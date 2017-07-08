@@ -9,7 +9,7 @@ import {catchedId, ATOM_STATUS} from '../src/interfaces'
 
 describe('Atom', () => {
     it('caching', () => {
-        let random = new Atom(() => Math.random())
+        let random = new Atom('random', () => Math.random())
 
         assert(random.get() === random.get())
     })
@@ -17,16 +17,16 @@ describe('Atom', () => {
     it('lazyness', () => {
         let value = 0
         const context = new Context()
-        const prop = new Atom(() => value = 1, context)
+        const prop = new Atom('prop', () => value = 1, context)
         context.run()
 
         assert(value === 0)
     })
 
     it('instant actualization', () => {
-        let source = new Atom((next?: number) => next || 1)
-        let middle = new Atom(() => source.get() + 1)
-        let target = new Atom(() => middle.get() + 1)
+        let source = new Atom('source', (next?: number) => next || 1)
+        let middle = new Atom('middle', () => source.get() + 1)
+        let target = new Atom('target', () => middle.get() + 1)
 
         assert(target.get() === 3)
 
@@ -38,9 +38,9 @@ describe('Atom', () => {
     it('do not actualize when masters not changed', () => {
         let targetUpdates = 0
 
-        let source = new Atom((next? : number) => next || 1)
-        let middle = new Atom(() => Math.abs(source.get()))
-        let target = new Atom(() => {
+        let source = new Atom('source', (next? : number) => next || 1)
+        let middle = new Atom('middle', () => Math.abs(source.get()))
+        let target = new Atom('target', () => {
             ++ targetUpdates
             return middle.get()
         })
@@ -59,12 +59,12 @@ describe('Atom', () => {
 
         let actualizations = ''
 
-        let source = new Atom((next?: number) => next || 1, context)
-        let middle = new Atom(() => {
+        let source = new Atom('source', (next?: number) => next || 1, context)
+        let middle = new Atom('middle', () => {
             actualizations += 'M'
             return source.get()
         }, context)
-        let target = new Atom(() => {
+        let target = new Atom('target', () => {
             actualizations += 'T'
             source.get()
             return middle.get()
@@ -81,10 +81,10 @@ describe('Atom', () => {
 
     it('destroy on switch', () => {
         const context = new Context()
-        let c = new Atom((next?: number = 1) => next, context)
-        let a = new Atom(() => 1, context)
-        let b = new Atom(() => 2, context)
-        let s = new Atom(() => c.get() === 0 ? b.get() : a.get(), context)
+        let c = new Atom('c', (next?: number = 1) => next, context)
+        let a = new Atom('a', () => 1, context)
+        let b = new Atom('b', () => 2, context)
+        let s = new Atom('s', () => c.get() === 0 ? b.get() : a.get(), context)
 
         assert(s.get() === 1)
         assert(b.status === ATOM_STATUS.OBSOLETE)
@@ -99,14 +99,13 @@ describe('Atom', () => {
     it('automatic deferred restart', () => {
         const context = new Context()
         let targetValue: number = 0
-        let source = new Atom((next?: number) => next || 1, context)
-        let middle = new Atom(() => source.get() + 1, context)
-        let target = new Atom(() => targetValue = middle.get() + 1, context)
+        let source = new Atom('source', (next?: number) => next || 1, context)
+        let middle = new Atom('middle', () => source.get() + 1, context)
+        let target = new Atom('target', () => targetValue = middle.get() + 1, context)
         target.get()
         assert(targetValue === 3)
         source.set(2)
         assert(targetValue === 3)
-
         context.run()
         assert(targetValue === 4)
     })
@@ -114,11 +113,11 @@ describe('Atom', () => {
     it('error handling', () => {
         const error = new Error('Test error')
         ;(error: Object)[catchedId] = true
-        let source = new Atom((next?: number) => {
+        let source = new Atom('source', (next?: number) => {
             throw error
         })
-        let middle = new Atom(() => source.get() + 1)
-        let target = new Atom(() => middle.get() + 1)
+        let middle = new Atom('middle', () => source.get() + 1)
+        let target = new Atom('target', () => middle.get() + 1)
 
         assert.throws(() => {
             target.get().valueOf()

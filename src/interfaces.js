@@ -1,10 +1,7 @@
 // @flow
 
-import SimpleSet from './SimpleSet'
-
 export interface IContext {
     last: ?IAtomInt;
-    lastId: number;
 
     proposeToPull(atom: IAtomInt): void;
     proposeToReap(atom: IAtomInt): void;
@@ -30,13 +27,13 @@ export type IAtomStatus = $Values<typeof ATOM_STATUS>
 
 export interface IAtom<V> {
     status: IAtomStatus;
+    field: string;
     get(): V;
     set(v: V): V;
     destroyed(isDestroyed?: boolean): boolean;
 }
 
 export interface IAtomInt extends IAtom<*> {
-    id: number;
     actualize(): void;
     check(): void;
     obsolete(): void;

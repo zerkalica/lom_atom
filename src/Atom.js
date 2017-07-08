@@ -5,40 +5,53 @@ import {catchedId, ATOM_STATUS} from './interfaces'
 import type {
     IAtom,
     IAtomInt,
-    IAtomForce,
     IAtomStatus,
     IContext,
     IAtomHandler
 } from './interfaces'
 
-import SimpleSet from './SimpleSet'
 import Context from './Context'
 import {defaultNormalize, createMock, AtomWait} from './utils'
 
 const defaultContext = new Context()
 
+function checkSlave(slave: IAtomInt) {
+    slave.check()
+}
+
+function obsoleteSlave(slave: IAtomInt) {
+    slave.obsolete()
+}
+
+function disleadThis(master: IAtomInt) {
+    master.dislead(this)
+}
+
+function actualizeMaster(master: IAtomInt) {
+    if (this.status === ATOM_STATUS.CHECKING) {
+        master.actualize()
+    }
+}
+
 export default class Atom<V> implements IAtom<V>, IAtomInt {
     status: IAtomStatus = ATOM_STATUS.OBSOLETE
-    id: number
+    field: string
 
-    _masters: ?SimpleSet<IAtomInt> = null
-    _slaves: ?SimpleSet<IAtomInt> = null
-
-    _autoFresh: boolean = true
+    _masters: ?Set<IAtomInt> = null
+    _slaves: ?Set<IAtomInt> = null
     _handler: IAtomHandler<V>
     _context: IContext
-
     _cached: V | void = undefined
-    _isDestroyed: boolean = false
     _normalize: (nv: V, old?: V) => V
 
     constructor(
+        field: string,
         handler: IAtomHandler<V>,
         context?: IContext = defaultContext,
         normalize?: (nv: V, old?: V) => V = defaultNormalize
     ) {
+        this.field = field
         this._normalize = normalize
-        this.id = ++context.lastId
         this._handler = handler
         this._context = context
     }
@@ -53,8 +66,10 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
                 if (this._slaves) {
                     return false
                 }
-                this._disleadAll()
-                this._notifySlaves()
+                if (this._masters) {
+                    this._masters.forEach(disleadThis, this)
+                }
+                this._checkSlaves()
                 this._cached = undefined
                 this.status = ATOM_STATUS.DESTROYED
             }
@@ -73,7 +88,7 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
             let slaves = this._slaves
             if (!slaves) {
                 this._context.unreap(this)
-                slaves = this._slaves = new SimpleSet()
+                slaves = this._slaves = new Set()
             }
             slaves.add(slave)
             slave.addMaster(this)
@@ -99,26 +114,15 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         if (force) {
             this.status = ATOM_STATUS.ACTUAL
             this._cached = normalized
-            this._obsoleteSlaves()
+            if (this._slaves) {
+                this._slaves.forEach(obsoleteSlave)
+            }
         } else {
             this.obsolete()
             this.actualize(normalized)
         }
 
         return this._cached
-    }
-
-    _disleadAll() {
-        if (this._masters) {
-            const {items, from} = this._masters
-            this._masters = null
-            for (let i = from; i < items.length; i++) {
-                const master = items[i]
-                if (master !== undefined) {
-                    master.dislead(this)
-                }
-            }
-        }
     }
 
     actualize(proposedValue?: V): void {
@@ -128,16 +132,7 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
 
         if (this.status === ATOM_STATUS.CHECKING) {
             if (this._masters) {
-                const {items, from} = this._masters
-                for (let i = from; i < items.length; i++) {
-                    if (this.status !== ATOM_STATUS.CHECKING) {
-                        break
-                    }
-                    const master = items[i]
-                    if (master !== undefined) {
-                        master.actualize()
-                    }
-                }
+                this._masters.forEach(actualizeMaster, this)
             }
 
             if (this.status === ATOM_STATUS.CHECKING) {
@@ -151,7 +146,9 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
     }
 
     _pullPush(proposedValue?: V, force?: boolean): void {
-        this._disleadAll()
+        if (this._masters) {
+            this._masters.forEach(disleadThis, this)
+        }
         let newValue: V
 
         this.status = ATOM_STATUS.PULLING
@@ -180,7 +177,9 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
 
         if (newValue !== undefined && this._cached !== newValue) {
             this._cached = newValue
-            this._obsoleteSlaves()
+            if (this._slaves) {
+                this._slaves.forEach(obsoleteSlave)
+            }
         }
     }
 
@@ -196,51 +195,32 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         }
     }
 
+    _checkSlaves() {
+        if (this._slaves) {
+            this._slaves.forEach(checkSlave)
+        } else {
+            // top level atom
+            this._context.proposeToPull(this)
+        }
+    }
+
     check() {
         if (this.status === ATOM_STATUS.ACTUAL) {
             this.status = ATOM_STATUS.CHECKING
-            this._notifySlaves()
+            this._checkSlaves()
         }
     }
 
     obsolete() {
         if (this.status !== ATOM_STATUS.OBSOLETE) {
             this.status = ATOM_STATUS.OBSOLETE
-            this._notifySlaves()
-        }
-    }
-
-    _obsoleteSlaves() {
-        if (this._slaves) {
-            const {items, from} = this._slaves
-            for (let i = from; i < items.length; i++) {
-                const slave = items[i]
-                if (slave !== undefined) {
-                    slave.obsolete()
-                }
-            }
-        }
-    }
-
-    _notifySlaves() {
-        if (this._slaves) {
-            const {items, from} = this._slaves
-
-            for (let i = from; i < items.length; i++) {
-                const slave = items[i]
-                if (slave !== undefined) {
-                    slave.check()
-                }
-            }
-        } else if (this._autoFresh) {
-            // top level atom
-            this._context.proposeToPull(this)
+            this._checkSlaves()
         }
     }
 
     addMaster(master: IAtomInt) {
         if (!this._masters) {
-            this._masters = new SimpleSet()
+            this._masters = new Set()
             const context = this._context
         }
         this._masters.add(master)

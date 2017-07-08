@@ -3,7 +3,6 @@
         "stage-0"
     ],
     "plugins": [
-        "external-helpers",
         "transform-decorators-legacy",
         ["transform-class-properties", {"loose": true}],
         ["transform-es2015-template-literals", {"loose": true}],
@@ -24,5 +23,17 @@
         "transform-flow-strip-types",
         "syntax-flow",
         "espower"
-    ]
+    ],
+    "env": {
+      "rollup": {
+        "plugins": [
+          "external-helpers"
+        ]
+      },
+      "commonjs": {
+        "plugins": [
+          ["transform-es2015-modules-commonjs", {"loose": true}]
+        ]
+      }
+    }
 }
