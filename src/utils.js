@@ -1,5 +1,7 @@
 // @flow
 
+import {catchedId} from './interfaces'
+
 const throwOnAccess = {
     get(target : Error) {
         throw target.valueOf()
@@ -41,5 +43,6 @@ export class AtomWait extends Error {
         } else {
             this.stack = (new Error(message)).stack
         }
+        ;(this: Object)[catchedId] = true
     }
 }

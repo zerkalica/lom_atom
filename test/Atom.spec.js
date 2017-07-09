@@ -125,11 +125,16 @@ describe('Atom', () => {
 
             setTimeout(() => {
                 source.set(1)
-                resolve()
-            }, 10)
+                setTimeout(() => resolve(), 0)
+                // resolve()
+            }, 0)
             throw new AtomWait()
         }, context)
-        let middle = new Atom('middle', () => source.get() + 1, context)
+
+        let middle = new Atom('middle', () => {
+            targetValue = source.get() + 1
+            return targetValue
+        }, context)
 
         assert.throws(() => {
             middle.get().valueOf()
@@ -137,7 +142,7 @@ describe('Atom', () => {
 
         return promise
             .then(() => {
-                assert(middle.get() === 2)
+                assert(targetValue === 2)
             })
     })
 

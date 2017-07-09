@@ -164,10 +164,8 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
             )
         } catch (error) {
             if (error[catchedId] === undefined) {
-                if (!(error instanceof AtomWait)) {
-                    console.error(error.stack || error)
-                }
                 error[catchedId] = true
+                console.error(error.stack || error)
             }
             newValue = createMock(error)
         }
