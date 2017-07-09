@@ -56,7 +56,7 @@ export default class Context implements IContext {
             for (let i = start; i < end; i++) {
                 const atom: IAtomInt = updating[i]
                 if (!reaping.has(atom) && !atom.destroyed()) {
-                    atom.get()
+                    atom.actualize()
                 }
             }
 
