@@ -4,6 +4,7 @@
 import assert from 'power-assert'
 import sinon from 'sinon'
 import Atom from '../src/Atom'
+import {AtomWait} from '../src/utils'
 import Context from '../src/Context'
 import {catchedId, ATOM_STATUS} from '../src/interfaces'
 
@@ -108,6 +109,36 @@ describe('Atom', () => {
         assert(targetValue === 3)
         context.run()
         assert(targetValue === 4)
+    })
+
+    it('async loading', () => {
+        const context = new Context()
+        let targetValue: number = 0
+        let resolve
+        const promise = new Promise((res, reject) => {
+            resolve = res
+        })
+        let source = new Atom('source', (next?: number) => {
+            if (next !== undefined) {
+                return next
+            }
+
+            setTimeout(() => {
+                source.set(1)
+                resolve()
+            }, 10)
+            throw new AtomWait()
+        }, context)
+        let middle = new Atom('middle', () => source.get() + 1, context)
+
+        assert.throws(() => {
+            middle.get().valueOf()
+        })
+
+        return promise
+            .then(() => {
+                assert(middle.get() === 2)
+            })
     })
 
     it('error handling', () => {
