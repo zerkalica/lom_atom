@@ -1,5 +1,5 @@
 {
-  "name": "lom-atom",
+  "name": "lom_atom",
   "version": "1.0.0",
   "description": "Observable state management",
   "publishConfig": {
@@ -15,22 +15,19 @@
     "prepush": "npm test",
     "update": "ncu -ua && npm install",
     "clean": "rm -rf dist",
-    "build": "npm run clean && BABEL_ENV=rollup rollup -c && BABEL_ENV=commonjs babel src --ignore=__tests__ --source-maps --out-dir dist",
-    "build.dep": "npm-helpers/build-deps.sh",
-    "build.dev": "npm run build -- --watch",
-    "lint": "eslint .",
+    "build": "npm run clean && BABEL_ENV=rollup rollup -c",
     "check": "flow check",
     "testonly": "BABEL_ENV=commonjs mocha",
     "test": "flow check && BABEL_ENV=commonjs mocha",
     "test.dev": "BABEL_ENV=commonjs mocha --growl --watch",
     "build.babel": "babel examples/app/src --out-dir dist/examples",
-    "watch": "chokidar --initial -d 2000 -t 1000 'src/**/*.js' -c 'npm run build && cp -rvf *.js src dist $npm_package_config_dest/node_modules/lom-atom'"
+    "watch": "chokidar --initial -d 2000 -t 1000 'src/**/*.js' -c 'npm run build && cp -rvf *.js src dist $npm_package_config_dest/node_modules/lom_atom'"
   },
   "author": "Stefan Zerkalica <zerkalica@gmail.com>",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "http://github.com/zerkalica/lom-atom.git"
+    "url": "http://github.com/zerkalica/lom_atom.git"
   },
   "keywords": [
     "state",
@@ -56,7 +53,6 @@
   "devDependencies": {
     "babel-cli": "^6.24.1",
     "babel-core": "^6.25.0",
-    "babel-loader": "^7.1.1",
     "babel-plugin-espower": "^2.3.2",
     "babel-plugin-external-helpers": "^6.22.0",
     "babel-plugin-syntax-flow": "^6.18.0",

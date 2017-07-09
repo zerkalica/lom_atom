@@ -221,7 +221,6 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
     addMaster(master: IAtomInt) {
         if (!this._masters) {
             this._masters = new Set()
-            const context = this._context
         }
         this._masters.add(master)
     }

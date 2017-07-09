@@ -93,7 +93,7 @@ describe('Atom', () => {
         context.run()
         assert(s.get() === 2)
         assert(b.status === ATOM_STATUS.ACTUAL)
-        assert(a.status === ATOM_STATUS.DESTROYED)
+        assert(a.destroyed() === true)
     })
 
     it('automatic deferred restart', () => {

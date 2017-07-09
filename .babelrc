@@ -21,8 +21,7 @@
         "transform-es2015-block-scoping",
         ["transform-object-rest-spread", {"useBuiltIns": true}],
         "transform-flow-strip-types",
-        "syntax-flow",
-        "espower"
+        "syntax-flow"
     ],
     "env": {
       "rollup": {
@@ -32,6 +31,7 @@
       },
       "commonjs": {
         "plugins": [
+          "espower",
           ["transform-es2015-modules-commonjs", {"loose": true}]
         ]
       }
