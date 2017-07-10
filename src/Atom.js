@@ -13,7 +13,7 @@ import type {
 import Context from './Context'
 import {defaultNormalize, createMock, AtomWait} from './utils'
 
-const defaultContext = new Context()
+export const defaultContext = new Context()
 
 function checkSlave(slave: IAtomInt) {
     slave.check()
@@ -43,13 +43,16 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
     _context: IContext
     _cached: V | void = undefined
     _normalize: (nv: V, old?: V) => V
+    _destroy: (() => void) | void
 
     constructor(
         field: string,
         handler: IAtomHandler<V>,
         context?: IContext = defaultContext,
+        destroy?: () => void,
         normalize?: (nv: V, old?: V) => V = defaultNormalize
     ) {
+        this._destroy = destroy
         this.field = field
         this._normalize = normalize
         this._handler = handler
@@ -72,6 +75,9 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
                 this._checkSlaves()
                 this._cached = undefined
                 this.status = ATOM_STATUS.DESTROYED
+                if (this._destroy) {
+                    this._destroy()
+                }
             }
 
             return true

@@ -1,12 +1,11 @@
 // @flow
 
-import {default as Atom} from './Atom'
+export {default as Atom} from './Atom'
+export {default as mem} from './mem'
 
 export {
     AtomWait
 } from './utils'
-
-export {Atom}
 
 export {
     ATOM_STATUS,

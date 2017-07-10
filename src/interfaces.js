@@ -28,8 +28,8 @@ export type IAtomStatus = $Values<typeof ATOM_STATUS>
 export interface IAtom<V> {
     status: IAtomStatus;
     field: string;
-    get(): V;
-    set(v: V): V;
+    get(force?: boolean): V;
+    set(v: V, force?: boolean): V;
     destroyed(isDestroyed?: boolean): boolean;
 }
 
