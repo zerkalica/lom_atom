@@ -118,8 +118,9 @@ describe('mem', () => {
 
         const x = new X()
         assert(x.bar() === 2)
-
         fooCalled = false
+        x.foo
+        assert(fooCalled === false)
         x.force.foo;
         assert(fooCalled === true)
 

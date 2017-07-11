@@ -15,6 +15,16 @@ interface TypedPropertyDescriptor<T> {
 
 type IHandler<V> = (next?: V, force?: boolean) => V;
 
+function getAtom<V>(t: Object, handlerKey: string, cache: WeakMap<Object, IAtom<V>>): IAtom<V> {
+    let atom: IAtom<V> | void = cache.get(t)
+    if (atom === undefined) {
+        atom = new Atom(handlerKey, t)
+        cache.set(t, atom)
+    }
+
+    return atom
+}
+
 function memMethod<V>(
     proto: Object,
     name: string,
@@ -27,24 +37,12 @@ function memMethod<V>(
     proto[handlerKey] = handler
 
     descr.value = function(next?: V, force?: boolean) {
-        let atom: IAtom<V> | void = cache.get(this)
-        if (atom === undefined) {
-            atom = new Atom(handlerKey, this)
-            cache.set(this, atom)
-        }
+        const altForce = this._force
+        this._force = false
 
-        return atom.value(next, force)
+        return getAtom(this, handlerKey, cache)
+            .value(next, force === undefined ? altForce : force)
     }
-}
-
-function getAtom<V>(t: Object, handlerKey: string, cache: WeakMap<Object, IAtom<V>>): IAtom<V> {
-    let atom: IAtom<V> | void = cache.get(t)
-    if (atom === undefined) {
-        atom = new Atom(handlerKey, t)
-        cache.set(t, atom)
-    }
-
-    return atom
 }
 
 function memGetSet<V>(
