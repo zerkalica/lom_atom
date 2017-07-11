@@ -4,13 +4,13 @@
 import assert from 'power-assert'
 import sinon from 'sinon'
 import Atom, {defaultContext} from '../src/Atom'
-import mem, {force} from '../src/mem'
+import mem, {memkey, force} from '../src/mem'
 import {AtomWait} from '../src/utils'
 import Context from '../src/Context'
 import {catchedId, ATOM_STATUS} from '../src/interfaces'
 
 describe('mem', () => {
-    it.skip('get/set magic', () => {
+    it('complex properties', () => {
 
         interface IUser {
             name: string;
@@ -24,12 +24,11 @@ describe('mem', () => {
         }
 
         class UserService implements IUserService {
-            force: UserService
+            @force force: UserService
 
-            @mem
-            currentUserId: number = 1
+            @mem currentUserId: number = 1
 
-            @mem
+            @memkey
             userById(id: number, next?: IUser): IUser {
                 if (next !== undefined) return next
 

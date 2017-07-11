@@ -1,6 +1,6 @@
 // @flow
 
-import type {IAtom, IAtomHost} from './interfaces'
+import type {IAtom, IAtomHandler, IAtomKeyHandler, IAtomHost} from './interfaces'
 import Atom, {defaultContext} from './Atom'
 
 interface TypedPropertyDescriptor<T> {
@@ -12,8 +12,6 @@ interface TypedPropertyDescriptor<T> {
     get?: () => T;
     set?: (value: T) => void;
 }
-
-type IHandler<V> = (next?: V, force?: boolean) => V;
 
 function getAtom<V>(t: Object, handlerKey: string, cache: WeakMap<Object, IAtom<V>>): IAtom<V> {
     let atom: IAtom<V> | void = cache.get(t)
@@ -28,7 +26,7 @@ function getAtom<V>(t: Object, handlerKey: string, cache: WeakMap<Object, IAtom<
 function memMethod<V>(
     proto: Object,
     name: string,
-    descr: TypedPropertyDescriptor<IHandler<V>>
+    descr: TypedPropertyDescriptor<IAtomHandler<V>>
 ) {
     const handler = descr.value
     const cache = new WeakMap()
@@ -111,6 +109,43 @@ export function force(
         return this
     }
     delete descr.initializer
+}
+
+function getKey(params: mixed): string {
+    if (!params) {
+        return '-'
+    }
+
+    return typeof params === 'object'
+        ? Object.keys(params)
+            .sort()
+            .map((key: string) => `${key}:${JSON.stringify((params: any)[key])}`)
+            .join('.')
+        : JSON.stringify(params)
+}
+
+export function memkey<V, K>(
+    proto: Object,
+    name: string,
+    descr: TypedPropertyDescriptor<IAtomKeyHandler<V, K>>
+) {
+    const handler = descr.value
+    const cache: Map<string, WeakMap<Object, IAtom<*>>> = new Map()
+
+    const handlerKey = `${name}@`
+    proto[handlerKey] = handler
+
+    descr.value = function(rawKey: K, next?: V, force?: boolean) {
+        const key = getKey(rawKey)
+        let subCache = cache.get(key)
+        if (!subCache) {
+            subCache = new WeakMap()
+            cache.set(key, subCache)
+        }
+
+        return getAtom(this, handlerKey, subCache)
+            .value(next, force)
+    }
 }
 
 export default function mem(

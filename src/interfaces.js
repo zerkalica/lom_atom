@@ -52,3 +52,5 @@ export type IAtomHost<V> = {
 }
 
 export type IAtomHandler<V> = (next?: V, force?: IAtomForce) => V
+
+export type IAtomKeyHandler<V, K> = (key: K, next?: V, force?: IAtomForce) => V
