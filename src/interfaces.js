@@ -44,4 +44,10 @@ export interface IAtomInt extends IAtom<*> {
 
 export type IAtomForce = boolean
 
+export type IAtomHost<V> = {
+    __lom?: string[];
+    [key: string]: (next?: V, force?: IAtomForce) => V;
+    _destroy?: () => void;
+}
+
 export type IAtomHandler<V> = (next?: V, force?: IAtomForce) => V

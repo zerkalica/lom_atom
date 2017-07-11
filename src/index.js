@@ -1,7 +1,7 @@
 // @flow
 
 export {default as Atom} from './Atom'
-export {default as mem} from './mem'
+export {default as mem, force} from './mem'
 
 export {
     AtomWait

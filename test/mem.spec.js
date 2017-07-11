@@ -4,7 +4,7 @@
 import assert from 'power-assert'
 import sinon from 'sinon'
 import Atom, {defaultContext} from '../src/Atom'
-import mem from '../src/mem'
+import mem, {force} from '../src/mem'
 import {AtomWait} from '../src/utils'
 import Context from '../src/Context'
 import {catchedId, ATOM_STATUS} from '../src/interfaces'
@@ -67,7 +67,6 @@ describe('mem', () => {
     })
 
     it('auto sync of properties', () => {
-        @mem
         class X {
             @mem
             foo(next?: number): number {
@@ -94,10 +93,88 @@ describe('mem', () => {
         assert(x.xxx() === 7)
     })
 
+    it('force getset', () => {
+        let fooCalled = false
+        class X {
+            @force
+            force: X
+
+            @mem
+            get foo() {
+                fooCalled = true
+                return 1
+            }
+
+            @mem
+            set foo(v: number) {
+                fooCalled = true
+            }
+
+            @mem
+            bar(): number {
+                return this.foo + 1
+            }
+        }
+
+        const x = new X()
+        assert(x.bar() === 2)
+
+        fooCalled = false
+        x.force.foo;
+        assert(fooCalled === true)
+
+        fooCalled = false
+        x.force.foo = 5
+        assert(fooCalled === false)
+
+        assert(x.bar() === 6)
+    })
+
+    it('getset property', () => {
+        class X {
+            @mem
+            get foo() {
+                return 1
+            }
+            @mem
+            set foo(v: number) {}
+
+            @mem
+            bar(): number {
+                return this.foo + 1
+            }
+        }
+
+        const x = new X()
+        assert(x.bar() === 2)
+
+        x.foo = 5
+
+        assert(x.bar() === 6)
+    })
+
+    it('regular property', () => {
+        class X {
+            @mem
+            foo: number = 1
+
+            @mem
+            bar(): number {
+                return this.foo + 1
+            }
+        }
+
+        const x = new X()
+        assert(x.bar() === 2)
+
+        x.foo = 5
+
+        assert(x.bar() === 6)
+    })
+
     it('wait for data', () => {
         let testResolve: ?() => void
 
-        @mem
         class Test {
             @mem
             source(next?: string, force?: boolean): string {
@@ -138,7 +215,6 @@ describe('mem', () => {
     it('this in decorated method equal to constructed object', () => {
         let t: A
 
-        @mem
         class A {
             @mem
             foo(): number {
@@ -156,7 +232,6 @@ describe('mem', () => {
     it('must be deferred destroyed when no longer referenced', () => {
         let destroyed = false
 
-        @mem
         class A {
             @mem
             foo(): number {
@@ -169,7 +244,6 @@ describe('mem', () => {
             }
         }
 
-        @mem
         class B {
             _a = new A()
 

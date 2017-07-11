@@ -7,7 +7,8 @@ import type {
     IAtomInt,
     IAtomStatus,
     IContext,
-    IAtomHandler
+    IAtomHandler,
+    IAtomHost
 } from './interfaces'
 
 import Context from './Context'
@@ -32,6 +33,7 @@ function actualizeMaster(master: IAtomInt) {
         master.actualize()
     }
 }
+const defaultHost: IAtomHost<*> = {}
 
 export default class Atom<V> implements IAtom<V>, IAtomInt {
     status: IAtomStatus = ATOM_STATUS.OBSOLETE
@@ -39,23 +41,30 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
 
     _masters: ?Set<IAtomInt> = null
     _slaves: ?Set<IAtomInt> = null
-    _handler: IAtomHandler<V>
     _context: IContext
     _cached: V | void = undefined
     _normalize: (nv: V, old?: V) => V
-    _destroy: (() => void) | void
+
+    _handler: IAtomHandler<V>
+    _host: IAtomHost<V>
 
     constructor(
         field: string,
-        handler: IAtomHandler<V>,
+        handler: IAtomHandler<V> | IAtomHost<V>,
         context?: IContext = defaultContext,
-        destroy?: () => void,
         normalize?: (nv: V, old?: V) => V = defaultNormalize
     ) {
-        this._destroy = destroy
+
+        if (typeof handler === 'function') {
+            this._host = defaultHost
+            this._handler = handler
+        } else {
+            this._host = handler
+            this._handler = handler[field]
+        }
+
         this.field = field
         this._normalize = normalize
-        this._handler = handler
         this._context = context
     }
 
@@ -75,8 +84,13 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
                 this._checkSlaves()
                 this._cached = undefined
                 this.status = ATOM_STATUS.DESTROYED
-                if (this._destroy) {
-                    this._destroy()
+                const host = this._host
+                if (host !== defaultHost) {
+                    if (host._destroy !== undefined) {
+                        host._destroy()
+                    }
+                    // host[this.field] = (undefined: any)
+                    // host[`${this.field}@`] = (undefined: any)
                 }
             }
 
@@ -165,7 +179,7 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
 
         try {
             newValue = this._normalize(
-                this._handler(proposedValue, force),
+                this._handler.call(this._host, proposedValue, force),
                 this._cached
             )
         } catch (error) {
