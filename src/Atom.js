@@ -228,4 +228,10 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         }
         this._masters.add(master)
     }
+
+    value(next?: V, force?: boolean): V {
+        return next === undefined
+            ? this.get(force)
+            : this.set(next, force)
+    }
 }

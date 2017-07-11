@@ -67,6 +67,7 @@ describe('mem', () => {
     })
 
     it('auto sync of properties', () => {
+        @mem
         class X {
             @mem
             foo(next?: number): number {
@@ -96,6 +97,7 @@ describe('mem', () => {
     it('wait for data', () => {
         let testResolve: ?() => void
 
+        @mem
         class Test {
             @mem
             source(next?: string, force?: boolean): string {
@@ -135,6 +137,8 @@ describe('mem', () => {
 
     it('this in decorated method equal to constructed object', () => {
         let t: A
+
+        @mem
         class A {
             @mem
             foo(): number {
@@ -152,6 +156,7 @@ describe('mem', () => {
     it('must be deferred destroyed when no longer referenced', () => {
         let destroyed = false
 
+        @mem
         class A {
             @mem
             foo(): number {
@@ -164,6 +169,7 @@ describe('mem', () => {
             }
         }
 
+        @mem
         class B {
             _a = new A()
 
@@ -183,7 +189,6 @@ describe('mem', () => {
         }
 
         const b = new B()
-
         assert(b.bar() === 1)
 
         b.showing(false)

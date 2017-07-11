@@ -30,6 +30,7 @@ export interface IAtom<V> {
     field: string;
     get(force?: boolean): V;
     set(v: V, force?: boolean): V;
+    value(next?: V, force?: boolean): V;
     destroyed(isDestroyed?: boolean): boolean;
 }
 
