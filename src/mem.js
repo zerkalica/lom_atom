@@ -19,26 +19,40 @@ export default function mem<Prototype: Object, V>(
     name: string,
     descr: TypedPropertyDescriptor<IHandler<V>>
 ) {
-    const handler: IHandler<V> | void = descr.value
-    if (handler === undefined) {
-        throw new Error('Only function allowed')
-    }
+    let handler: IHandler<V> | void = descr.value
+    let definingProperty = false
 
-    descr.value = function(next?: V, force?: boolean) {
-        const field = `${name}@`
-        const host = this
-        let atom: ?IAtom<V> = host[field]
-        if (!atom) {
-            host[field] = atom = new Atom(
+    return {
+        get() {
+            if (
+                definingProperty
+                || this === proto.prototype
+                || this.hasOwnProperty(name)
+                || typeof handler !== 'function'
+            ) {
+                return handler
+            }
+
+            const t = this
+            const atom: IAtom<V> = new Atom(
                 name,
-                handler.bind(host),
+                handler.bind(t),
                 undefined,
-                host._destroy ? host._destroy.bind(host) : undefined
+                t._destroy ? t._destroy.bind(t) : undefined
             )
-        }
 
-        return next === undefined
-            ? atom.get(force)
-            : atom.set(next, force)
+            function facade(next?: V, force?: boolean): V {
+                return next === undefined
+                    ? atom.get(force)
+                    : atom.set(next, force)
+            }
+
+            definingProperty = true
+            Object.defineProperty(t, name, {
+                value: facade
+            })
+            definingProperty = false
+            return facade
+        }
     }
 }

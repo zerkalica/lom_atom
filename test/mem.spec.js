@@ -9,44 +9,63 @@ import {AtomWait} from '../src/utils'
 import Context from '../src/Context'
 import {catchedId, ATOM_STATUS} from '../src/interfaces'
 
-// describe('prop', () => {
-//     it('auto sync of properties', () => {
-//
-//         interface IUser {
-//             name: string;
-//             email: string;
-//         }
-//
-//         @store
-//         class UserService {
-//             force: UserService
-//             get user(): IUser {
-//                 return {
-//                     name: 'test1',
-//                     email: 'test@ww.ww'
-//                 }
-//             }
-//
-//             set user(next: IUser) {}
-//
-//             get fullName(): string {
-//                 const {name, email} = this.user
-//                 return `${name} <${email}>`
-//             }
-//         }
-//
-//         const x = new UserService()
-//
-//         x.force.user = {
-//             name: 'test2',
-//             email: 'test2@ww.ww'
-//         }
-//
-//         assert(x.fullName === 'test2 <test2@ww.ww>')
-//     })
-// })
-
 describe('mem', () => {
+    it.skip('get/set magic', () => {
+
+        interface IUser {
+            name: string;
+            email: string;
+        }
+
+        interface IUserService {
+            currentUserId: number;
+            userById(id: number, next?: IUser): IUser;
+            currentUser: IUser;
+        }
+
+        class UserService implements IUserService {
+            force: UserService
+
+            @mem
+            currentUserId: number = 1
+
+            @mem
+            userById(id: number, next?: IUser): IUser {
+                if (next !== undefined) return next
+
+                setTimeout(() => {
+                    this.userById(id, {
+                        name: 'test' + id,
+                        email: 'test' + id + '@t.t'
+                    })
+                }, 50)
+
+                throw new AtomWait()
+            }
+
+            @mem
+            get currentUser(): IUser {
+                return this.userById(this.currentUserId)
+            }
+
+            set currentUser(next: IUser) {}
+
+            get fullName(): string {
+                const {name, email} = this.currentUser
+                return `${name} <${email}>`
+            }
+        }
+
+        const x = new UserService()
+        const user1 = x.userById(1)
+        assert(user1 === x.currentUser)
+        x.force.currentUser = {
+            name: 'test2',
+            email: 'test2@t.t'
+        }
+        assert(x.fullName === 'test2 <test2@t.t>')
+    })
+
     it('auto sync of properties', () => {
         class X {
             @mem
