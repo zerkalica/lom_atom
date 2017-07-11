@@ -10,8 +10,8 @@ import Context from '../src/Context'
 import {catchedId, ATOM_STATUS} from '../src/interfaces'
 
 describe('mem', () => {
-    it('complex properties', () => {
-
+    it('mem by key', () => {
+        let userByIdCalled = false
         interface IUser {
             name: string;
             email: string;
@@ -30,6 +30,7 @@ describe('mem', () => {
 
             @memkey
             userById(id: number, next?: IUser): IUser {
+                userByIdCalled = true
                 if (next !== undefined) return next
 
                 setTimeout(() => {
@@ -57,6 +58,18 @@ describe('mem', () => {
 
         const x = new UserService()
         const user1 = x.userById(1)
+
+        userByIdCalled = false
+        x.userById(1)
+        assert(userByIdCalled === false)
+
+        x.userById(2)
+        assert(userByIdCalled === true)
+
+        userByIdCalled = false
+        x.userById(2)
+        assert(userByIdCalled === false)
+
         assert(user1 === x.currentUser)
         x.force.currentUser = {
             name: 'test2',
