@@ -2,6 +2,7 @@
 
 export interface IContext {
     last: ?IAtomInt;
+    force: boolean;
 
     proposeToPull(atom: IAtomInt): void;
     proposeToReap(atom: IAtomInt): void;

@@ -113,7 +113,8 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
             slaves.add(slave)
             slave.addMaster(this)
         }
-        if (force) {
+        if (force || this._context.force) {
+            this._context.force = false
             this._pullPush(undefined, true)
         } else {
             this.actualize()
@@ -131,7 +132,8 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
             return this._cached
         }
 
-        if (force) {
+        if (force || this._context.force) {
+            this._context.force = false
             this.status = ATOM_STATUS.ACTUAL
             this._cached = normalized
             if (this._slaves) {

@@ -14,6 +14,8 @@ const animationFrame =  typeof requestAnimationFrame === 'function'
 export default class Context implements IContext {
     last: ?IAtomInt = null
 
+    force: boolean = false
+
     _updating: IAtomInt[] = []
     _reaping: Set<IAtomInt> = new Set()
     _scheduled = false

@@ -1,7 +1,7 @@
 // @flow
 
 import type {IAtom, IAtomHost} from './interfaces'
-import Atom from './Atom'
+import Atom, {defaultContext} from './Atom'
 
 interface TypedPropertyDescriptor<T> {
     enumerable?: boolean;
@@ -37,11 +37,8 @@ function memMethod<V>(
     proto[handlerKey] = handler
 
     descr.value = function(next?: V, force?: boolean) {
-        const altForce = this._force
-        this._force = false
-
         return getAtom(this, handlerKey, cache)
-            .value(next, force === undefined ? altForce : force)
+            .value(next, force)
     }
 }
 
@@ -68,15 +65,11 @@ function memGetSet<V>(
     }
 
     descr.get = function() {
-        const force = this._force
-        this._force = false
-        return getAtom(this, handlerKey, cache).get(force)
+        return getAtom(this, handlerKey, cache).get()
     }
 
     descr.set = function(val: V) {
-        const force = this._force
-        this._force = false
-        getAtom(this, handlerKey, cache).set(val, force)
+        getAtom(this, handlerKey, cache).set(val)
     }
 }
 
@@ -114,7 +107,7 @@ export function force(
     descr: TypedPropertyDescriptor<*>
 ) {
     descr.get = function () {
-        this._force = true
+        defaultContext.force = true
         return this
     }
     delete descr.initializer
