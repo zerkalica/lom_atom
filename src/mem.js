@@ -3,117 +3,92 @@
 import type {IAtom, IAtomHandler, IAtomKeyHandler, IAtomHost} from './interfaces'
 import Atom, {defaultContext} from './Atom'
 
-interface TypedPropertyDescriptor<T> {
+type TypedPropertyDescriptor<T> = {
     enumerable?: boolean;
     configurable?: boolean;
     writable?: boolean;
-    initializer?: () => T;
     value?: T;
+    initializer?: () => T;
     get?: () => T;
     set?: (value: T) => void;
 }
 
-function getAtom<V>(t: Object, handlerKey: string, cache: WeakMap<Object, IAtom<V>>): IAtom<V> {
-    let atom: IAtom<V> | void = cache.get(t)
+function getAtom<V>(t: Object, handlerKey: string, subKey: string): IAtom<V> {
+    let atom: IAtom<V> | void = t[subKey]
     if (atom === undefined) {
-        atom = new Atom(handlerKey, t)
-        cache.set(t, atom)
+        t[subKey] = atom = new Atom(handlerKey, t)
     }
 
     return atom
 }
 
-function memMethod<V>(
-    proto: Object,
+function memMethod<V, P: Object>(
+    proto: P,
     name: string,
     descr: TypedPropertyDescriptor<IAtomHandler<V>>
-) {
-    const handler = descr.value
-    const cache = new WeakMap()
-
+): TypedPropertyDescriptor<IAtomHandler<V>> {
     const handlerKey = `${name}@`
-    proto[handlerKey] = handler
+    const subKey = `${name}$`
+    proto[handlerKey] = descr.value
 
-    descr.value = function(next?: V, force?: boolean) {
-        return getAtom(this, handlerKey, cache)
-            .value(next, force)
+    return {
+        enumerable: descr.enumerable,
+        configurable: descr.configurable,
+        value(next?: V, force?: boolean) {
+            return getAtom(this, handlerKey, subKey)
+                .value(next, force)
+        }
     }
 }
 
-function memGetSet<V>(
-    proto: Object,
-    name: string,
-    descr: TypedPropertyDescriptor<V>
-) {
-    const cache = new WeakMap()
-
-    const handlerKey = `${name}@`
-    if (proto[handlerKey]) {
-        return
-    }
-    const {get, set} = descr
-    proto[handlerKey] = function handler(next?: V, force?: boolean) {
+function createGetSetHandler<V>(get?: () => V, set?: (v: V) => void): IAtomHandler<V> {
+    return function getSetHandler(next?: V, force?: boolean) {
         if (next === undefined) {
             return (get: any).call(this)
         }
-
         (set: any).call(this, next)
-
         return next
     }
+}
 
-    descr.get = function() {
-        return getAtom(this, handlerKey, cache).get()
-    }
-
-    descr.set = function(val: V) {
-        getAtom(this, handlerKey, cache).set(val)
+function createValueHandler<V>(initializer?: () => V): IAtomHandler<V> {
+    return function valueHandler(next?: V, force?: boolean) {
+        return next === undefined && initializer !== undefined
+            ? initializer.call(this)
+            : (next: any)
     }
 }
 
-function memValue<V>(
-    proto: Object,
+function memProp<V, P: Object>(
+    proto: P,
     name: string,
     descr: TypedPropertyDescriptor<V>
-) {
-    const cache = new WeakMap()
-
+): TypedPropertyDescriptor<V> | void {
     const handlerKey = `${name}@`
-    const {initializer} = descr
-
-    proto[handlerKey] = function handler(next?: V, force?: boolean) {
-        return next === undefined
-            ? (initializer: any).call(this)
-            : next
+    const subKey = `${name}$`
+    if (proto[handlerKey]) {
+        return
     }
 
-    delete descr.writable
-    delete descr.initializer
+    proto[handlerKey] = descr.get === undefined && descr.set === undefined
+        ? createValueHandler(descr.initializer)
+        : createGetSetHandler(descr.get, descr.set)
 
-    descr.get = function() {
-        return getAtom(this, handlerKey, cache).get()
+    return {
+        enumerable: descr.enumerable,
+        configurable: descr.configurable,
+        get() {
+            return getAtom(this, handlerKey, subKey).get()
+        },
+        set(val: V) {
+            getAtom(this, handlerKey, subKey).set(val)
+        }
     }
-
-    descr.set = function(val: V) {
-        getAtom(this, handlerKey, cache).set(val)
-    }
-}
-
-export function force(
-    proto: Object,
-    name: string,
-    descr: TypedPropertyDescriptor<*>
-) {
-    descr.get = function () {
-        defaultContext.force = true
-        return this
-    }
-    delete descr.initializer
 }
 
 function getKey(params: mixed): string {
     if (!params) {
-        return '-'
+        return ''
     }
 
     return typeof params === 'object'
@@ -124,41 +99,47 @@ function getKey(params: mixed): string {
         : JSON.stringify(params)
 }
 
-export function memkey<V, K>(
-    proto: Object,
+export function memkey<V, K, P: Object>(
+    proto: P,
     name: string,
     descr: TypedPropertyDescriptor<IAtomKeyHandler<V, K>>
-) {
-    const handler = descr.value
-    const cache: Map<string, WeakMap<Object, IAtom<*>>> = new Map()
-
+): TypedPropertyDescriptor<IAtomKeyHandler<V, K>> {
     const handlerKey = `${name}@`
-    proto[handlerKey] = handler
+    proto[handlerKey] = descr.value
 
-    descr.value = function(rawKey: K, next?: V, force?: boolean) {
-        const key = getKey(rawKey)
-        let subCache = cache.get(key)
-        if (!subCache) {
-            subCache = new WeakMap()
-            cache.set(key, subCache)
+    return {
+        enumerable: descr.enumerable,
+        configurable: descr.configurable,
+        value(rawKey: K, next?: V, force?: boolean) {
+            return getAtom(this, handlerKey, `${name}#${getKey(rawKey)}$`)
+                .value(next, force)
         }
-
-        return getAtom(this, handlerKey, subCache)
-            .value(next, force)
     }
 }
 
-export default function mem(
-    proto: Object,
+function forceGet() {
+    defaultContext.force = true
+    return this
+}
+
+export function force<V>(
+    proto: mixed,
+    name: string,
+    descr: TypedPropertyDescriptor<V>
+): TypedPropertyDescriptor<V> {
+    return {
+        enumerable: descr.enumerable,
+        configurable: descr.configurable,
+        get: forceGet
+    }
+}
+
+export default function mem<P: Object, V, K>(
+    proto: P,
     name: string,
     descr: TypedPropertyDescriptor<*>
-) {
-    if (typeof descr.value === 'function') {
-        return memMethod(proto, name, descr)
-    }
-    if (descr.get !== undefined || descr.set !== undefined) {
-        return memGetSet(proto, name, descr)
-    }
-
-    return memValue(proto, name, descr)
+): TypedPropertyDescriptor<*> | void {
+    return descr.value === undefined
+        ? memProp(proto, name, descr)
+        : memMethod(proto, name, descr)
 }

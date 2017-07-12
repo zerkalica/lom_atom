@@ -23,9 +23,11 @@ describe('mem', () => {
             currentUser: IUser;
         }
 
+        function f<T>(t: Class<T>): Class<T & {force: T}> {
+            return (t: any)
+        }
         class UserService implements IUserService {
-            @force force: UserService
-
+            @force get force() { return this }
             @mem currentUserId: number = 1
 
             @memkey

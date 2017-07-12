@@ -20,13 +20,22 @@
         ["transform-es2015-destructuring", {"loose": true}],
         "transform-es2015-block-scoping",
         ["transform-object-rest-spread", {"useBuiltIns": true}],
+        "syntax-flow",
+        ["transform-react-jsx", {
+            "pragma": "lom_h"
+        }],
         "transform-flow-strip-types",
-        "syntax-flow"
+        ["module-resolver", {
+            "root": [""],
+            "alias": {
+                "lom-atom": "./src/index.js"
+            }
+        }]
     ],
     "env": {
       "rollup": {
         "plugins": [
-          "external-helpers"
+            "external-helpers"
         ]
       },
       "commonjs": {

@@ -36,13 +36,11 @@ export function defaultNormalize<V>(next: V, prev?: V): V {
 }
 
 export class AtomWait extends Error {
-    constructor(message?: string) {
+    name = 'AtomWait'
+
+    constructor(message?: string = 'Wait...') {
         super(message)
-        if (Error.hasOwnProperty('captureStackTrace')) {
-            Error.captureStackTrace(this, this.constructor)
-        } else {
-            this.stack = (new Error(message)).stack
-        }
+        this['__proto__'] = new.target.prototype
         ;(this: Object)[catchedId] = true
     }
 }

@@ -2,6 +2,7 @@
 
 export {default as Atom} from './Atom'
 export {default as mem, force} from './mem'
+export {default as createReactWrapper, createCreateElement} from './createReactWrapper'
 
 export {
     AtomWait
