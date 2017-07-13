@@ -105,7 +105,7 @@ export default function createReactWrapper<IElement>(
         _renderedData: IElement | void = undefined
 
         componentWillUnmount() {
-            (this: Object)['__render$'].destroyed(true)
+            (this: Object)['__render@'].destroyed(true)
         }
 
         @mem

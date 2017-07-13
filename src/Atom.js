@@ -50,22 +50,16 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
 
     constructor(
         field: string,
-        handler: IAtomHandler<V> | IAtomHost<V>,
-        context?: IContext = defaultContext,
-        normalize?: (nv: V, old?: V) => V = defaultNormalize
+        handler: IAtomHandler<V>,
+        host?: IAtomHost<V>,
+        context?: IContext,
+        normalize?: (nv: V, old?: V) => V
     ) {
-
-        if (typeof handler === 'function') {
-            this._host = defaultHost
-            this._handler = handler
-        } else {
-            this._host = handler
-            this._handler = handler[field]
-        }
-
         this.field = field
-        this._normalize = normalize
-        this._context = context
+        this._handler = handler
+        this._host = host || defaultHost
+        this._normalize = normalize || defaultNormalize
+        this._context = context || defaultContext
     }
 
     destroyed(isDestroyed?: boolean): boolean {
@@ -75,11 +69,9 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
 
         if (isDestroyed) {
             if (this.status !== ATOM_STATUS.DESTROYED) {
-                if (this._slaves) {
-                    return false
-                }
                 if (this._masters) {
                     this._masters.forEach(disleadThis, this)
+                    this._masters = null
                 }
                 this._checkSlaves()
                 this._cached = undefined
@@ -89,8 +81,7 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
                     if (host._destroy !== undefined) {
                         host._destroy()
                     }
-                    // host[this.field] = (undefined: any)
-                    // host[`${this.field}@`] = (undefined: any)
+                    host[this.field] = (undefined: any)
                 }
             }
 

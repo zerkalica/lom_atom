@@ -13,10 +13,10 @@ type TypedPropertyDescriptor<T> = {
     set?: (value: T) => void;
 }
 
-function getAtom<V>(t: Object, handlerKey: string, subKey: string): IAtom<V> {
-    let atom: IAtom<V> | void = t[subKey]
+function getAtom<V>(t: Object, handler: IAtomHandler<V>, atomCacheKey: string): IAtom<V> {
+    let atom: IAtom<V> | void = t[atomCacheKey]
     if (atom === undefined) {
-        t[subKey] = atom = new Atom(handlerKey, t)
+        t[atomCacheKey] = atom = new Atom(atomCacheKey, handler, t)
     }
 
     return atom
@@ -27,15 +27,18 @@ function memMethod<V, P: Object>(
     name: string,
     descr: TypedPropertyDescriptor<IAtomHandler<V>>
 ): TypedPropertyDescriptor<IAtomHandler<V>> {
-    const handlerKey = `${name}@`
-    const subKey = `${name}$`
-    proto[handlerKey] = descr.value
+    proto[`${name}$`] = descr.value
+    const handler = descr.value
+    if (handler === undefined) {
+        throw new TypeError(`${name} is not an function (next?: V)`)
+    }
+    const atomCacheKey = `${name}@`
 
     return {
         enumerable: descr.enumerable,
         configurable: descr.configurable,
         value(next?: V, force?: boolean) {
-            return getAtom(this, handlerKey, subKey)
+            return getAtom(this, handler, atomCacheKey)
                 .value(next, force)
         }
     }
@@ -64,24 +67,25 @@ function memProp<V, P: Object>(
     name: string,
     descr: TypedPropertyDescriptor<V>
 ): TypedPropertyDescriptor<V> | void {
-    const handlerKey = `${name}@`
-    const subKey = `${name}$`
-    if (proto[handlerKey]) {
+    const handlerKey = `${name}$`
+    if (proto[handlerKey] !== undefined) {
         return
     }
 
-    proto[handlerKey] = descr.get === undefined && descr.set === undefined
+    const handler = proto[handlerKey] = descr.get === undefined && descr.set === undefined
         ? createValueHandler(descr.initializer)
         : createGetSetHandler(descr.get, descr.set)
+
+    const atomCacheKey = `${name}@`
 
     return {
         enumerable: descr.enumerable,
         configurable: descr.configurable,
         get() {
-            return getAtom(this, handlerKey, subKey).get()
+            return getAtom(this, handler, atomCacheKey).get()
         },
         set(val: V) {
-            getAtom(this, handlerKey, subKey).set(val)
+            getAtom(this, handler, atomCacheKey).set(val)
         }
     }
 }
@@ -104,14 +108,22 @@ export function memkey<V, K, P: Object>(
     name: string,
     descr: TypedPropertyDescriptor<IAtomKeyHandler<V, K>>
 ): TypedPropertyDescriptor<IAtomKeyHandler<V, K>> {
-    const handlerKey = `${name}@`
-    proto[handlerKey] = descr.value
+    const handler = descr.value
+    if (handler === undefined) {
+        throw new TypeError(`${name} is not an function (rawKey: K, next?: V)`)
+    }
+
+    proto[`${name}$`] = handler
 
     return {
         enumerable: descr.enumerable,
         configurable: descr.configurable,
         value(rawKey: K, next?: V, force?: boolean) {
-            return getAtom(this, handlerKey, `${name}#${getKey(rawKey)}$`)
+            function handlerWithKey(next?: V, force?: boolean): V {
+                return handler.call(this, rawKey, next, force)
+            }
+
+            return getAtom(this, handlerWithKey, `${name}(${getKey(rawKey)})@`)
                 .value(next, force)
         }
     }

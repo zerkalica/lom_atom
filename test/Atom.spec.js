@@ -3,7 +3,7 @@
 
 import assert from 'power-assert'
 import sinon from 'sinon'
-import Atom from '../src/Atom'
+import Atom, {defaultContext} from '../src/Atom'
 import {AtomWait} from '../src/utils'
 import Context from '../src/Context'
 import {catchedId, ATOM_STATUS} from '../src/interfaces'
@@ -17,9 +17,8 @@ describe('Atom', () => {
 
     it('lazyness', () => {
         let value = 0
-        const context = new Context()
-        const prop = new Atom('prop', () => value = 1, context)
-        context.run()
+        const prop = new Atom('prop', () => value = 1)
+        defaultContext.run()
 
         assert(value === 0)
     })
@@ -56,63 +55,59 @@ describe('Atom', () => {
     })
 
     it('obsolete atoms actualized in initial order', () => {
-        const context = new Context()
 
         let actualizations = ''
 
-        let source = new Atom('source', (next?: number) => next || 1, context)
+        let source = new Atom('source', (next?: number) => next || 1)
         let middle = new Atom('middle', () => {
             actualizations += 'M'
             return source.get()
-        }, context)
+        })
         let target = new Atom('target', () => {
             actualizations += 'T'
             source.get()
             return middle.get()
-        }, context)
+        })
 
         target.get()
         assert(actualizations === 'TM')
 
         source.set(2)
-        context.run()
+        defaultContext.run()
 
         assert(actualizations, 'TMTM')
     })
 
     it('destroy on switch', () => {
-        const context = new Context()
-        let c = new Atom('c', (next?: number = 1) => next, context)
-        let a = new Atom('a', () => 1, context)
-        let b = new Atom('b', () => 2, context)
-        let s = new Atom('s', () => c.get() === 0 ? b.get() : a.get(), context)
+        let c = new Atom('c', (next?: number = 1) => next)
+        let a = new Atom('a', () => 1)
+        let b = new Atom('b', () => 2)
+        let s = new Atom('s', () => c.get() === 0 ? b.get() : a.get())
 
         assert(s.get() === 1)
         assert(b.status === ATOM_STATUS.OBSOLETE)
         assert(a.status === ATOM_STATUS.ACTUAL)
         c.set(0)
-        context.run()
+        defaultContext.run()
         assert(s.get() === 2)
         assert(b.status === ATOM_STATUS.ACTUAL)
         assert(a.destroyed() === true)
     })
 
     it('automatic deferred restart', () => {
-        const context = new Context()
         let targetValue: number = 0
-        let source = new Atom('source', (next?: number) => next || 1, context)
-        let middle = new Atom('middle', () => source.get() + 1, context)
-        let target = new Atom('target', () => targetValue = middle.get() + 1, context)
+        let source = new Atom('source', (next?: number) => next || 1)
+        let middle = new Atom('middle', () => source.get() + 1)
+        let target = new Atom('target', () => targetValue = middle.get() + 1)
         target.get()
         assert(targetValue === 3)
         source.set(2)
         assert(targetValue === 3)
-        context.run()
+        defaultContext.run()
         assert(targetValue === 4)
     })
 
     it('async loading', () => {
-        const context = new Context()
         let targetValue: number = 0
         let resolve
         const promise = new Promise((res, reject) => {
@@ -129,12 +124,12 @@ describe('Atom', () => {
                 // resolve()
             }, 0)
             throw new AtomWait()
-        }, context)
+        })
 
         let middle = new Atom('middle', () => {
             targetValue = source.get() + 1
             return targetValue
-        }, context)
+        })
 
         assert.throws(() => {
             middle.get().valueOf()
