@@ -1,6 +1,7 @@
 // @flow
 
 import {detached} from './mem'
+import {defaultContext} from './Atom'
 import {AtomWait} from './utils'
 
 type IReactComponent<IElement, Props> = {
@@ -39,12 +40,19 @@ type IAtomize<IElement, Props> = (
     fromError?: IFromError<IElement>
 ) => Class<IReactComponent<IElement, Props>>
 
+function createEventFix(origin: (e: Event) => void): (e: Event) => void {
+    return function fixEvent(e: Event) {
+        origin(e)
+        defaultContext.run()
+    }
+}
 export function createCreateElement<IElement, Props>(
     atomize: IAtomize<IElement, Props>,
     createElement: Function
 ) {
     return function lomCreateElement() {
         const el = arguments[0]
+        const attrs = arguments[1]
 
         let newEl
         if (typeof el === 'function' && el.prototype.render === undefined) {
@@ -55,26 +63,34 @@ export function createCreateElement<IElement, Props>(
         } else {
             newEl = el
         }
+        if (attrs) {
+            if (attrs.onInput) {
+                attrs.onInput = createEventFix(attrs.onInput)
+            }
+            if (attrs.onChange) {
+                attrs.onChange = createEventFix(attrs.onChange)
+            }
+        }
 
         switch(arguments.length) {
             case 2:
-                return createElement(newEl, arguments[1])
+                return createElement(newEl, attrs)
             case 3:
-                return createElement(newEl, arguments[1], arguments[2])
+                return createElement(newEl, attrs, arguments[2])
             case 4:
-                return createElement(newEl, arguments[1], arguments[2], arguments[3])
+                return createElement(newEl, attrs, arguments[2], arguments[3])
             case 5:
-                return createElement(newEl, arguments[1], arguments[2], arguments[3], arguments[4])
+                return createElement(newEl, attrs, arguments[2], arguments[3], arguments[4])
             case 6:
-                return createElement(newEl, arguments[1], arguments[2], arguments[3], arguments[4], arguments[5])
+                return createElement(newEl, attrs, arguments[2], arguments[3], arguments[4], arguments[5])
             case 7:
-                return createElement(newEl, arguments[1], arguments[2], arguments[3],
+                return createElement(newEl, attrs, arguments[2], arguments[3],
                     arguments[4], arguments[5], arguments[6])
             case 8:
-                return createElement(newEl, arguments[1], arguments[2], arguments[3],
+                return createElement(newEl, attrs, arguments[2], arguments[3],
                     arguments[4], arguments[5], arguments[6], arguments[7])
             case 9:
-                return createElement(newEl, arguments[1], arguments[2], arguments[3],
+                return createElement(newEl, attrs, arguments[2], arguments[3],
                     arguments[4], arguments[5], arguments[6], arguments[7], arguments[8])
             default:
                 return createElement.apply(null, arguments)

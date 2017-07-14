@@ -10,7 +10,7 @@ import {CounterView, Counter} from './counter'
 import {HelloView, Hello} from './hello'
 
 class Store {
-    links = ['hello', 'counter']
+    links = ['hello', 'counter', 'error']
     @mem route: string = 'hello'
     counter = new Counter()
     hello = new Hello()

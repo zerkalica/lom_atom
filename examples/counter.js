@@ -6,12 +6,11 @@ export class Counter {
     @force $: Counter
 
     @mem get value(): number {
-        return 1
-        // setTimeout(() => {
-        //     this.$.value = 1
-        // }, 500)
-        //
-        // throw new AtomWait()
+        setTimeout(() => {
+            this.$.value = 1
+        }, 500)
+
+        throw new AtomWait()
     }
 
     @mem set value(v: number | Error) {}
