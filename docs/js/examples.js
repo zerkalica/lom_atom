@@ -538,22 +538,9 @@ function memProp(proto, name, descr) {
 
 
 
-function forceGet() {
-    defaultContext.force = true;
-    return this;
-}
 
-function forceDecorator(proto, name, descr) {
-    return {
-        enumerable: descr.enumerable,
-        configurable: descr.configurable,
-        get: forceGet
-    };
-}
 
-function force$1(v) {
-    return arguments.length > 1 ? forceDecorator(v, arguments[1], arguments[2]) : new AtomForce(v);
-}
+
 
 // export const force: IForce<*> =(function<V>(v?: V) {
 // }: any)
@@ -640,6 +627,15 @@ function createCreateElement(atomize, createElement) {
             newEl = el;
         }
         if (attrs) {
+            if (attrs.onKeyPress) {
+                attrs.onKeyPress = createEventFix(attrs.onKeyPress);
+            }
+            if (attrs.onKeyDown) {
+                attrs.onKeyDown = createEventFix(attrs.onKeyDown);
+            }
+            if (attrs.onKeyUp) {
+                attrs.onKeyUp = createEventFix(attrs.onKeyUp);
+            }
             if (attrs.onInput) {
                 attrs.onInput = createEventFix(attrs.onInput);
             }
@@ -687,22 +683,46 @@ function createReactWrapper(BaseComponent, defaultFromError) {
 
             _this._fromError = fromError;
             _this._render = render;
+            _this._context = undefined;
+            if (render.hooks) {
+                var _hooks = _this._hooks = new render.hooks();
+                if (_hooks.initContext) {
+                    _this._context = _hooks.initContext(_this.props);
+                }
+            }
             return _this;
         }
 
         AtomizedComponent.prototype.shouldComponentUpdate = function shouldComponentUpdate(props) {
-            return shouldUpdate(this.props, props);
+            var isUpdated = shouldUpdate(this.props, props);
+
+            if (isUpdated) {
+                var _hooks2 = this._hooks;
+                if (_hooks2 && _hooks2.updateContext) {
+                    this._context = _hooks2.updateContext(this.props, props, this._context);
+                }
+            }
+
+            return isUpdated;
         };
 
         AtomizedComponent.prototype.componentWillUnmount = function componentWillUnmount() {
-            this[this.constructor.displayName + '.view'].destroyed(true);
+            var hooks = this._hooks;
+            if (hooks && hooks._destroy) {
+                hooks._destroy();
+            }
+            this.props = undefined;
+            this._hooks = undefined;
+            this._context = undefined;
+            this._render = undefined;
+            this._fromError = undefined;this[this.constructor.displayName + '.view'].destroyed(true);
         };
 
         AtomizedComponent.prototype.view = function view() {
             var data = void 0;
 
             try {
-                data = this._render(this.props);
+                data = this._render(this.props, this._context);
             } catch (error) {
                 data = this._fromError({ error: error });
             }
@@ -19051,7 +19071,7 @@ var Counter = (_class$1 = function () {
             var _this = this;
 
             setTimeout(function () {
-                _this.value = force$1(42);
+                _this.value = 42;
             }, 500);
 
             throw new AtomWait();
@@ -19096,6 +19116,8 @@ function CounterView(_ref) {
 
 var _class$2;
 var _descriptor$1;
+var _class3;
+var _descriptor2;
 
 function _initDefineProp$1(target, property, descriptor, context) {
     if (!descriptor) return;
@@ -19147,7 +19169,30 @@ var Hello = (_class$2 = function Hello() {
     }
 })), _class$2);
 
-function HelloView(_ref) {
+var HelloContext = (_class3 = function HelloContext() {
+    classCallCheck(this, HelloContext);
+
+    _initDefineProp$1(this, 'actionName', _descriptor2, this);
+}, (_descriptor2 = _applyDecoratedDescriptor$3(_class3.prototype, 'actionName', [mem], {
+    enumerable: true,
+    initializer: function initializer() {
+        return 'Hello';
+    }
+})), _class3);
+
+var HelloViewHooks = function () {
+    function HelloViewHooks() {
+        classCallCheck(this, HelloViewHooks);
+    }
+
+    HelloViewHooks.prototype.initContext = function initContext(props) {
+        return new HelloContext();
+    };
+
+    return HelloViewHooks;
+}();
+
+function HelloView(_ref, context) {
     var hello = _ref.hello;
 
     return lom_h(
@@ -19156,16 +19201,27 @@ function HelloView(_ref) {
         lom_h(
             'h3',
             null,
-            'Hello, ',
+            context.actionName,
+            ', ',
             hello.name
         ),
+        'Name: ',
         lom_h('input', { value: hello.name, onInput: function onInput(_ref2) {
                 var target = _ref2.target;
 
                 hello.name = target.value;
+            } }),
+        lom_h('br', null),
+        'Action: ',
+        lom_h('input', { value: context.actionName, onInput: function onInput(_ref3) {
+                var target = _ref3.target;
+
+                context.actionName = target.value;
             } })
     );
 }
+
+HelloView.hooks = HelloViewHooks;
 
 var _class;
 var _descriptor;

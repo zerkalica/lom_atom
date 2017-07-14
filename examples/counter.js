@@ -5,7 +5,7 @@ import {AtomWait, mem, force} from 'lom-atom'
 export class Counter {
     @mem get value(): number {
         setTimeout(() => {
-            this.value = force(42)
+            this.value = 42
         }, 500)
 
         throw new AtomWait()

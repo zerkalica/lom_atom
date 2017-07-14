@@ -10,7 +10,19 @@ type IReactComponent<IElement, Props> = {
     forceUpdate(): void;
 }
 
-type IRenderFn<IElement, Props> = (props: Props) => IElement
+interface IHooks<Props, Context> {
+    constructor(): IHooks<Props, Context>;
+    +_destroy?: () => void;
+    +initContext?: (props: Props) => Context;
+    +updateContext?: (oldProps: Props, newProps: Props, oldContext: Context) => Context;
+}
+
+interface IRenderFn<IElement, Props, Context> {
+    displayName?: string;
+    (props: Props, context: Context): IElement;
+    hooks?: Class<IHooks<Props, Context>>;
+}
+
 type IFromError<IElement> = (props: {error: Error}) => IElement
 
 function shouldUpdate<Props: Object>(oldProps: Props, props: Props): boolean {
@@ -35,8 +47,8 @@ function shouldUpdate<Props: Object>(oldProps: Props, props: Props): boolean {
     return lpKeys !== 0
 }
 
-type IAtomize<IElement, Props> = (
-    render: IRenderFn<IElement, Props>,
+type IAtomize<IElement, Props, Context> = (
+    render: IRenderFn<IElement, Props, Context>,
     fromError?: IFromError<IElement>
 ) => Class<IReactComponent<IElement, Props>>
 
@@ -46,8 +58,8 @@ function createEventFix(origin: (e: Event) => void): (e: Event) => void {
         defaultContext.run()
     }
 }
-export function createCreateElement<IElement, Props>(
-    atomize: IAtomize<IElement, Props>,
+export function createCreateElement<IElement, Props, Context>(
+    atomize: IAtomize<IElement, Props, Context>,
     createElement: Function
 ) {
     return function lomCreateElement() {
@@ -64,6 +76,15 @@ export function createCreateElement<IElement, Props>(
             newEl = el
         }
         if (attrs) {
+            if (attrs.onKeyPress) {
+                attrs.onKeyPress = createEventFix(attrs.onKeyPress)
+            }
+            if (attrs.onKeyDown) {
+                attrs.onKeyDown = createEventFix(attrs.onKeyDown)
+            }
+            if (attrs.onKeyUp) {
+                attrs.onKeyUp = createEventFix(attrs.onKeyUp)
+            }
             if (attrs.onInput) {
                 attrs.onInput = createEventFix(attrs.onInput)
             }
@@ -102,32 +123,59 @@ export function createCreateElement<IElement, Props>(
 export default function createReactWrapper<IElement>(
     BaseComponent: Class<*>,
     defaultFromError: IFromError<IElement>
-): IAtomize<IElement, *> {
-    class AtomizedComponent<Props: Object> extends BaseComponent {
-        _render: IRenderFn<IElement, Props>
+): IAtomize<IElement, *, *> {
+    class AtomizedComponent<Props: Object, Context> extends BaseComponent {
+        _render: IRenderFn<IElement, Props, Context>
         _fromError: IFromError<IElement>
         _fromRender = false
         _renderedData: IElement | void = undefined
+        _context: Context
+        _hooks: ?IHooks<Props, Context>
 
         props: Props
 
         constructor(
             props: Props,
             context?: Object,
-            render: IRenderFn<IElement, Props>,
+            render: IRenderFn<IElement, Props, Context>,
             fromError: IFromError<IElement>
         ) {
             super(props, context)
             this._fromError = fromError
             this._render = render
+            this._context = (undefined: any)
+            if (render.hooks) {
+                const hooks = this._hooks = new render.hooks()
+                if (hooks.initContext) {
+                    this._context = hooks.initContext(this.props)
+                }
+            }
         }
 
         shouldComponentUpdate(props: Props) {
-            return shouldUpdate(this.props, props)
+            const isUpdated = shouldUpdate(this.props, props)
+
+            if (isUpdated) {
+                const hooks = this._hooks
+                if (hooks && hooks.updateContext) {
+                    this._context = hooks.updateContext(this.props, props, this._context)
+                }
+            }
+
+            return isUpdated
         }
 
         componentWillUnmount() {
-            (this: Object)[this.constructor.displayName + '.view'].destroyed(true)
+            const hooks = this._hooks
+            if (hooks && hooks._destroy) {
+                hooks._destroy()
+            }
+            this.props = (undefined: any)
+            this._hooks = (undefined: any)
+            this._context = (undefined: any)
+            this._render = (undefined: any)
+            this._fromError = (undefined: any)
+            ;(this: Object)[this.constructor.displayName + '.view'].destroyed(true)
         }
 
         @detached
@@ -135,7 +183,7 @@ export default function createReactWrapper<IElement>(
             let data: IElement
 
             try {
-                data = this._render(this.props)
+                data = this._render(this.props, this._context)
             } catch (error) {
                 data = this._fromError({error})
             }
@@ -162,8 +210,8 @@ export default function createReactWrapper<IElement>(
         }
     }
 
-    return function reactWrapper<Props>(
-        render: IRenderFn<IElement, Props>,
+    return function reactWrapper<Props, Context>(
+        render: IRenderFn<IElement, Props, Context>,
         fromError?: IFromError<IElement>
     ): Class<IReactComponent<IElement, Props>> {
         function WrappedComponent(props: Props, context?: Object) {
