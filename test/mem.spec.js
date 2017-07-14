@@ -192,10 +192,10 @@ describe('mem', () => {
 
         class Test {
             @mem
-            source(next?: string, force?: boolean): string {
+            source(next?: string): string {
                 new Promise((resolve: () => void) => {
                     testResolve = () => {
-                        this.source('Jin', true)
+                        this.source(force('Jin'))
                         resolve()
                     }
                 })

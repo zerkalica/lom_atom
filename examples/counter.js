@@ -3,17 +3,19 @@
 import {AtomWait, mem, force} from 'lom-atom'
 
 export class Counter {
-    @force $: Counter
-
     @mem get value(): number {
         setTimeout(() => {
-            this.$.value = 1
+            this.value = force(42)
         }, 500)
 
         throw new AtomWait()
     }
 
-    @mem set value(v: number | Error) {}
+    @mem set value(v: number) {
+        if (typeof v === 'string') {
+            throw new TypeError('Test error')
+        }
+    }
 }
 
 export function CounterView({counter}: {
@@ -24,5 +26,6 @@ export function CounterView({counter}: {
             Count: {counter.value}
         </div>
         <button onClick={() => { counter.value++ }}>Add</button>
+        <button onClick={() => { counter.value = ('error': any) }}>Gen error</button>
     </div>
 }

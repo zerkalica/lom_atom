@@ -1,6 +1,7 @@
 // @flow
 
-import type {IAtom, IAtomHandler, IAtomKeyHandler, IAtomHost} from './interfaces'
+import {AtomForce} from './interfaces'
+import type {IAtom, IAtomHandler, IAtomKeyHandler, IAtomHost, IForceable} from './interfaces'
 import Atom, {defaultContext} from './Atom'
 
 type TypedPropertyDescriptor<T> = {
@@ -42,15 +43,15 @@ function memMethod<V, P: Object>(
     return {
         enumerable: descr.enumerable,
         configurable: descr.configurable,
-        value(next?: V, force?: boolean) {
+        value(next?: V) {
             return getAtom(this, handler, name, isComponent)
-                .value(next, force)
+                .value(next)
         }
     }
 }
 
 function createGetSetHandler<V>(get?: () => V, set?: (v: V) => void): IAtomHandler<V> {
-    return function getSetHandler(next?: V, force?: boolean) {
+    return function getSetHandler(next?: V) {
         if (next === undefined) {
             return (get: any).call(this)
         }
@@ -60,7 +61,7 @@ function createGetSetHandler<V>(get?: () => V, set?: (v: V) => void): IAtomHandl
 }
 
 function createValueHandler<V>(initializer?: () => V): IAtomHandler<V> {
-    return function valueHandler(next?: V, force?: boolean) {
+    return function valueHandler(next?: V) {
         return next === undefined && initializer !== undefined
             ? initializer.call(this)
             : (next: any)
@@ -121,13 +122,13 @@ export function memkey<V, K, P: Object>(
     return {
         enumerable: descr.enumerable,
         configurable: descr.configurable,
-        value(rawKey: K, next?: V, force?: boolean) {
-            function handlerWithKey(next?: V, force?: boolean): V {
-                return handler.call(this, rawKey, next, force)
+        value(rawKey: K, next?: V) {
+            function handlerWithKey(next?: V): V {
+                return handler.call(this, rawKey, next)
             }
 
             return getAtom(this, handlerWithKey, `${name}(${getKey(rawKey)})`)
-                .value(next, force)
+                .value(next)
         }
     }
 }
@@ -137,7 +138,7 @@ function forceGet() {
     return this
 }
 
-export function force<V>(
+export function forceDecorator<V>(
     proto: mixed,
     name: string,
     descr: TypedPropertyDescriptor<V>
@@ -148,6 +149,23 @@ export function force<V>(
         get: forceGet
     }
 }
+
+declare function force<V>(v?: V): V
+
+declare function force<V>(
+    proto: Object,
+    name: string,
+    descr: TypedPropertyDescriptor<V>
+): TypedPropertyDescriptor<V>
+
+export function force<V>(v?: V) {
+    return arguments.length > 1
+        ? forceDecorator(v, arguments[1], arguments[2])
+        : ((new AtomForce(v): any): V)
+}
+
+// export const force: IForce<*> =(function<V>(v?: V) {
+// }: any)
 
 export default function mem<P: Object, V, K>(
     proto: P,

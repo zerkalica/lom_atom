@@ -35,6 +35,13 @@ export function defaultNormalize<V>(next: V, prev?: V): V {
     return next
 }
 
+export function force<V>(value: V) {
+    return {
+        type: 'lom_atom.force',
+        value
+    }
+}
+
 export class AtomWait extends Error {
     name = 'AtomWait'
 

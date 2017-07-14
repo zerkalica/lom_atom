@@ -34,12 +34,26 @@ type $Values<O: Object> = $ObjectValues<*, O>
 
 export type IAtomStatus = $Values<typeof ATOM_STATUS>
 
+export class AtomForce<V> {
+    value: V | void
+
+    constructor(value?: V) {
+        this.value = value
+    }
+
+    valueOf(): V | void {
+        return this.value
+    }
+}
+
+export type IForceable<V> = V | AtomForce<V>
+
 export interface IAtom<V> {
     status: IAtomStatus;
     field: string;
-    get(force?: boolean): V;
-    set(v: V, force?: boolean): V;
-    value(next?: V, force?: boolean): V;
+    get(force?: IForceable<V>): V;
+    set(v: IForceable<V>): V;
+    value(next?: IForceable<V>): V;
     destroyed(isDestroyed?: boolean): boolean;
 }
 
@@ -53,14 +67,10 @@ export interface IAtomInt extends IAtom<*> {
     addMaster(master: IAtomInt): void;
 }
 
-export type IAtomForce = boolean
+export type IAtomHandler<V> = (next?: V) => V
+export type IAtomKeyHandler<V, K> = (key: K, next?: V) => V
 
 export type IAtomHost<V> = {
-    __lom?: string[];
-    [key: string]: (next?: V, force?: IAtomForce) => V;
+    [key: string]: IAtomHandler<V> | IAtomKeyHandler<V, *>;
     _destroy?: () => void;
 }
-
-export type IAtomHandler<V> = (next?: V, force?: IAtomForce) => V
-
-export type IAtomKeyHandler<V, K> = (key: K, next?: V, force?: IAtomForce) => V

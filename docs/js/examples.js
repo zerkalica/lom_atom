@@ -6,16 +6,6 @@ var global$1 = typeof global !== "undefined" ? global :
             typeof self !== "undefined" ? self :
             typeof window !== "undefined" ? window : {};
 
-var ATOM_STATUS = {
-    DESTROYED: 0,
-    OBSOLETE: 1,
-    CHECKING: 2,
-    PULLING: 3,
-    ACTUAL: 4
-};
-
-var catchedId = Symbol('lom_atom_catched');
-
 var classCallCheck = function (instance, Constructor) {
   if (!(instance instanceof Constructor)) {
     throw new TypeError("Cannot call a class as a function");
@@ -82,6 +72,30 @@ var possibleConstructorReturn = function (self, call) {
   return call && (typeof call === "object" || typeof call === "function") ? call : self;
 };
 
+var ATOM_STATUS = {
+    DESTROYED: 0,
+    OBSOLETE: 1,
+    CHECKING: 2,
+    PULLING: 3,
+    ACTUAL: 4
+};
+
+var catchedId = Symbol('lom_atom_catched');
+
+var AtomForce = function () {
+    function AtomForce(value) {
+        classCallCheck(this, AtomForce);
+
+        this.value = value;
+    }
+
+    AtomForce.prototype.valueOf = function valueOf() {
+        return this.value;
+    };
+
+    return AtomForce;
+}();
+
 var throwOnAccess = {
     get: function get$$1(target) {
         throw target.valueOf();
@@ -110,6 +124,8 @@ function defaultNormalize(next, prev) {
 
     return next;
 }
+
+
 
 var AtomWait = function (_Error) {
     inherits(AtomWait, _Error);
@@ -294,8 +310,8 @@ var Atom = function () {
         return false;
     };
 
-    Atom.prototype.get = function get$$1(force) {
-        if (force || this._context.force) {
+    Atom.prototype.get = function get$$1(force$$1) {
+        if (force$$1 !== undefined || this._context.force) {
             this._context.force = false;
             this._pullPush(undefined, true);
         } else {
@@ -318,7 +334,11 @@ var Atom = function () {
         return this._cached;
     };
 
-    Atom.prototype.set = function set$$1(v, force) {
+    Atom.prototype.set = function set$$1(raw) {
+        var v = raw instanceof AtomForce ? raw.value : raw;
+        if (v === undefined) {
+            return this._cached;
+        }
         var normalized = this._normalize(v, this._cached);
         if (this._cached === normalized) {
             return normalized;
@@ -329,7 +349,7 @@ var Atom = function () {
 
         // console.log('set', this.field, 'value', normalized)
 
-        if (force || this._context.force) {
+        if (raw instanceof AtomForce || this._context.force) {
             this._context.force = false;
             this.status = ATOM_STATUS.ACTUAL;
             this._context.newValue(this, this._cached, normalized);
@@ -365,7 +385,7 @@ var Atom = function () {
         }
     };
 
-    Atom.prototype._pullPush = function _pullPush(proposedValue, force) {
+    Atom.prototype._pullPush = function _pullPush(proposedValue, force$$1) {
         if (this._masters) {
             this._masters.forEach(disleadThis, this);
         }
@@ -377,7 +397,7 @@ var Atom = function () {
         var slave = context.last;
         context.last = this;
         try {
-            newValue = this._normalize(this._host === undefined ? this._handler(proposedValue, force) : this._handler.call(this._host, proposedValue, force), this._cached);
+            newValue = this._normalize(this._host === undefined ? this._handler(proposedValue) : this._handler.call(this._host, proposedValue), this._cached);
         } catch (error) {
             if (error[catchedId] === undefined) {
                 error[catchedId] = true;
@@ -443,8 +463,8 @@ var Atom = function () {
         this._masters.add(master);
     };
 
-    Atom.prototype.value = function value(next, force) {
-        return next === undefined ? this.get(force) : this.set(next, force);
+    Atom.prototype.value = function value(next) {
+        return next === undefined ? this.get(next) : this.set(next);
     };
 
     return Atom;
@@ -474,14 +494,14 @@ function memMethod(proto, name, descr, isComponent) {
     return {
         enumerable: descr.enumerable,
         configurable: descr.configurable,
-        value: function value(next, force) {
-            return getAtom(this, handler, name, isComponent).value(next, force);
+        value: function value(next) {
+            return getAtom(this, handler, name, isComponent).value(next);
         }
     };
 }
 
 function createGetSetHandler(get, set) {
-    return function getSetHandler(next, force) {
+    return function getSetHandler(next) {
         if (next === undefined) {
             return get.call(this);
         }
@@ -491,7 +511,7 @@ function createGetSetHandler(get, set) {
 }
 
 function createValueHandler(initializer) {
-    return function valueHandler(next, force) {
+    return function valueHandler(next) {
         return next === undefined && initializer !== undefined ? initializer.call(this) : next;
     };
 }
@@ -523,13 +543,20 @@ function forceGet() {
     return this;
 }
 
-function force(proto, name, descr) {
+function forceDecorator(proto, name, descr) {
     return {
         enumerable: descr.enumerable,
         configurable: descr.configurable,
         get: forceGet
     };
 }
+
+function force$1(v) {
+    return arguments.length > 1 ? forceDecorator(v, arguments[1], arguments[2]) : new AtomForce(v);
+}
+
+// export const force: IForce<*> =(function<V>(v?: V) {
+// }: any)
 
 function mem(proto, name, descr) {
     return descr.value === undefined ? memProp(proto, name, descr) : memMethod(proto, name, descr);
@@ -18983,17 +19010,6 @@ var ReactDOM_1 = ReactDOM$1;
 var index$2 = ReactDOM_1;
 
 var _class$1;
-var _descriptor$1;
-
-function _initDefineProp$1(target, property, descriptor, context) {
-    if (!descriptor) return;
-    Object.defineProperty(target, property, {
-        enumerable: descriptor.enumerable,
-        configurable: descriptor.configurable,
-        writable: descriptor.writable,
-        value: descriptor.initializer ? descriptor.initializer.call(context) : void 0
-    });
-}
 
 function _applyDecoratedDescriptor$2(target, property, decorators, descriptor, context) {
     var desc = {};
@@ -19027,8 +19043,6 @@ function _applyDecoratedDescriptor$2(target, property, decorators, descriptor, c
 var Counter = (_class$1 = function () {
     function Counter() {
         classCallCheck(this, Counter);
-
-        _initDefineProp$1(this, '$', _descriptor$1, this);
     }
 
     createClass(Counter, [{
@@ -19037,18 +19051,19 @@ var Counter = (_class$1 = function () {
             var _this = this;
 
             setTimeout(function () {
-                _this.$.value = 1;
+                _this.value = force$1(42);
             }, 500);
 
             throw new AtomWait();
         },
-        set: function set$$1(v) {}
+        set: function set$$1(v) {
+            if (typeof v === 'string') {
+                throw new TypeError('Test error');
+            }
+        }
     }]);
     return Counter;
-}(), (_descriptor$1 = _applyDecoratedDescriptor$2(_class$1.prototype, '$', [force], {
-    enumerable: true,
-    initializer: null
-}), _applyDecoratedDescriptor$2(_class$1.prototype, 'value', [mem], Object.getOwnPropertyDescriptor(_class$1.prototype, 'value'), _class$1.prototype), _applyDecoratedDescriptor$2(_class$1.prototype, 'value', [mem], Object.getOwnPropertyDescriptor(_class$1.prototype, 'value'), _class$1.prototype)), _class$1);
+}(), (_applyDecoratedDescriptor$2(_class$1.prototype, 'value', [mem], Object.getOwnPropertyDescriptor(_class$1.prototype, 'value'), _class$1.prototype), _applyDecoratedDescriptor$2(_class$1.prototype, 'value', [mem], Object.getOwnPropertyDescriptor(_class$1.prototype, 'value'), _class$1.prototype)), _class$1);
 
 function CounterView(_ref) {
     var counter = _ref.counter;
@@ -19068,14 +19083,21 @@ function CounterView(_ref) {
                     counter.value++;
                 } },
             'Add'
+        ),
+        lom_h(
+            'button',
+            { onClick: function onClick() {
+                    counter.value = 'error';
+                } },
+            'Gen error'
         )
     );
 }
 
 var _class$2;
-var _descriptor$2;
+var _descriptor$1;
 
-function _initDefineProp$2(target, property, descriptor, context) {
+function _initDefineProp$1(target, property, descriptor, context) {
     if (!descriptor) return;
     Object.defineProperty(target, property, {
         enumerable: descriptor.enumerable,
@@ -19117,8 +19139,8 @@ function _applyDecoratedDescriptor$3(target, property, decorators, descriptor, c
 var Hello = (_class$2 = function Hello() {
     classCallCheck(this, Hello);
 
-    _initDefineProp$2(this, 'name', _descriptor$2, this);
-}, (_descriptor$2 = _applyDecoratedDescriptor$3(_class$2.prototype, 'name', [mem], {
+    _initDefineProp$1(this, 'name', _descriptor$1, this);
+}, (_descriptor$1 = _applyDecoratedDescriptor$3(_class$2.prototype, 'name', [mem], {
     enumerable: true,
     initializer: function initializer() {
         return 'test';
