@@ -12,6 +12,8 @@ export function HelloView({hello}: {
     return <div>
         <h3>Hello, {hello.name}</h3>
 
-        <input value={hello.name} onChange={(e: Event) => { hello.name = e.target.value}} />
+        <input value={hello.name} onChange={({target}: Event) => {
+            hello.name = (target: any).value
+        }} />
     </div>
 }

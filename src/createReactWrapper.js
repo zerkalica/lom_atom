@@ -1,6 +1,6 @@
 // @flow
 
-import mem from './mem'
+import {detached} from './mem'
 import {AtomWait} from './utils'
 
 type IReactComponent<IElement, Props> = {
@@ -41,7 +41,7 @@ type IAtomize<IElement, Props> = (
 
 export function createCreateElement<IElement, Props>(
     atomize: IAtomize<IElement, Props>,
-    createElement: any
+    createElement: Function
 ) {
     return function lomCreateElement() {
         const el = arguments[0]
@@ -68,7 +68,14 @@ export function createCreateElement<IElement, Props>(
             case 6:
                 return createElement(newEl, arguments[1], arguments[2], arguments[3], arguments[4], arguments[5])
             case 7:
-                return createElement(newEl, arguments[1], arguments[2], arguments[3], arguments[4], arguments[5], arguments[6])
+                return createElement(newEl, arguments[1], arguments[2], arguments[3],
+                    arguments[4], arguments[5], arguments[6])
+            case 8:
+                return createElement(newEl, arguments[1], arguments[2], arguments[3],
+                    arguments[4], arguments[5], arguments[6], arguments[7])
+            case 9:
+                return createElement(newEl, arguments[1], arguments[2], arguments[3],
+                    arguments[4], arguments[5], arguments[6], arguments[7], arguments[8])
             default:
                 return createElement.apply(null, arguments)
         }
@@ -79,10 +86,12 @@ export function createCreateElement<IElement, Props>(
 export default function createReactWrapper<IElement>(
     BaseComponent: Class<*>,
     defaultFromError: IFromError<IElement>
-) {
+): IAtomize<IElement, *> {
     class AtomizedComponent<Props: Object> extends BaseComponent {
         _render: IRenderFn<IElement, Props>
         _fromError: IFromError<IElement>
+        _fromRender = false
+        _renderedData: IElement | void = undefined
 
         props: Props
 
@@ -101,15 +110,12 @@ export default function createReactWrapper<IElement>(
             return shouldUpdate(this.props, props)
         }
 
-        _fromRender = false
-        _renderedData: IElement | void = undefined
-
         componentWillUnmount() {
-            (this: Object)['__render@'].destroyed(true)
+            (this: Object)[this.constructor.displayName + '.view'].destroyed(true)
         }
 
-        @mem
-        __render(): IElement {
+        @detached
+        view(): IElement {
             let data: IElement
 
             try {
@@ -134,7 +140,7 @@ export default function createReactWrapper<IElement>(
                 return this._renderedData
             }
             this._fromRender = true
-            const data = this.__render()
+            const data = this.view()
             this._fromRender = false
             return data
         }

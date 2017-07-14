@@ -33,12 +33,11 @@ function actualizeMaster(master: IAtomInt) {
         master.actualize()
     }
 }
-const defaultHost: IAtomHost<*> = {}
 
 export default class Atom<V> implements IAtom<V>, IAtomInt {
     status: IAtomStatus = ATOM_STATUS.OBSOLETE
     field: string
-
+    isComponent: boolean
     _masters: ?Set<IAtomInt> = null
     _slaves: ?Set<IAtomInt> = null
     _context: IContext
@@ -46,20 +45,23 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
     _normalize: (nv: V, old?: V) => V
 
     _handler: IAtomHandler<V>
-    _host: IAtomHost<V>
+    _host: IAtomHost<V> | void
 
     constructor(
         field: string,
         handler: IAtomHandler<V>,
         host?: IAtomHost<V>,
+        isComponent?: boolean,
         context?: IContext,
         normalize?: (nv: V, old?: V) => V
     ) {
         this.field = field
         this._handler = handler
-        this._host = host || defaultHost
+        this._host = host
+        this.isComponent = isComponent || false
         this._normalize = normalize || defaultNormalize
         this._context = context || defaultContext
+        // console.log('init', this.field)
     }
 
     destroyed(isDestroyed?: boolean): boolean {
@@ -69,6 +71,7 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
 
         if (isDestroyed) {
             if (this.status !== ATOM_STATUS.DESTROYED) {
+                // console.log('destroy', this.field)
                 if (this._masters) {
                     this._masters.forEach(disleadThis, this)
                     this._masters = null
@@ -77,7 +80,7 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
                 this._cached = undefined
                 this.status = ATOM_STATUS.DESTROYED
                 const host = this._host
-                if (host !== defaultHost) {
+                if (host !== undefined) {
                     if (host._destroy !== undefined) {
                         host._destroy()
                     }
@@ -88,27 +91,28 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
             return true
         }
 
-        this.status = ATOM_STATUS.OBSOLETE
-
         return false
     }
 
     get(force?: boolean): V {
-        const slave = this._context.last
-        if (slave) {
-            let slaves = this._slaves
-            if (!slaves) {
-                this._context.unreap(this)
-                slaves = this._slaves = new Set()
-            }
-            slaves.add(slave)
-            slave.addMaster(this)
-        }
         if (force || this._context.force) {
             this._context.force = false
             this._pullPush(undefined, true)
         } else {
             this.actualize()
+        }
+
+        const slave = this._context.last
+        if (slave && (!slave.isComponent || !this.isComponent)) {
+            let slaves = this._slaves
+            if (!slaves) {
+                // console.log('unreap', this.field)
+                this._context.unreap(this)
+                slaves = this._slaves = new Set()
+            }
+            // console.log('add slave', slave.field, 'to master', this.field)
+            slaves.add(slave)
+            slave.addMaster(this)
         }
 
         return (this._cached: any)
@@ -123,9 +127,12 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
             return this._cached
         }
 
+        // console.log('set', this.field, 'value', normalized)
+
         if (force || this._context.force) {
             this._context.force = false
             this.status = ATOM_STATUS.ACTUAL
+            this._context.newValue(this, this._cached, normalized)
             this._cached = normalized
             if (this._slaves) {
                 this._slaves.forEach(obsoleteSlave)
@@ -135,7 +142,7 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
             this.actualize(normalized)
         }
 
-        return this._cached
+        return (this._cached: any)
     }
 
     actualize(proposedValue?: V): void {
@@ -169,10 +176,11 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         const context = this._context
         const slave = context.last
         context.last = this
-
         try {
             newValue = this._normalize(
-                this._handler.call(this._host, proposedValue, force),
+                this._host === undefined
+                    ? this._handler(proposedValue, force)
+                    : this._handler.call(this._host, proposedValue, force),
                 this._cached
             )
         } catch (error) {
@@ -182,11 +190,13 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
             }
             newValue = createMock(error)
         }
+
         context.last = slave
 
         this.status = ATOM_STATUS.ACTUAL
 
         if (newValue !== undefined && this._cached !== newValue) {
+            this._context.newValue(this, this._cached, newValue)
             this._cached = newValue
             if (this._slaves) {
                 this._slaves.forEach(obsoleteSlave)
@@ -199,8 +209,10 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         if (slaves) {
             if (slaves.size === 1) {
                 this._slaves = null
+                // console.log('reap (slaves === null)', this.field)
                 this._context.proposeToReap(this)
             } else {
+                // console.log('delete slave', slave.field, 'from', this.field)
                 slaves.delete(slave)
             }
         }
@@ -210,7 +222,7 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         if (this._slaves) {
             this._slaves.forEach(checkSlave)
         } else {
-            // top level atom
+            // console.log('pull', this.field)
             this._context.proposeToPull(this)
         }
     }

@@ -1,9 +1,17 @@
 // @flow
 
+export interface ILogger {
+    pulling(atom: IAtom<*>): void;
+    error<V>(atom: IAtom<V>, err: Error): void;
+    newValue<V>(atom: IAtom<V>, from?: V | Error, to: V): void;
+}
+
 export interface IContext {
     last: ?IAtomInt;
     force: boolean;
 
+    newValue<V>(t: IAtom<V>, from?: V | Error, to: V | Error): void;
+    setLogger(logger: ILogger): void;
     proposeToPull(atom: IAtomInt): void;
     proposeToReap(atom: IAtomInt): void;
     unreap(atom: IAtomInt): void;
@@ -36,6 +44,8 @@ export interface IAtom<V> {
 }
 
 export interface IAtomInt extends IAtom<*> {
+    isComponent: boolean;
+
     actualize(): void;
     check(): void;
     obsolete(): void;

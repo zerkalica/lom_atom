@@ -1,6 +1,7 @@
 // @flow
 
-import type {IAtomInt, IContext} from './interfaces'
+import type {IAtomInt, IAtom, IContext, ILogger} from './interfaces'
+import {AtomWait} from './utils'
 
 function reap(atom: IAtomInt, key: IAtomInt, reaping: Set<IAtomInt>) {
     reaping.delete(atom)
@@ -16,21 +17,41 @@ export default class Context implements IContext {
 
     force: boolean = false
 
+    _logger: ?ILogger = null
     _updating: IAtomInt[] = []
     _reaping: Set<IAtomInt> = new Set()
     _scheduled = false
 
+    setLogger(logger: ILogger) {
+        this._logger = logger
+    }
+
+    newValue<V>(atom: IAtom<V>, from?: V | Error, to: V | Error) {
+        if (this._logger) {
+            if (to instanceof AtomWait) {
+                this._logger.pulling(atom)
+            } else if (to instanceof Error) {
+                this._logger.error(atom, to)
+            } else {
+                this._logger.newValue(atom, from, to)
+            }
+        }
+    }
+
     proposeToPull(atom: IAtomInt) {
+        // this.logger.pull(atom)
         this._updating.push(atom)
         this._schedule()
     }
 
     proposeToReap(atom: IAtomInt) {
+        // this.logger.reap(atom)
         this._reaping.add(atom)
         this._schedule()
     }
 
     unreap(atom: IAtomInt) {
+        // this.logger.unreap(atom)
         this._reaping.delete(atom)
     }
 
@@ -69,7 +90,7 @@ export default class Context implements IContext {
         while (reaping.size > 0) {
             reaping.forEach(reap)
         }
-
+        // console.log('---------------------------- state changed\n')
         this._scheduled = false
     }
 }

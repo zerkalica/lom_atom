@@ -13,10 +13,15 @@ type TypedPropertyDescriptor<T> = {
     set?: (value: T) => void;
 }
 
-function getAtom<V>(t: Object, handler: IAtomHandler<V>, atomCacheKey: string): IAtom<V> {
+function getName(obj: Object): string {
+    return obj.constructor.displayName || obj.constructor.name
+}
+
+function getAtom<V>(t: Object, handler: IAtomHandler<V>, name: string, isComponent?: boolean): IAtom<V> {
+    const atomCacheKey = `${getName(t)}.${name}`
     let atom: IAtom<V> | void = t[atomCacheKey]
     if (atom === undefined) {
-        t[atomCacheKey] = atom = new Atom(atomCacheKey, handler, t)
+        t[atomCacheKey] = atom = new Atom(atomCacheKey, handler, t, isComponent)
     }
 
     return atom
@@ -25,20 +30,20 @@ function getAtom<V>(t: Object, handler: IAtomHandler<V>, atomCacheKey: string): 
 function memMethod<V, P: Object>(
     proto: P,
     name: string,
-    descr: TypedPropertyDescriptor<IAtomHandler<V>>
+    descr: TypedPropertyDescriptor<IAtomHandler<V>>,
+    isComponent?: boolean
 ): TypedPropertyDescriptor<IAtomHandler<V>> {
     proto[`${name}$`] = descr.value
     const handler = descr.value
     if (handler === undefined) {
         throw new TypeError(`${name} is not an function (next?: V)`)
     }
-    const atomCacheKey = `${name}@`
 
     return {
         enumerable: descr.enumerable,
         configurable: descr.configurable,
         value(next?: V, force?: boolean) {
-            return getAtom(this, handler, atomCacheKey)
+            return getAtom(this, handler, name, isComponent)
                 .value(next, force)
         }
     }
@@ -76,16 +81,14 @@ function memProp<V, P: Object>(
         ? createValueHandler(descr.initializer)
         : createGetSetHandler(descr.get, descr.set)
 
-    const atomCacheKey = `${name}@`
-
     return {
         enumerable: descr.enumerable,
         configurable: descr.configurable,
         get() {
-            return getAtom(this, handler, atomCacheKey).get()
+            return getAtom(this, handler, name).get()
         },
         set(val: V) {
-            getAtom(this, handler, atomCacheKey).set(val)
+            getAtom(this, handler, name).set(val)
         }
     }
 }
@@ -123,7 +126,7 @@ export function memkey<V, K, P: Object>(
                 return handler.call(this, rawKey, next, force)
             }
 
-            return getAtom(this, handlerWithKey, `${name}(${getKey(rawKey)})@`)
+            return getAtom(this, handlerWithKey, `${name}(${getKey(rawKey)})`)
                 .value(next, force)
         }
     }
@@ -154,4 +157,12 @@ export default function mem<P: Object, V, K>(
     return descr.value === undefined
         ? memProp(proto, name, descr)
         : memMethod(proto, name, descr)
+}
+
+export function detached<P: Object, V, K>(
+    proto: P,
+    name: string,
+    descr: TypedPropertyDescriptor<*>
+): TypedPropertyDescriptor<*> | void {
+    return memMethod(proto, name, descr, true)
 }

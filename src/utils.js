@@ -3,10 +3,10 @@
 import {catchedId} from './interfaces'
 
 const throwOnAccess = {
-    get(target : Error) {
+    get(target: Error) {
         throw target.valueOf()
     },
-    ownKeys(target : Error) {
+    ownKeys(target: Error) {
         throw target.valueOf()
     }
 }
@@ -23,7 +23,7 @@ export function defaultNormalize<V>(next: V, prev?: V): V {
         && (prev instanceof Array)
         && (next.length === prev.length)
     ) {
-        for( let i = 0; i < next.length; ++i ) {
+        for(let i = 0; i < next.length; i++) {
             if(next[i] !== prev[i]) {
                 return next
             }
@@ -40,7 +40,8 @@ export class AtomWait extends Error {
 
     constructor(message?: string = 'Wait...') {
         super(message)
-        this['__proto__'] = new.target.prototype
+        // $FlowFixMe new.target
+        ;(this: Object)['__proto__'] = new.target.prototype
         ;(this: Object)[catchedId] = true
     }
 }
