@@ -74,3 +74,16 @@ export type IAtomHost<V> = {
     [key: string]: IAtomHandler<V> | IAtomKeyHandler<V, *>;
     _destroy?: () => void;
 }
+
+export interface IHooks<Props: Object, Context> {
+    // constructor(): IHooks<Props, Context>;
+    +_destroy?: () => void;
+    +initContext?: (props: Props) => Context;
+    +updateContext?: (oldProps: Props, newProps: Props, oldContext: Context) => Context;
+}
+
+// export interface IHasHooks<Props: Object, Context> {
+//     hooks?: Class<IHooks<Props, Context>>;
+// }
+//
+export type IHooksFromComponent<Props, Context> = (component: Function) => ?IHooks<Props, Context>

@@ -2,7 +2,8 @@
 
 import {detached} from './mem'
 import {defaultContext} from './Atom'
-import {AtomWait} from './utils'
+import {shouldUpdate, AtomWait, defaultHooksFromComponent} from './utils'
+import type {IHooks, IHooksFromComponent} from './interfaces'
 
 type IReactComponent<IElement, Props> = {
     constructor(props: Props, context?: Object): IReactComponent<IElement, Props>;
@@ -10,42 +11,12 @@ type IReactComponent<IElement, Props> = {
     forceUpdate(): void;
 }
 
-interface IHooks<Props, Context> {
-    constructor(): IHooks<Props, Context>;
-    +_destroy?: () => void;
-    +initContext?: (props: Props) => Context;
-    +updateContext?: (oldProps: Props, newProps: Props, oldContext: Context) => Context;
-}
-
 interface IRenderFn<IElement, Props, Context> {
     displayName?: string;
     (props: Props, context: Context): IElement;
-    hooks?: Class<IHooks<Props, Context>>;
 }
 
 type IFromError<IElement> = (props: {error: Error}) => IElement
-
-function shouldUpdate<Props: Object>(oldProps: Props, props: Props): boolean {
-    if (oldProps === props) {
-        return false
-    }
-    if ((!oldProps && props) || (!props && oldProps)) {
-        return true
-    }
-
-    let lpKeys = 0
-    for (let k in oldProps) { // eslint-disable-line
-        if (oldProps[k] !== props[k]) {
-            return true
-        }
-        lpKeys++
-    }
-    for (let k in props) { // eslint-disable-line
-        lpKeys--
-    }
-
-    return lpKeys !== 0
-}
 
 type IAtomize<IElement, Props, Context> = (
     render: IRenderFn<IElement, Props, Context>,
@@ -119,10 +90,10 @@ export function createCreateElement<IElement, Props, Context>(
     }
 }
 
-
 export default function createReactWrapper<IElement>(
     BaseComponent: Class<*>,
-    defaultFromError: IFromError<IElement>
+    defaultFromError: IFromError<IElement>,
+    hooksFromComponent?: IHooksFromComponent<any, any> = defaultHooksFromComponent
 ): IAtomize<IElement, *, *> {
     class AtomizedComponent<Props: Object, Context> extends BaseComponent {
         _render: IRenderFn<IElement, Props, Context>
@@ -144,11 +115,10 @@ export default function createReactWrapper<IElement>(
             this._fromError = fromError
             this._render = render
             this._context = (undefined: any)
-            if (render.hooks) {
-                const hooks = this._hooks = new render.hooks()
-                if (hooks.initContext) {
-                    this._context = hooks.initContext(this.props)
-                }
+            const hooks: ?IHooks<Props, Context> = hooksFromComponent(render)
+            this._hooks = hooks
+            if (hooks && hooks.initContext) {
+                this._context = hooks.initContext(this.props)
             }
         }
 

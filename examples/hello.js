@@ -38,5 +38,4 @@ export function HelloView(
 
     </div>
 }
-
 HelloView.hooks = HelloViewHooks

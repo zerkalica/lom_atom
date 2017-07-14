@@ -1,6 +1,7 @@
 // @flow
 
 import {catchedId} from './interfaces'
+import type {IHooks} from './interfaces'
 
 const throwOnAccess = {
     get(target: Error) {
@@ -35,13 +36,6 @@ export function defaultNormalize<V>(next: V, prev?: V): V {
     return next
 }
 
-export function force<V>(value: V) {
-    return {
-        type: 'lom_atom.force',
-        value
-    }
-}
-
 export class AtomWait extends Error {
     name = 'AtomWait'
 
@@ -51,4 +45,37 @@ export class AtomWait extends Error {
         ;(this: Object)['__proto__'] = new.target.prototype
         ;(this: Object)[catchedId] = true
     }
+}
+
+
+export function shouldUpdate<Props: Object>(oldProps: Props, props: Props): boolean {
+    if (oldProps === props) {
+        return false
+    }
+    if ((!oldProps && props) || (!props && oldProps)) {
+        return true
+    }
+
+    let lpKeys = 0
+    for (let k in oldProps) { // eslint-disable-line
+        if (oldProps[k] !== props[k]) {
+            return true
+        }
+        lpKeys++
+    }
+    for (let k in props) { // eslint-disable-line
+        lpKeys--
+    }
+
+    return lpKeys !== 0
+}
+
+export function defaultHooksFromComponent<Props: Object, Context>(
+    component: Function
+): ?IHooks<Props, Context> {
+    if (component.hooks) {
+        return new (component: any).hooks()
+    }
+
+    return null
 }
