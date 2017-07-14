@@ -9,19 +9,14 @@
     "dest": "."
   },
   "scripts": {
-    "prepublish": "npm run build",
-    "preversion": "npm test",
     "postversion": "git push && git push --tags",
-    "prepush": "npm test",
+    "prepush": "npm test && npm run build",
     "update": "ncu -ua && npm install",
     "clean": "rm -rf dist",
     "build": "npm run clean && BABEL_ENV=rollup rollup -c",
     "ex": "npm run clean && BABEL_ENV=rollup rollup -c -w --config rollup.config.examples.js",
-    "check": "flow check",
-    "testonly": "BABEL_ENV=commonjs mocha",
     "test": "flow check && BABEL_ENV=commonjs mocha",
     "test.dev": "BABEL_ENV=commonjs mocha --growl --watch",
-    "build.babel": "babel examples/app/src --out-dir dist/examples",
     "watch": "chokidar --initial -d 2000 -t 1000 'src/**/*.js' -c 'npm run build && cp -rvf *.js src dist $npm_package_config_dest/node_modules/lom_atom'"
   },
   "author": "Stefan Zerkalica <zerkalica@gmail.com>",
