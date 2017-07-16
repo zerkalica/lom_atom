@@ -1,5 +1,5 @@
 import babel from 'rollup-plugin-babel'
-import uglify from 'rollup-plugin-uglify'
+// import uglify from 'rollup-plugin-uglify'
 import resolve from 'rollup-plugin-node-resolve';
 import commonjs from 'rollup-plugin-commonjs'
 import progress from 'rollup-plugin-progress'
@@ -7,7 +7,7 @@ import progress from 'rollup-plugin-progress'
 import globals from 'rollup-plugin-node-globals'
 import replace from 'rollup-plugin-replace'
 
-const libConf = {
+const libConfDev = {
     entry: 'src/index.js',
 
     format: 'umd',
@@ -19,8 +19,7 @@ const libConf = {
         progress(),
         babel({
             exclude: 'node_modules/**'
-        }),
-        // uglify()
+        })
     ]
 }
 
@@ -60,5 +59,5 @@ const examplesConf = {
 
 export default [
     examplesConf,
-    libConf
+    libConfDev
 ]

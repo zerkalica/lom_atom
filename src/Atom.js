@@ -1,9 +1,8 @@
 // @flow
 
-import {AtomForce, catchedId, ATOM_STATUS} from './interfaces'
+import {catchedId, ATOM_STATUS} from './interfaces'
 
 import type {
-    IForceable,
     IAtom,
     IAtomInt,
     IAtomStatus,
@@ -95,8 +94,8 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         return false
     }
 
-    get(force?: IForceable<V>): V {
-        if (force !== undefined || this._context.force) {
+    get(force?: boolean): V {
+        if (force || this._context.force) {
             this._context.force = false
             this._pullPush(undefined, true)
         } else {
@@ -119,11 +118,7 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         return (this._cached: any)
     }
 
-    set(raw: IForceable<V>): V {
-        const v = raw instanceof AtomForce ? raw.value : raw
-        if (v === undefined) {
-            return (this._cached: any)
-        }
+    set(v: V, force?: boolean): V {
         const normalized: V = this._normalize(v, this._cached)
         if (this._cached === normalized) {
             return normalized
@@ -134,7 +129,7 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
 
         // console.log('set', this.field, 'value', normalized)
 
-        if (raw instanceof AtomForce || this._context.force) {
+        if (force || this._context.force) {
             this._context.force = false
             this.status = ATOM_STATUS.ACTUAL
             this._context.newValue(this, this._cached, normalized)
@@ -184,8 +179,8 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         try {
             newValue = this._normalize(
                 this._host === undefined
-                    ? this._handler(proposedValue)
-                    : this._handler.call(this._host, proposedValue),
+                    ? this._handler(proposedValue, force)
+                    : this._handler.call(this._host, proposedValue, force),
                 this._cached
             )
         } catch (error) {
@@ -253,9 +248,9 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         this._masters.add(master)
     }
 
-    value(next?: IForceable<V>): V {
+    value(next?: V, force?: boolean): V {
         return next === undefined
-            ? this.get(next)
-            : this.set(next)
+            ? this.get(force)
+            : this.set(next, force)
     }
 }

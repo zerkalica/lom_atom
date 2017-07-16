@@ -9,7 +9,6 @@ export {
 } from './utils'
 
 export {
-    AtomForce,
     ATOM_STATUS,
     catchedId
 } from './interfaces'

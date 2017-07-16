@@ -6,6 +6,16 @@ var global$1 = typeof global !== "undefined" ? global :
             typeof self !== "undefined" ? self :
             typeof window !== "undefined" ? window : {};
 
+var ATOM_STATUS = {
+    DESTROYED: 0,
+    OBSOLETE: 1,
+    CHECKING: 2,
+    PULLING: 3,
+    ACTUAL: 4
+};
+
+var catchedId = Symbol('lom_atom_catched');
+
 var classCallCheck = function (instance, Constructor) {
   if (!(instance instanceof Constructor)) {
     throw new TypeError("Cannot call a class as a function");
@@ -71,35 +81,6 @@ var possibleConstructorReturn = function (self, call) {
 
   return call && (typeof call === "object" || typeof call === "function") ? call : self;
 };
-
-var ATOM_STATUS = {
-    DESTROYED: 0,
-    OBSOLETE: 1,
-    CHECKING: 2,
-    PULLING: 3,
-    ACTUAL: 4
-};
-
-var catchedId = Symbol('lom_atom_catched');
-
-var AtomForce = function () {
-    function AtomForce(value) {
-        classCallCheck(this, AtomForce);
-
-        this.value = value;
-    }
-
-    AtomForce.prototype.valueOf = function valueOf() {
-        return this.value;
-    };
-
-    return AtomForce;
-}();
-
-// export interface IHasHooks<Props: Object, Context> {
-//     hooks?: Class<IHooks<Props, Context>>;
-// }
-//
 
 var throwOnAccess = {
     get: function get$$1(target) {
@@ -171,14 +152,6 @@ function shouldUpdate(oldProps, props) {
     }
 
     return lpKeys !== 0;
-}
-
-function defaultHooksFromComponent(component) {
-    if (component.hooks) {
-        return new component.hooks();
-    }
-
-    return null;
 }
 
 function reap(atom, key, reaping) {
@@ -346,7 +319,7 @@ var Atom = function () {
     };
 
     Atom.prototype.get = function get$$1(force) {
-        if (force !== undefined || this._context.force) {
+        if (force || this._context.force) {
             this._context.force = false;
             this._pullPush(undefined, true);
         } else {
@@ -369,11 +342,7 @@ var Atom = function () {
         return this._cached;
     };
 
-    Atom.prototype.set = function set$$1(raw) {
-        var v = raw instanceof AtomForce ? raw.value : raw;
-        if (v === undefined) {
-            return this._cached;
-        }
+    Atom.prototype.set = function set$$1(v, force) {
         var normalized = this._normalize(v, this._cached);
         if (this._cached === normalized) {
             return normalized;
@@ -384,7 +353,7 @@ var Atom = function () {
 
         // console.log('set', this.field, 'value', normalized)
 
-        if (raw instanceof AtomForce || this._context.force) {
+        if (force || this._context.force) {
             this._context.force = false;
             this.status = ATOM_STATUS.ACTUAL;
             this._context.newValue(this, this._cached, normalized);
@@ -432,7 +401,7 @@ var Atom = function () {
         var slave = context.last;
         context.last = this;
         try {
-            newValue = this._normalize(this._host === undefined ? this._handler(proposedValue) : this._handler.call(this._host, proposedValue), this._cached);
+            newValue = this._normalize(this._host === undefined ? this._handler(proposedValue, force) : this._handler.call(this._host, proposedValue, force), this._cached);
         } catch (error) {
             if (error[catchedId] === undefined) {
                 error[catchedId] = true;
@@ -498,8 +467,8 @@ var Atom = function () {
         this._masters.add(master);
     };
 
-    Atom.prototype.value = function value(next) {
-        return next === undefined ? this.get(next) : this.set(next);
+    Atom.prototype.value = function value(next, force) {
+        return next === undefined ? this.get(force) : this.set(next, force);
     };
 
     return Atom;
@@ -529,8 +498,8 @@ function memMethod(proto, name, descr, isComponent) {
     return {
         enumerable: descr.enumerable,
         configurable: descr.configurable,
-        value: function value(next) {
-            return getAtom(this, handler, name, isComponent).value(next);
+        value: function value(next, force) {
+            return getAtom(this, handler, name, isComponent).value(next, force);
         }
     };
 }
@@ -575,17 +544,165 @@ function memProp(proto, name, descr) {
 
 
 
-
-
-// export const force: IForce<*> =(function<V>(v?: V) {
-// }: any)
-
 function mem(proto, name, descr) {
     return descr.value === undefined ? memProp(proto, name, descr) : memMethod(proto, name, descr);
 }
 
 function detached(proto, name, descr) {
     return memMethod(proto, name, descr, true);
+}
+
+var _class2;
+
+function _applyDecoratedDescriptor$2(target, property, decorators, descriptor, context) {
+    var desc = {};
+    Object['ke' + 'ys'](descriptor).forEach(function (key) {
+        desc[key] = descriptor[key];
+    });
+    desc.enumerable = !!desc.enumerable;
+    desc.configurable = !!desc.configurable;
+
+    if ('value' in desc || desc.initializer) {
+        desc.writable = true;
+    }
+
+    desc = decorators.slice().reverse().reduce(function (desc, decorator) {
+        return decorator(target, property, desc) || desc;
+    }, desc);
+
+    if (context && desc.initializer !== void 0) {
+        desc.value = desc.initializer ? desc.initializer.call(context) : void 0;
+        desc.initializer = undefined;
+    }
+
+    if (desc.initializer === void 0) {
+        Object['define' + 'Property'](target, property, desc);
+        desc = null;
+    }
+
+    return desc;
+}
+
+var Context$1 = function () {
+    function Context(parent, items) {
+        classCallCheck(this, Context);
+
+        this.parent = parent;
+        var map = this.map = new Map();
+        if (items !== undefined) {
+            for (var i = 0; i < items.length; i++) {
+                var item = items[i];
+                if (item instanceof Array) {
+                    map.set(item[0], item[1]);
+                } else {
+                    map.set(item.constructor, item);
+                }
+            }
+        }
+    }
+
+    Context.prototype._destroy = function _destroy() {
+        this.parent = undefined;
+        this.map = undefined;
+    };
+
+    Context.prototype._get = function _get(key) {
+        var ptr = this;
+        var value = undefined;
+        while (ptr !== undefined) {
+            value = ptr.map.get(key);
+            if (value !== undefined) {
+                return value;
+            }
+            ptr = ptr.parent;
+        }
+
+        throw new Error('Context: not registered for key ' + String(key));
+    };
+
+    Context.prototype.resolve = function resolve(argDeps) {
+        var result = [];
+        for (var i = 0, l = argDeps.length; i < l; i++) {
+            var argDep = argDeps[i];
+            if (typeof argDep === 'object') {
+                var obj = {};
+                for (var prop in argDep) {
+                    // eslint-disable-line
+                    obj[prop] = this._get(argDep[prop]);
+                }
+                result.push(obj);
+            } else {
+                result.push(this._get(argDep));
+            }
+        }
+
+        return result;
+    };
+
+    return Context;
+}();
+
+var StateDescriptor = (_class2 = function () {
+    function StateDescriptor(descr) {
+        classCallCheck(this, StateDescriptor);
+        this._state = undefined;
+        this.context = undefined;
+
+        this.descr = descr;
+    }
+
+    StateDescriptor.prototype._destroy = function _destroy() {
+        if (this.context) {
+            this.context._destroy();
+        }
+        this._state = undefined;
+        this.descr = undefined;
+        this.context = undefined;
+    };
+
+    StateDescriptor.prototype.props = function (_props) {
+        function props(_x, _x2) {
+            return _props.apply(this, arguments);
+        }
+
+        props.toString = function () {
+            return _props.toString();
+        };
+
+        return props;
+    }(function (props, force$$1) {
+        if (props !== undefined) {
+            var _provide = this.descr.provide;
+            if (_provide !== undefined) {
+                this.context = new Context$1(props.__lom_ctx, _provide(props, this._state));
+            } else {
+                this.context = props.__lom_ctx || new Context$1();
+            }
+
+            return props;
+        }
+
+        throw new Error('Can\'t get props from StateDescriptor.props');
+    });
+
+    StateDescriptor.prototype.state = function state() {
+        this.props();
+        var deps = this.descr.deps;
+        if (deps === undefined || this.context === undefined) {
+            throw new Error('No state defined');
+        }
+        this._state = this.context.resolve(deps)[0];
+
+        return this._state;
+    };
+
+    return StateDescriptor;
+}(), (_applyDecoratedDescriptor$2(_class2.prototype, 'props', [mem], Object.getOwnPropertyDescriptor(_class2.prototype, 'props'), _class2.prototype), _applyDecoratedDescriptor$2(_class2.prototype, 'state', [mem], Object.getOwnPropertyDescriptor(_class2.prototype, 'state'), _class2.prototype)), _class2);
+
+function createStateDescriptor(render) {
+    if (render.deps !== undefined || render.provide !== undefined) {
+        return new StateDescriptor(render);
+    }
 }
 
 function _applyDecoratedDescriptor$1(target, property, decorators, descriptor, context) {
@@ -623,17 +740,24 @@ function createEventFix(origin) {
         defaultContext.run();
     };
 }
+
 function createCreateElement(atomize, createElement) {
     return function lomCreateElement() {
         var el = arguments[0];
         var attrs = arguments[1];
 
         var newEl = void 0;
-        if (typeof el === 'function' && el.prototype.render === undefined) {
+        var isAtomic = typeof el === 'function' && el.prototype.render === undefined;
+        if (isAtomic) {
             if (el.__lom === undefined) {
                 el.__lom = atomize(el);
             }
             newEl = el.__lom;
+            if (!attrs) {
+                attrs = { __lom_ctx: parentContext };
+            } else {
+                attrs.__lom_ctx = parentContext;
+            }
         } else {
             newEl = el;
         }
@@ -648,7 +772,7 @@ function createCreateElement(atomize, createElement) {
                 attrs.onKeyUp = createEventFix(attrs.onKeyUp);
             }
             if (attrs.onInput) {
-                attrs.onInput = createEventFix(attrs.onInput);
+                attrs.onChange = createEventFix(attrs.onInput);
             }
             if (attrs.onChange) {
                 attrs.onChange = createEventFix(attrs.onChange);
@@ -673,90 +797,95 @@ function createCreateElement(atomize, createElement) {
             case 9:
                 return createElement(newEl, attrs, arguments[2], arguments[3], arguments[4], arguments[5], arguments[6], arguments[7], arguments[8]);
             default:
-                return createElement.apply(null, arguments);
+                if (isAtomic === false) {
+                    return createElement.apply(null, arguments);
+                }
+                var args = [newEl, attrs];
+                for (var i = 2, l = arguments.length; i < l; i++) {
+                    args.push(arguments[i]);
+                }
+                return createElement.apply(null, args);
         }
     };
 }
 
+var parentContext = undefined;
+
 function createReactWrapper(BaseComponent, defaultFromError) {
     var _desc, _value, _class;
 
-    var hooksFromComponent = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : defaultHooksFromComponent;
     var AtomizedComponent = (_class = function (_BaseComponent) {
         inherits(AtomizedComponent, _BaseComponent);
 
-        function AtomizedComponent(props, context, render, fromError) {
+        function AtomizedComponent(props, reactContext, render) {
             classCallCheck(this, AtomizedComponent);
 
-            var _this = possibleConstructorReturn(this, _BaseComponent.call(this, props, context));
+            var _this = possibleConstructorReturn(this, _BaseComponent.call(this, props, reactContext));
 
-            _this._fromRender = false;
             _this._renderedData = undefined;
+            _this._force = true;
 
-            _this._fromError = fromError;
             _this._render = render;
-            _this._context = undefined;
-            var hooks = hooksFromComponent(render);
-            _this._hooks = hooks;
-            if (hooks && hooks.initContext) {
-                _this._context = hooks.initContext(_this.props);
-            }
+            _this._stateDescriptor = createStateDescriptor(render);
             return _this;
         }
 
         AtomizedComponent.prototype.shouldComponentUpdate = function shouldComponentUpdate(props) {
             var isUpdated = shouldUpdate(this.props, props);
-
             if (isUpdated) {
-                var hooks = this._hooks;
-                if (hooks && hooks.updateContext) {
-                    this._context = hooks.updateContext(this.props, props, this._context);
-                }
+                this._force = true;
             }
 
             return isUpdated;
         };
 
         AtomizedComponent.prototype.componentWillUnmount = function componentWillUnmount() {
-            var hooks = this._hooks;
-            if (hooks && hooks._destroy) {
-                hooks._destroy();
-            }
+            this._renderedData = undefined;
             this.props = undefined;
-            this._hooks = undefined;
-            this._context = undefined;
             this._render = undefined;
-            this._fromError = undefined;this[this.constructor.displayName + '.view'].destroyed(true);
+            this._fromError = undefined;
+            this._stateDescriptor = undefined;this[this.constructor.displayName + '.view'].destroyed(true);
         };
 
-        AtomizedComponent.prototype.view = function view() {
-            var data = void 0;
-
-            try {
-                data = this._render(this.props, this._context);
-            } catch (error) {
-                data = this._fromError({ error: error });
+        AtomizedComponent.prototype.view = function view(next, force$$1) {
+            if (next !== undefined) {
+                throw new Error('Can]\'t set view');
             }
 
-            if (!this._fromRender) {
+            var data = void 0;
+            var props = this.props;
+            var prevContext = parentContext;
+
+            try {
+                var sd = this._stateDescriptor;
+                if (sd === undefined) {
+                    parentContext = props.__lom_ctx;
+                    data = this._render(props);
+                } else {
+                    sd.props(props);
+                    parentContext = sd.context;
+                    data = this._render(props, sd.descr.deps === undefined ? undefined : sd.state());
+                }
+            } catch (error) {
+                data = this.constructor.fromError({ error: error });
+            }
+
+            parentContext = prevContext;
+
+            if (this._force === false) {
                 // prevent recursion
                 // can call this.render synchronously
                 this._renderedData = data;
                 this.forceUpdate();
                 this._renderedData = undefined;
             }
+            this._force = false;
 
             return data;
         };
 
         AtomizedComponent.prototype.render = function render() {
-            if (this._renderedData !== undefined) {
-                return this._renderedData;
-            }
-            this._fromRender = true;
-            var data = this.view();
-            this._fromRender = false;
-            return data;
+            return this._renderedData === undefined ? this.view(undefined, this._force) : this._renderedData;
         };
 
         return AtomizedComponent;
@@ -765,8 +894,9 @@ function createReactWrapper(BaseComponent, defaultFromError) {
 
     return function reactWrapper(render, fromError) {
         function WrappedComponent(props, context) {
-            AtomizedComponent.call(this, props, context, render, fromError || defaultFromError);
+            AtomizedComponent.call(this, props, context, render);
         }
+        WrappedComponent.fromError = fromError || defaultFromError;
         WrappedComponent.displayName = render.displayName || render.name;
         WrappedComponent.prototype = Object.create(AtomizedComponent.prototype);
         WrappedComponent.prototype.constructor = WrappedComponent;
@@ -774,9 +904,6 @@ function createReactWrapper(BaseComponent, defaultFromError) {
         return WrappedComponent;
     };
 }
-
-// shim for using process in browser
-// based off https://github.com/defunctzombie/node-process/blob/master/browser.js
 
 function defaultSetTimout() {
     throw new Error('setTimeout has not been defined');
@@ -1004,7 +1131,6 @@ object-assign
 @license MIT
 */
 
-/* eslint-disable no-unused-vars */
 var getOwnPropertySymbols = Object.getOwnPropertySymbols;
 var hasOwnProperty = Object.prototype.hasOwnProperty;
 var propIsEnumerable = Object.prototype.propertyIsEnumerable;
@@ -1099,17 +1225,6 @@ var index = shouldUseNative() ? Object.assign : function (target, source) {
  * 
  */
 
-/**
- * Copyright (c) 2013-present, Facebook, Inc.
- * All rights reserved.
- *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
- *
- * 
- */
-
 function makeEmptyFunction(arg) {
   return function () {
     return arg;
@@ -1135,13 +1250,6 @@ emptyFunction.thatReturnsArgument = function (arg) {
 };
 
 var emptyFunction_1 = emptyFunction;
-
-/**
- * Similar to invariant but only logs a warning if the condition is not met.
- * This can be used to log issues in development environments in critical
- * paths. Removing the logging code for production environments will keep the
- * same logic and follow the same code paths.
- */
 
 var warning = emptyFunction_1;
 
@@ -1291,17 +1399,6 @@ var emptyObject = {};
 
 var emptyObject_1 = emptyObject;
 
-/**
- * Use invariant() to assert state which your program assumes to be true.
- *
- * Provide sprintf-style format (only %s is supported) and arguments
- * to provide information about what broke and what you were
- * expecting.
- *
- * The invariant message will be stripped in production, but the invariant
- * will remain to ensure logic does not differ in production.
- */
-
 var validateFormat = function validateFormat(format) {};
 
 {
@@ -1334,20 +1431,6 @@ function invariant(condition, format, a, b, c, d, e, f) {
 }
 
 var invariant_1 = invariant;
-
-/**
- * Forked from fbjs/warning:
- * https://github.com/facebook/fbjs/blob/e66ba20ad5be433eb54423f2b097d829324d9de6/packages/fbjs/src/__forks__/warning.js
- *
- * Only change is we use console.warn instead of console.error,
- * and do nothing when 'console' is not supported.
- * This really simplifies the code.
- * ---
- * Similar to invariant but only logs a warning if the condition is not met.
- * This can be used to log issues in development environments in critical
- * paths. Removing the logging code for production environments will keep the
- * same logic and follow the same code paths.
- */
 
 var lowPriorityWarning$1 = function () {};
 
@@ -1388,9 +1471,6 @@ var lowPriorityWarning$1 = function () {};
 
 var lowPriorityWarning_1 = lowPriorityWarning$1;
 
-/**
- * Base class helpers for the updating state of a component.
- */
 function ReactComponent(props, context, updater) {
   this.props = props;
   this.context = context;
@@ -1509,13 +1589,6 @@ var ReactBaseClasses = {
   PureComponent: ReactPureComponent
 };
 
-/**
- * Static poolers. Several custom versions for each potential number of
- * arguments. A completely generic pooler is easy to implement, but would
- * require accessing the `arguments` object. In each of these, `this` refers to
- * the Class itself, not an instance. If any others are needed, simply add them
- * here, or in their own files.
- */
 var oneArgumentPooler = function (copyFieldsFrom) {
   var Klass = this;
   if (Klass.instancePool.length) {
@@ -1615,12 +1688,6 @@ var PooledClass_1 = PooledClass;
  * 
  */
 
-/**
- * Keeps track of the current owner.
- *
- * The current owner is the component who should own any components that are
- * currently being constructed.
- */
 var ReactCurrentOwner = {
   /**
    * @internal
@@ -1641,9 +1708,6 @@ var ReactCurrentOwner_1 = ReactCurrentOwner;
  *
  * 
  */
-
-// The Symbol used to tag the ReactElement type. If there is no native Symbol
-// nor polyfill, then a plain number is used for performance.
 
 var REACT_ELEMENT_TYPE = typeof Symbol === 'function' && Symbol['for'] && Symbol['for']('react.element') || 0xeac7;
 
@@ -1984,8 +2048,6 @@ var ReactElement_1 = ReactElement;
  * 
  */
 
-/* global Symbol */
-
 var ITERATOR_SYMBOL = typeof Symbol === 'function' && Symbol.iterator;
 var FAUX_ITERATOR_SYMBOL = '@@iterator'; // Before Symbol spec.
 
@@ -2021,13 +2083,6 @@ var getIteratorFn_1 = getIteratorFn;
  * of patent rights can be found in the PATENTS file in the same directory.
  *
  * 
- */
-
-/**
- * Escape and wrap key so it is safe to use as a reactid
- *
- * @param {string} key to be escaped.
- * @return {string} the escaped key.
  */
 
 function escape(key) {
@@ -3074,11 +3129,6 @@ var ReactElementValidator$2 = {
 
 var ReactElementValidator_1 = ReactElementValidator$2;
 
-/**
- * Create a factory that creates HTML tag elements.
- *
- * @private
- */
 var createDOMFactory = ReactElement_1.createFactory;
 {
   var ReactElementValidator$1 = ReactElementValidator_1;
@@ -3787,11 +3837,6 @@ var factoryWithTypeCheckers = function(isValidElement, throwOnDirectAccess) {
 
   return ReactPropTypes;
 };
-
-// React 15.5 references this module, and assumes PropTypes are still callable in production.
-// Therefore we re-export development-only version with all the PropTypes checks here.
-// However if one is migrating to the `prop-types` npm library, they will go through the
-// `index.js` entry point, and it will branch depending on the environment.
 
 var factory_1 = function(isValidElement) {
   // It is still allowed in 15.5.
@@ -4680,20 +4725,6 @@ var isValidElement$1 = ReactElement_1.isValidElement;
 
 var createClass$1 = factory_1$2(Component, isValidElement$1, ReactNoopUpdateQueue_1);
 
-/**
- * Returns the first child in a collection of children and verifies that there
- * is only one child in the collection.
- *
- * See https://facebook.github.io/react/docs/top-level-api.html#react.children.only
- *
- * The current implementation of this function assumes that a single child gets
- * passed without a wrapper, but the purpose of this helper function is to
- * abstract away the particular structure of children.
- *
- * @param {?object} children Child collection structure.
- * @return {ReactElement} The first and only `ReactElement` contained in the
- * structure.
- */
 function onlyChild(children) {
   !ReactElement_1.isValidElement(children) ? invariant_1(false, 'React.Children.only expected to receive a single React element child.') : void 0;
   return children;
@@ -5315,9 +5346,6 @@ var ARIADOMPropertyConfig = {
 
 var ARIADOMPropertyConfig_1 = ARIADOMPropertyConfig;
 
-/**
- * Injectable ordering of event plugins.
- */
 var eventPluginOrder = null;
 
 /**
@@ -5614,14 +5642,6 @@ var ReactErrorUtils = {
 
 var ReactErrorUtils_1 = ReactErrorUtils;
 
-/**
- * Injected dependencies:
- */
-
-/**
- * - `ComponentTree`: [required] Module that can convert between React instances
- *   and actual node references.
- */
 var ComponentTree;
 var TreeTraversal;
 var injection = {
@@ -5821,19 +5841,6 @@ var EventPluginUtils = {
 
 var EventPluginUtils_1 = EventPluginUtils;
 
-/**
- * Accumulates items that must not be null or undefined into the first one. This
- * is used to conserve memory by avoiding array allocations, and thus sacrifices
- * API cleanness. Since `current` can be null before being passed in and not
- * null after this function, make sure to assign it back to `current`:
- *
- * `a = accumulateInto(a, b);`
- *
- * This API should be sparingly used. Try `accumulate` for something cleaner.
- *
- * @return {*|array<*>} An accumulation of items.
- */
-
 function accumulateInto(current, next) {
   !(next != null) ? invariant_1(false, 'accumulateInto(...): Accumulated items must not be null or undefined.') : void 0;
 
@@ -5873,14 +5880,6 @@ var accumulateInto_1 = accumulateInto;
  * 
  */
 
-/**
- * @param {array} arr an "accumulation" of items which is either an Array or
- * a single item. Useful when paired with the `accumulate` module. This is a
- * simple utility that allows us to reason about a collection of items, but
- * handling the case when there is exactly one item (and we do not need to
- * allocate an array).
- */
-
 function forEachAccumulated(arr, cb, scope) {
   if (Array.isArray(arr)) {
     arr.forEach(cb, scope);
@@ -5891,9 +5890,6 @@ function forEachAccumulated(arr, cb, scope) {
 
 var forEachAccumulated_1 = forEachAccumulated;
 
-/**
- * Internal store for event listeners
- */
 var listenerBank = {};
 
 /**
@@ -6292,13 +6288,6 @@ var ExecutionEnvironment$1 = {
 
 var ExecutionEnvironment_1 = ExecutionEnvironment$1;
 
-/**
- * Static poolers. Several custom versions for each potential number of
- * arguments. A completely generic pooler is easy to implement, but would
- * require accessing the `arguments` object. In each of these, `this` refers to
- * the Class itself, not an instance. If any others are needed, simply add them
- * here, or in their own files.
- */
 var oneArgumentPooler$1 = function (copyFieldsFrom) {
   var Klass = this;
   if (Klass.instancePool.length) {
@@ -6406,17 +6395,6 @@ function getTextContentAccessor() {
 
 var getTextContentAccessor_1 = getTextContentAccessor;
 
-/**
- * This helper class stores information about text content of a target node,
- * allowing comparison of content before and after a given event.
- *
- * Identify the node where selection currently begins, then observe
- * both its text content and its current position in the DOM. Since the
- * browser may natively replace the target node during composition, we can
- * use its position to find its replacement.
- *
- * @param {DOMEventTarget} root
- */
 function FallbackCompositionState(root) {
   this._root = root;
   this._startText = this.getText();
@@ -6728,10 +6706,6 @@ function getPooledWarningPropertyDefinition(propName, getVal) {
   }
 }
 
-/**
- * @interface Event
- * @see http://www.w3.org/TR/DOM-Level-3-Events/#events-compositionevents
- */
 var CompositionEventInterface = {
   data: null
 };
@@ -6750,11 +6724,6 @@ SyntheticEvent_1.augmentClass(SyntheticCompositionEvent, CompositionEventInterfa
 
 var SyntheticCompositionEvent_1 = SyntheticCompositionEvent;
 
-/**
- * @interface Event
- * @see http://www.w3.org/TR/2013/WD-DOM-Level-3-Events-20131105
- *      /#events-inputevents
- */
 var InputEventInterface = {
   data: null
 };
@@ -7263,11 +7232,6 @@ var ReactFeatureFlags = {
 
 var ReactFeatureFlags_1 = ReactFeatureFlags;
 
-/**
- * @param {?object} object
- * @return {boolean} True if `object` is a valid owner.
- * @final
- */
 function isValidOwner(object) {
   return !!(object && typeof object.attachRef === 'function' && typeof object.detachRef === 'function');
 }
@@ -7474,19 +7438,6 @@ if (ExecutionEnvironment_1.canUseDOM) {
 }
 
 var performance_1 = performance$2 || {};
-
-/**
- * Copyright (c) 2013-present, Facebook, Inc.
- * All rights reserved.
- *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
- *
- * @typechecks
- */
-
-
 
 var performanceNow$1;
 
@@ -7847,8 +7798,6 @@ if (/[?&]react_perf\b/.test(url)) {
 
 var ReactDebugTool_1 = ReactDebugTool$1;
 
-// Trust the developer to only use ReactInstrumentation with a __DEV__ check
-
 var debugTool = null;
 
 {
@@ -7858,10 +7807,6 @@ var debugTool = null;
 
 var ReactInstrumentation$1 = { debugTool: debugTool };
 
-/**
- * Helper to call ReactRef.attachRefs with this composite component, split out
- * to avoid allocations in the transaction mount-ready queue.
- */
 function attachRefs() {
   ReactRef_1.attachRefs(this, this._currentElement);
 }
@@ -8565,14 +8510,6 @@ var inputValueTracking_1 = inputValueTracking;
  *
  */
 
-/**
- * Gets the target node from a native browser event by accounting for
- * inconsistencies in browser DOM APIs.
- *
- * @param {object} nativeEvent Native browser event.
- * @return {DOMEventTarget} Target node.
- */
-
 function getEventTarget(nativeEvent) {
   var target = nativeEvent.target || nativeEvent.srcElement || window;
 
@@ -8643,10 +8580,6 @@ var isEventSupported_1 = isEventSupported;
  * of patent rights can be found in the PATENTS file in the same directory.
  *
  * 
- */
-
-/**
- * @see http://www.whatwg.org/specs/web-apps/current-work/multipage/the-input-element.html#input-type-attr-summary
  */
 
 var supportedInputTypes = {
@@ -8981,24 +8914,10 @@ var ChangeEventPlugin_1 = ChangeEventPlugin;
  *
  */
 
-/**
- * Module that is injectable into `EventPluginHub`, that specifies a
- * deterministic ordering of `EventPlugin`s. A convenient way to reason about
- * plugins, without having to package every one of them. This is better than
- * having plugins be ordered in the same order that they are injected because
- * that ordering would be influenced by the packaging order.
- * `ResponderEventPlugin` must occur before `SimpleEventPlugin` so that
- * preventing default on events is convenient in `SimpleEventPlugin` handlers.
- */
-
 var DefaultEventPluginOrder = ['ResponderEventPlugin', 'SimpleEventPlugin', 'TapEventPlugin', 'EnterLeaveEventPlugin', 'ChangeEventPlugin', 'SelectEventPlugin', 'BeforeInputEventPlugin'];
 
 var DefaultEventPluginOrder_1 = DefaultEventPluginOrder;
 
-/**
- * @interface UIEvent
- * @see http://www.w3.org/TR/DOM-Level-3-Events/
- */
 var UIEventInterface = {
   view: function (event) {
     if (event.view) {
@@ -9071,11 +8990,6 @@ var ViewportMetrics_1 = ViewportMetrics;
  *
  */
 
-/**
- * Translation from modifier key to the associated property in the event.
- * @see http://www.w3.org/TR/DOM-Level-3-Events/#keys-Modifiers
- */
-
 var modifierKeyToProp = {
   Alt: 'altKey',
   Control: 'ctrlKey',
@@ -9102,10 +9016,6 @@ function getEventModifierState(nativeEvent) {
 
 var getEventModifierState_1 = getEventModifierState;
 
-/**
- * @interface MouseEvent
- * @see http://www.w3.org/TR/DOM-Level-3-Events/
- */
 var MouseEventInterface = {
   screenX: null,
   screenY: null,
@@ -9491,10 +9401,6 @@ var DOMNamespaces_1 = DOMNamespaces;
 
 /* globals MSApp */
 
-/**
- * Create a function which has 'unsafe' privileges (required by windows8 apps)
- */
-
 var createMicrosoftUnsafeLocalFunction = function (func) {
   if (typeof MSApp !== 'undefined' && MSApp.execUnsafeLocalFunction) {
     return function (arg0, arg1, arg2, arg3) {
@@ -9627,12 +9533,6 @@ var setInnerHTML_1 = setInnerHTML;
  *
  */
 
-// code copied and modified from escape-html
-/**
- * Module variables.
- * @private
- */
-
 var matchHtmlRegExp = /["'&<>]/;
 
 /**
@@ -9712,16 +9612,6 @@ function escapeTextContentForBrowser(text) {
 
 var escapeTextContentForBrowser_1 = escapeTextContentForBrowser;
 
-/**
- * Set the textContent property of a node, ensuring that whitespace is preserved
- * even in IE8. innerText is a poor substitute for textContent and, among many
- * issues, inserts <br> instead of the literal newline chars. innerHTML behaves
- * as it should.
- *
- * @param {DOMElement} node
- * @param {string} text
- * @internal
- */
 var setTextContent = function (node, text) {
   if (text) {
     var firstChild = node.firstChild;
@@ -9848,28 +9738,6 @@ DOMLazyTree.queueText = queueText;
 
 var DOMLazyTree_1 = DOMLazyTree;
 
-/**
- * Copyright (c) 2013-present, Facebook, Inc.
- * All rights reserved.
- *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
- *
- * @typechecks
- */
-
-
-
-/**
- * Convert array-like objects to arrays.
- *
- * This API assumes the caller knows the contents of the data type. For less
- * well defined inputs use createArrayFromMixed.
- *
- * @param {object|function|filelist} obj
- * @return {array}
- */
 function toArray$2(obj) {
   var length = obj.length;
 
@@ -9973,25 +9841,6 @@ function createArrayFromMixed(obj) {
 
 var createArrayFromMixed_1 = createArrayFromMixed;
 
-/**
- * Copyright (c) 2013-present, Facebook, Inc.
- * All rights reserved.
- *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
- *
- */
-
-/*eslint-disable fb-www/unsafe-html */
-
-
-
-
-
-/**
- * Dummy container used to detect which wraps are necessary.
- */
 var dummyNode$1 = ExecutionEnvironment_1.canUseDOM ? document.createElement('div') : null;
 
 /**
@@ -10066,28 +9915,6 @@ function getMarkupWrap(nodeName) {
 
 var getMarkupWrap_1 = getMarkupWrap;
 
-/**
- * Copyright (c) 2013-present, Facebook, Inc.
- * All rights reserved.
- *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
- *
- * @typechecks
- */
-
-/*eslint-disable fb-www/unsafe-html*/
-
-
-
-
-
-
-
-/**
- * Dummy container used to render all markup.
- */
 var dummyNode = ExecutionEnvironment_1.canUseDOM ? document.createElement('div') : null;
 
 /**
@@ -10378,9 +10205,6 @@ var DOMChildrenOperations = {
 
 var DOMChildrenOperations_1 = DOMChildrenOperations;
 
-/**
- * Operations used to process updates to DOM nodes.
- */
 var ReactDOMIDOperations = {
   /**
    * Updates a component's children by processing a series of updates.
@@ -10396,11 +10220,6 @@ var ReactDOMIDOperations = {
 
 var ReactDOMIDOperations_1 = ReactDOMIDOperations;
 
-/**
- * Abstracts away all functionality of the reconciler that requires knowledge of
- * the browser context. TODO: These callers should be refactored to avoid the
- * need for this injection.
- */
 var ReactComponentBrowserEnvironment = {
   processChildrenUpdates: ReactDOMIDOperations_1.dangerouslyProcessChildrenUpdates,
 
@@ -10417,10 +10236,6 @@ var ReactComponentBrowserEnvironment_1 = ReactComponentBrowserEnvironment;
  * LICENSE file in the root directory of this source tree. An additional grant
  * of patent rights can be found in the PATENTS file in the same directory.
  *
- */
-
-/**
- * @param {DOMElement} node input/textarea to focus
  */
 
 function focusNode(node) {
@@ -10450,10 +10265,6 @@ var AutoFocusUtils_1 = AutoFocusUtils;
  * LICENSE file in the root directory of this source tree. An additional grant
  * of patent rights can be found in the PATENTS file in the same directory.
  *
- */
-
-/**
- * CSS properties which accept numbers but are not in units of "px".
  */
 
 var isUnitlessNumber = {
@@ -10594,17 +10405,6 @@ var CSSProperty = {
 
 var CSSProperty_1 = CSSProperty;
 
-/**
- * Copyright (c) 2013-present, Facebook, Inc.
- * All rights reserved.
- *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
- *
- * @typechecks
- */
-
 var _hyphenPattern = /-(.)/g;
 
 /**
@@ -10713,17 +10513,6 @@ function dangerousStyleValue(name, value, component, isCustomProperty) {
 
 var dangerousStyleValue_1 = dangerousStyleValue;
 
-/**
- * Copyright (c) 2013-present, Facebook, Inc.
- * All rights reserved.
- *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
- *
- * @typechecks
- */
-
 var _uppercasePattern = /([A-Z])/g;
 
 /**
@@ -10778,10 +10567,6 @@ var hyphenateStyleName_1 = hyphenateStyleName;
  *
  * 
  * @typechecks static-only
- */
-
-/**
- * Memoizes the return value of a function that accepts one string argument.
  */
 
 function memoizeStringOnly(callback) {
@@ -10989,12 +10774,6 @@ var CSSPropertyOperations = {
 
 var CSSPropertyOperations_1 = CSSPropertyOperations;
 
-/**
- * Escapes attribute value to prevent scripting attacks.
- *
- * @param {*} value Value to escape.
- * @return {string} An escaped string.
- */
 function quoteAttributeValueForBrowser(value) {
   return '"' + escapeTextContentForBrowser_1(value) + '"';
 }
@@ -11235,13 +11014,6 @@ var ReactEventEmitterMixin = {
 
 var ReactEventEmitterMixin_1 = ReactEventEmitterMixin;
 
-/**
- * Generate a mapping of standard vendor prefixes using the defined style property and event name.
- *
- * @param {string} styleProp
- * @param {string} eventName
- * @returns {object}
- */
 function makePrefixMap(styleProp, eventName) {
   var prefixes = {};
 
@@ -11321,61 +11093,6 @@ function getVendorPrefixedEventName(eventName) {
 }
 
 var getVendorPrefixedEventName_1 = getVendorPrefixedEventName;
-
-/**
- * Summary of `ReactBrowserEventEmitter` event handling:
- *
- *  - Top-level delegation is used to trap most native browser events. This
- *    may only occur in the main thread and is the responsibility of
- *    ReactEventListener, which is injected and can therefore support pluggable
- *    event sources. This is the only work that occurs in the main thread.
- *
- *  - We normalize and de-duplicate events to account for browser quirks. This
- *    may be done in the worker thread.
- *
- *  - Forward these native events (with the associated top-level type used to
- *    trap it) to `EventPluginHub`, which in turn will ask plugins if they want
- *    to extract any synthetic events.
- *
- *  - The `EventPluginHub` will then process each event by annotating them with
- *    "dispatches", a sequence of listeners and IDs that care about that event.
- *
- *  - The `EventPluginHub` then dispatches the events.
- *
- * Overview of React and the event system:
- *
- * +------------+    .
- * |    DOM     |    .
- * +------------+    .
- *       |           .
- *       v           .
- * +------------+    .
- * | ReactEvent |    .
- * |  Listener  |    .
- * +------------+    .                         +-----------+
- *       |           .               +--------+|SimpleEvent|
- *       |           .               |         |Plugin     |
- * +-----|------+    .               v         +-----------+
- * |     |      |    .    +--------------+                    +------------+
- * |     +-----------.--->|EventPluginHub|                    |    Event   |
- * |            |    .    |              |     +-----------+  | Propagators|
- * | ReactEvent |    .    |              |     |TapEvent   |  |------------|
- * |  Emitter   |    .    |              |<---+|Plugin     |  |other plugin|
- * |            |    .    |              |     +-----------+  |  utilities |
- * |     +-----------.--->|              |                    +------------+
- * |     |      |    .    +--------------+
- * +-----|------+    .                ^        +-----------+
- *       |           .                |        |Enter/Leave|
- *       +           .                +-------+|Plugin     |
- * +-------------+   .                         +-----------+
- * | application |   .
- * |-------------|   .
- * |             |   .
- * |             |   .
- * +-------------+   .
- *                   .
- *    React Core     .  General Purpose Event Plugin System
- */
 
 var hasEventPageXY;
 var alreadyListeningTo = {};
@@ -12482,15 +12199,6 @@ var ReactComponentEnvironment_1 = ReactComponentEnvironment;
  *
  */
 
-/**
- * `ReactInstanceMap` maintains a mapping from a public facing stateful
- * instance (key) and the internal representation (value). This allows public
- * methods to accept the user facing instance as an argument and map them back
- * to internal methods.
- */
-
-// TODO: Replace this with ES6: var ReactInstanceMap = new Map();
-
 var ReactInstanceMap = {
   /**
    * This API should be called `delete` but we'd have to make sure to always
@@ -12690,18 +12398,6 @@ var shallowEqual_1 = shallowEqual;
  * LICENSE file in the root directory of this source tree. An additional grant
  * of patent rights can be found in the PATENTS file in the same directory.
  *
- */
-
-/**
- * Given a `prevElement` and `nextElement`, determines if the existing
- * instance should be updated as opposed to being destroyed or replaced by a new
- * instance. Both arguments are elements. This ensures that this logic can
- * operate on stateless trees without any backing instance.
- *
- * @param {?object} prevElement
- * @param {?object} nextElement
- * @return {boolean} True if the existing instance should be updated.
- * @protected
  */
 
 function shouldUpdateReactComponent(prevElement, nextElement) {
@@ -13673,7 +13369,6 @@ function getNextDebugID() {
 
 var getNextDebugID_1 = getNextDebugID;
 
-// To avoid a cyclic dependency, we create the final class in this module
 var ReactCompositeComponentWrapper = function (element) {
   this.construct(element);
 };
@@ -13790,13 +13485,6 @@ var instantiateReactComponent_1 = instantiateReactComponent;
  * 
  */
 
-/**
- * Escape and wrap key so it is safe to use as a reactid
- *
- * @param {string} key to be escaped.
- * @return {string} the escaped key.
- */
-
 function escape$1(key) {
   var escapeRegex = /[=:]/g;
   var escaperLookup = {
@@ -13847,9 +13535,6 @@ var KeyEscapeUtils_1$2 = KeyEscapeUtils$2;
  * 
  */
 
-// The Symbol used to tag the ReactElement type. If there is no native Symbol
-// nor polyfill, then a plain number is used for performance.
-
 var REACT_ELEMENT_TYPE$2 = typeof Symbol === 'function' && Symbol['for'] && Symbol['for']('react.element') || 0xeac7;
 
 var ReactElementSymbol$2 = REACT_ELEMENT_TYPE$2;
@@ -13864,8 +13549,6 @@ var ReactElementSymbol$2 = REACT_ELEMENT_TYPE$2;
  *
  * 
  */
-
-/* global Symbol */
 
 var ITERATOR_SYMBOL$1 = typeof Symbol === 'function' && Symbol.iterator;
 var FAUX_ITERATOR_SYMBOL$1 = '@@iterator'; // Before Symbol spec.
@@ -14235,13 +13918,6 @@ function flattenChildren$1(children, selfDebugID) {
 
 var flattenChildren_1 = flattenChildren$1;
 
-/**
- * Make an update for markup to be rendered and inserted at a supplied index.
- *
- * @param {string} markup Markup that renders into an element.
- * @param {number} toIndex Destination index.
- * @private
- */
 function makeInsertMarkup(markup, afterNode, toIndex) {
   // NOTE: Null values reduce hidden classes.
   return {
@@ -14993,11 +14669,6 @@ var ReactServerUpdateQueue = function () {
 
 var ReactServerUpdateQueue_1 = ReactServerUpdateQueue;
 
-/**
- * Executed within the scope of the `Transaction` instance. Consider these as
- * being member methods, but with an implied ordering while being isolated from
- * each other.
- */
 var TRANSACTION_WRAPPERS$1 = [];
 
 {
@@ -16426,10 +16097,6 @@ index(ReactDOMEmptyComponent.prototype, {
 
 var ReactDOMEmptyComponent_1 = ReactDOMEmptyComponent;
 
-/**
- * Return the lowest common ancestor of A and B, or null if they are in
- * different trees.
- */
 function getLowestCommonAncestor(instA, instB) {
   !('_hostNode' in instA) ? invariant_1(false, 'getNodeFromInstance: Invalid argument.') : void 0;
   !('_hostNode' in instB) ? invariant_1(false, 'getNodeFromInstance: Invalid argument.') : void 0;
@@ -16546,21 +16213,6 @@ var ReactDOMTreeTraversal = {
   traverseEnterLeave: traverseEnterLeave
 };
 
-/**
- * Text nodes violate a couple assumptions that React makes about components:
- *
- *  - When mounting text into the DOM, adjacent text nodes are merged.
- *  - Text nodes cannot be assigned a React root ID.
- *
- * This component is used to wrap strings between comment nodes so that they
- * can undergo the same reconciliation that is applied to elements.
- *
- * TODO: Investigate representing React components in the DOM with text nodes.
- *
- * @class ReactDOMTextComponent
- * @extends ReactComponent
- * @internal
- */
 var ReactDOMTextComponent = function (text) {
   // TODO: This is really a ReactText (ReactNode), not a ReactElement
   this._currentElement = text;
@@ -16734,30 +16386,6 @@ var ReactDefaultBatchingStrategy = {
 
 var ReactDefaultBatchingStrategy_1 = ReactDefaultBatchingStrategy;
 
-/**
- * Copyright (c) 2013-present, Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
- * @typechecks
- */
-
-
-
-/**
- * Upstream version of event listener. Does not take into account specific
- * nature of platform.
- */
 var EventListener = {
   /**
    * Listen to DOM events during the bubble phase.
@@ -16827,17 +16455,6 @@ var EventListener_1 = EventListener;
  * @typechecks
  */
 
-/**
- * Gets the scroll position of the supplied element or window.
- *
- * The return values are unbounded, unlike `getScrollPosition`. This means they
- * may be negative or exceed the element boundaries (which is possible using
- * inertial scrolling).
- *
- * @param {DOMWindow|DOMElement} scrollable
- * @return {object} Map with `x` and `y` keys.
- */
-
 function getUnboundedScrollPosition(scrollable) {
   if (scrollable.Window && scrollable instanceof scrollable.Window) {
     return {
@@ -16853,11 +16470,6 @@ function getUnboundedScrollPosition(scrollable) {
 
 var getUnboundedScrollPosition_1 = getUnboundedScrollPosition;
 
-/**
- * Find the deepest React component completely containing the root of the
- * passed-in instance (for use when entire React trees are nested within each
- * other). If React trees are not nested, returns null.
- */
 function findParent(inst) {
   // TODO: It may be a good idea to cache this to prevent unnecessary DOM
   // traversal, but caching is difficult to do correctly without using a
@@ -17008,13 +16620,6 @@ var ReactInjection_1 = ReactInjection;
  *
  */
 
-/**
- * Given any node return the first leaf node without children.
- *
- * @param {DOMElement|DOMTextNode} node
- * @return {DOMElement|DOMTextNode}
- */
-
 function getLeafNode(node) {
   while (node && node.firstChild) {
     node = node.firstChild;
@@ -17070,11 +16675,6 @@ function getNodeForCharacterOffset(root, offset) {
 
 var getNodeForCharacterOffset_1 = getNodeForCharacterOffset;
 
-/**
- * While `isCollapsed` is available on the Selection object and `collapsed`
- * is available on the Range object, IE11 sometimes gets them wrong.
- * If the anchor/focus nodes and offsets are the same, the range is collapsed.
- */
 function isCollapsed(anchorNode, anchorOffset, focusNode, focusOffset) {
   return anchorNode === focusNode && anchorOffset === focusOffset;
 }
@@ -17265,21 +16865,6 @@ var ReactDOMSelection = {
 
 var ReactDOMSelection_1 = ReactDOMSelection;
 
-/**
- * Copyright (c) 2013-present, Facebook, Inc.
- * All rights reserved.
- *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
- *
- * @typechecks
- */
-
-/**
- * @param {*} object The object to check.
- * @return {boolean} Whether or not the object is a DOM node.
- */
 function isNode(object) {
   var doc = object ? object.ownerDocument || object : document;
   var defaultView = doc.defaultView || window;
@@ -17288,47 +16873,12 @@ function isNode(object) {
 
 var isNode_1 = isNode;
 
-/**
- * Copyright (c) 2013-present, Facebook, Inc.
- * All rights reserved.
- *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
- *
- * @typechecks
- */
-
-
-
-/**
- * @param {*} object The object to check.
- * @return {boolean} Whether or not the object is a DOM text node.
- */
 function isTextNode(object) {
   return isNode_1(object) && object.nodeType == 3;
 }
 
 var isTextNode_1 = isTextNode;
 
-/**
- * Copyright (c) 2013-present, Facebook, Inc.
- * All rights reserved.
- *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
- *
- * 
- */
-
-
-
-/*eslint-disable no-bitwise */
-
-/**
- * Checks if a given DOM node contains or is another DOM node.
- */
 function containsNode(outerNode, innerNode) {
   if (!outerNode || !innerNode) {
     return false;
@@ -17349,29 +16899,6 @@ function containsNode(outerNode, innerNode) {
 
 var containsNode_1 = containsNode;
 
-/**
- * Copyright (c) 2013-present, Facebook, Inc.
- * All rights reserved.
- *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
- *
- * @typechecks
- */
-
-/* eslint-disable fb-www/typeof-undefined */
-
-/**
- * Same as document.activeElement but wraps in a try-catch block. In IE it is
- * not safe to call document.activeElement if there is nothing focused.
- *
- * The activeElement will be null only if the document or document body is not
- * yet defined.
- *
- * @param {?DOMDocument} doc Defaults to current document.
- * @return {?DOMElement}
- */
 function getActiveElement(doc) /*?DOMElement*/{
   doc = doc || (typeof document !== 'undefined' ? document : undefined);
   if (typeof doc === 'undefined') {
@@ -17491,10 +17018,6 @@ var ReactInputSelection = {
 
 var ReactInputSelection_1 = ReactInputSelection;
 
-/**
- * Ensures that, when possible, the selection range (currently selected text
- * input) is not disturbed by performing the transaction.
- */
 var SELECTION_RESTORATION = {
   /**
    * @return {Selection} Selection information.
@@ -18113,11 +17636,6 @@ var SelectEventPlugin = {
 
 var SelectEventPlugin_1 = SelectEventPlugin;
 
-/**
- * @interface Event
- * @see http://www.w3.org/TR/css3-animations/#AnimationEvent-interface
- * @see https://developer.mozilla.org/en-US/docs/Web/API/AnimationEvent
- */
 var AnimationEventInterface = {
   animationName: null,
   elapsedTime: null,
@@ -18138,10 +17656,6 @@ SyntheticEvent_1.augmentClass(SyntheticAnimationEvent, AnimationEventInterface);
 
 var SyntheticAnimationEvent_1 = SyntheticAnimationEvent;
 
-/**
- * @interface Event
- * @see http://www.w3.org/TR/clipboard-apis/
- */
 var ClipboardEventInterface = {
   clipboardData: function (event) {
     return 'clipboardData' in event ? event.clipboardData : window.clipboardData;
@@ -18162,10 +17676,6 @@ SyntheticEvent_1.augmentClass(SyntheticClipboardEvent, ClipboardEventInterface);
 
 var SyntheticClipboardEvent_1 = SyntheticClipboardEvent;
 
-/**
- * @interface FocusEvent
- * @see http://www.w3.org/TR/DOM-Level-3-Events/
- */
 var FocusEventInterface = {
   relatedTarget: null
 };
@@ -18192,17 +17702,6 @@ var SyntheticFocusEvent_1 = SyntheticFocusEvent;
  * LICENSE file in the root directory of this source tree. An additional grant
  * of patent rights can be found in the PATENTS file in the same directory.
  *
- */
-
-/**
- * `charCode` represents the actual "character code" and is safe to use with
- * `String.fromCharCode`. As such, only keys that correspond to printable
- * characters produce a valid `charCode`, the only exception to this is Enter.
- * The Tab-key is considered non-printable and does not have a `charCode`,
- * presumably because it does not produce a tab-character in browsers.
- *
- * @param {object} nativeEvent Native browser event.
- * @return {number} Normalized `charCode` property.
  */
 
 function getEventCharCode(nativeEvent) {
@@ -18232,10 +17731,6 @@ function getEventCharCode(nativeEvent) {
 
 var getEventCharCode_1 = getEventCharCode;
 
-/**
- * Normalization of deprecated HTML5 `key` values
- * @see https://developer.mozilla.org/en-US/docs/Web/API/KeyboardEvent#Key_names
- */
 var normalizeKey = {
   Esc: 'Escape',
   Spacebar: ' ',
@@ -18330,10 +17825,6 @@ function getEventKey(nativeEvent) {
 
 var getEventKey_1 = getEventKey;
 
-/**
- * @interface KeyboardEvent
- * @see http://www.w3.org/TR/DOM-Level-3-Events/
- */
 var KeyboardEventInterface = {
   key: getEventKey_1,
   location: null,
@@ -18396,10 +17887,6 @@ SyntheticUIEvent_1.augmentClass(SyntheticKeyboardEvent, KeyboardEventInterface);
 
 var SyntheticKeyboardEvent_1 = SyntheticKeyboardEvent;
 
-/**
- * @interface DragEvent
- * @see http://www.w3.org/TR/DOM-Level-3-Events/
- */
 var DragEventInterface = {
   dataTransfer: null
 };
@@ -18418,10 +17905,6 @@ SyntheticMouseEvent_1.augmentClass(SyntheticDragEvent, DragEventInterface);
 
 var SyntheticDragEvent_1 = SyntheticDragEvent;
 
-/**
- * @interface TouchEvent
- * @see http://www.w3.org/TR/touch-events/
- */
 var TouchEventInterface = {
   touches: null,
   targetTouches: null,
@@ -18447,11 +17930,6 @@ SyntheticUIEvent_1.augmentClass(SyntheticTouchEvent, TouchEventInterface);
 
 var SyntheticTouchEvent_1 = SyntheticTouchEvent;
 
-/**
- * @interface Event
- * @see http://www.w3.org/TR/2009/WD-css3-transitions-20090320/#transition-events-
- * @see https://developer.mozilla.org/en-US/docs/Web/API/TransitionEvent
- */
 var TransitionEventInterface = {
   propertyName: null,
   elapsedTime: null,
@@ -18472,10 +17950,6 @@ SyntheticEvent_1.augmentClass(SyntheticTransitionEvent, TransitionEventInterface
 
 var SyntheticTransitionEvent_1 = SyntheticTransitionEvent;
 
-/**
- * @interface WheelEvent
- * @see http://www.w3.org/TR/DOM-Level-3-Events/
- */
 var WheelEventInterface = {
   deltaX: function (event) {
     return 'deltaX' in event ? event.deltaX : // Fallback to `wheelDeltaX` for Webkit and normalize (right is positive).
@@ -18509,24 +17983,6 @@ SyntheticMouseEvent_1.augmentClass(SyntheticWheelEvent, WheelEventInterface);
 
 var SyntheticWheelEvent_1 = SyntheticWheelEvent;
 
-/**
- * Turns
- * ['abort', ...]
- * into
- * eventTypes = {
- *   'abort': {
- *     phasedRegistrationNames: {
- *       bubbled: 'onAbort',
- *       captured: 'onAbortCapture',
- *     },
- *     dependencies: ['topAbort'],
- *   },
- *   ...
- * };
- * topLevelEventsToDispatchConfig = {
- *   'topAbort': { sameConfig }
- * };
- */
 var eventTypes$4 = {};
 var topLevelEventsToDispatchConfig = {};
 ['abort', 'animationEnd', 'animationIteration', 'animationStart', 'blur', 'canPlay', 'canPlayThrough', 'click', 'contextMenu', 'copy', 'cut', 'doubleClick', 'drag', 'dragEnd', 'dragEnter', 'dragExit', 'dragLeave', 'dragOver', 'dragStart', 'drop', 'durationChange', 'emptied', 'encrypted', 'ended', 'error', 'focus', 'input', 'invalid', 'keyDown', 'keyPress', 'keyUp', 'load', 'loadedData', 'loadedMetadata', 'loadStart', 'mouseDown', 'mouseMove', 'mouseOut', 'mouseOver', 'mouseUp', 'paste', 'pause', 'play', 'playing', 'progress', 'rateChange', 'reset', 'scroll', 'seeked', 'seeking', 'stalled', 'submit', 'suspend', 'timeUpdate', 'touchCancel', 'touchEnd', 'touchMove', 'touchStart', 'transitionEnd', 'volumeChange', 'waiting', 'wheel'].forEach(function (event) {
@@ -19398,14 +18854,6 @@ function getHostComponentFromComposite(inst) {
 
 var getHostComponentFromComposite_1 = getHostComponentFromComposite;
 
-/**
- * Returns the DOM node rendered by this element.
- *
- * See https://facebook.github.io/react/docs/top-level-api.html#reactdom.finddomnode
- *
- * @param {ReactComponent|DOMElement} componentOrElement
- * @return {?DOMElement} The root node of this element.
- */
 function findDOMNode(componentOrElement) {
   {
     var owner = ReactCurrentOwner_1.current;
@@ -19724,7 +19172,7 @@ var index$2 = ReactDOM_1;
 
 var _class$1;
 
-function _applyDecoratedDescriptor$2(target, property, decorators, descriptor, context) {
+function _applyDecoratedDescriptor$3(target, property, decorators, descriptor, context) {
     var desc = {};
     Object['ke' + 'ys'](descriptor).forEach(function (key) {
         desc[key] = descriptor[key];
@@ -19776,7 +19224,7 @@ var Counter = (_class$1 = function () {
         }
     }]);
     return Counter;
-}(), (_applyDecoratedDescriptor$2(_class$1.prototype, 'value', [mem], Object.getOwnPropertyDescriptor(_class$1.prototype, 'value'), _class$1.prototype), _applyDecoratedDescriptor$2(_class$1.prototype, 'value', [mem], Object.getOwnPropertyDescriptor(_class$1.prototype, 'value'), _class$1.prototype)), _class$1);
+}(), (_applyDecoratedDescriptor$3(_class$1.prototype, 'value', [mem], Object.getOwnPropertyDescriptor(_class$1.prototype, 'value'), _class$1.prototype), _applyDecoratedDescriptor$3(_class$1.prototype, 'value', [mem], Object.getOwnPropertyDescriptor(_class$1.prototype, 'value'), _class$1.prototype)), _class$1);
 
 function CounterView(_ref) {
     var counter = _ref.counter;
@@ -19807,10 +19255,65 @@ function CounterView(_ref) {
     );
 }
 
+var _class$3;
+var _descriptor$2;
+
+function _initDefineProp$2(target, property, descriptor, context) {
+    if (!descriptor) return;
+    Object.defineProperty(target, property, {
+        enumerable: descriptor.enumerable,
+        configurable: descriptor.configurable,
+        writable: descriptor.writable,
+        value: descriptor.initializer ? descriptor.initializer.call(context) : void 0
+    });
+}
+
+function _applyDecoratedDescriptor$5(target, property, decorators, descriptor, context) {
+    var desc = {};
+    Object['ke' + 'ys'](descriptor).forEach(function (key) {
+        desc[key] = descriptor[key];
+    });
+    desc.enumerable = !!desc.enumerable;
+    desc.configurable = !!desc.configurable;
+
+    if ('value' in desc || desc.initializer) {
+        desc.writable = true;
+    }
+
+    desc = decorators.slice().reverse().reduce(function (desc, decorator) {
+        return decorator(target, property, desc) || desc;
+    }, desc);
+
+    if (context && desc.initializer !== void 0) {
+        desc.value = desc.initializer ? desc.initializer.call(context) : void 0;
+        desc.initializer = undefined;
+    }
+
+    if (desc.initializer === void 0) {
+        Object['define' + 'Property'](target, property, desc);
+        desc = null;
+    }
+
+    return desc;
+}
+
+var Locale = (_class$3 = function Locale(lang) {
+    classCallCheck(this, Locale);
+
+    _initDefineProp$2(this, 'lang', _descriptor$2, this);
+
+    this.lang = lang;
+}, (_descriptor$2 = _applyDecoratedDescriptor$5(_class$3.prototype, 'lang', [mem], {
+    enumerable: true,
+    initializer: function initializer() {
+        return 'en';
+    }
+})), _class$3);
+
 var _class$2;
 var _descriptor$1;
 var _class3;
-var _descriptor2;
+var _descriptor2$1;
 
 function _initDefineProp$1(target, property, descriptor, context) {
     if (!descriptor) return;
@@ -19822,7 +19325,7 @@ function _initDefineProp$1(target, property, descriptor, context) {
     });
 }
 
-function _applyDecoratedDescriptor$3(target, property, decorators, descriptor, context) {
+function _applyDecoratedDescriptor$4(target, property, decorators, descriptor, context) {
     var desc = {};
     Object['ke' + 'ys'](descriptor).forEach(function (key) {
         desc[key] = descriptor[key];
@@ -19855,38 +19358,29 @@ var Hello = (_class$2 = function Hello() {
     classCallCheck(this, Hello);
 
     _initDefineProp$1(this, 'name', _descriptor$1, this);
-}, (_descriptor$1 = _applyDecoratedDescriptor$3(_class$2.prototype, 'name', [mem], {
+}, (_descriptor$1 = _applyDecoratedDescriptor$4(_class$2.prototype, 'name', [mem], {
     enumerable: true,
     initializer: function initializer() {
         return 'test';
     }
 })), _class$2);
 
-var HelloContext = (_class3 = function HelloContext() {
-    classCallCheck(this, HelloContext);
+var HelloOptions = (_class3 = function HelloOptions(name) {
+    classCallCheck(this, HelloOptions);
 
-    _initDefineProp$1(this, 'actionName', _descriptor2, this);
-}, (_descriptor2 = _applyDecoratedDescriptor$3(_class3.prototype, 'actionName', [mem], {
+    _initDefineProp$1(this, 'actionName', _descriptor2$1, this);
+
+    this.actionName = name + '-hello';
+}, (_descriptor2$1 = _applyDecoratedDescriptor$4(_class3.prototype, 'actionName', [mem], {
     enumerable: true,
-    initializer: function initializer() {
-        return 'Hello';
-    }
+    initializer: null
 })), _class3);
 
-var HelloViewHooks = function () {
-    function HelloViewHooks() {
-        classCallCheck(this, HelloViewHooks);
-    }
 
-    HelloViewHooks.prototype.initContext = function initContext(props) {
-        return new HelloContext();
-    };
-
-    return HelloViewHooks;
-}();
-
-function HelloView(_ref, context) {
+function HelloView(_ref, _ref2) {
     var hello = _ref.hello;
+    var options = _ref2.options,
+        locale = _ref2.locale;
 
     return lom_h(
         'div',
@@ -19894,29 +19388,36 @@ function HelloView(_ref, context) {
         lom_h(
             'h3',
             null,
-            context.actionName,
+            options.actionName,
             ', ',
             hello.name
         ),
+        'Lang: ',
+        locale.lang,
         'Name: ',
-        lom_h('input', { value: hello.name, onInput: function onInput(_ref2) {
-                var target = _ref2.target;
+        lom_h('input', { value: hello.name, onInput: function onInput(_ref3) {
+                var target = _ref3.target;
 
                 hello.name = target.value;
             } }),
         lom_h('br', null),
         'Action: ',
-        lom_h('input', { value: context.actionName, onInput: function onInput(_ref3) {
-                var target = _ref3.target;
+        lom_h('input', { value: options.actionName, onInput: function onInput(_ref4) {
+                var target = _ref4.target;
 
-                context.actionName = target.value;
+                options.actionName = target.value;
             } })
     );
 }
-HelloView.hooks = HelloViewHooks;
+
+HelloView.deps = [{ options: HelloOptions, locale: Locale }];
+HelloView.provide = function (props, prevState) {
+    return [new HelloOptions(props.name)];
+};
 
 var _class;
 var _descriptor;
+var _descriptor2;
 
 function _initDefineProp(target, property, descriptor, context) {
     if (!descriptor) return;
@@ -19963,12 +19464,19 @@ var Store = (_class = function Store() {
 
     _initDefineProp(this, 'route', _descriptor, this);
 
+    _initDefineProp(this, 'name', _descriptor2, this);
+
     this.counter = new Counter();
     this.hello = new Hello();
 }, (_descriptor = _applyDecoratedDescriptor(_class.prototype, 'route', [mem], {
     enumerable: true,
     initializer: function initializer() {
         return 'hello';
+    }
+}), _descriptor2 = _applyDecoratedDescriptor(_class.prototype, 'name', [mem], {
+    enumerable: true,
+    initializer: function initializer() {
+        return 'vvv';
     }
 })), _class);
 
@@ -19979,7 +19487,7 @@ function AppView(_ref) {
     var page = void 0;
     switch (store.route) {
         case 'hello':
-            page = lom_h(HelloView, { hello: store.hello });
+            page = lom_h(HelloView, { hello: store.hello, name: store.name });
             break;
 
         case 'counter':
@@ -20002,6 +19510,13 @@ function AppView(_ref) {
         lom_h(
             'div',
             null,
+            'APPName: ',
+            lom_h('input', { value: store.name, onInput: function onInput(_ref2) {
+                    var target = _ref2.target;
+
+                    store.name = target.value;
+                } }),
+            lom_h('br', null),
             store.links.map(function (link) {
                 return lom_h(
                     'button',
@@ -20018,10 +19533,13 @@ function AppView(_ref) {
         )
     );
 }
+AppView.provide = function (props) {
+    return [new Locale(props.lang)];
+};
 
 var store = new Store();
 
-index$2.render(lom_h(AppView, { store: store }), document.getElementById('app'));
+index$2.render(lom_h(AppView, { store: store, lang: 'ru' }), document.getElementById('app'));
 
 }());
 //# sourceMappingURL=examples.js.map

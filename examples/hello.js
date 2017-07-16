@@ -1,41 +1,49 @@
 // @flow
 
 import {AtomWait, mem, force} from 'lom-atom'
+import {Locale} from './common'
 
 export class Hello {
     @mem name = 'test'
 }
 
-class HelloContext {
-    @mem actionName = 'Hello'
+class HelloOptions {
+    @mem actionName: string
+    constructor(name: string) {
+        this.actionName = name +'-hello'
+    }
 }
 
 type HelloProps = {
     hello: Hello;
+    name: string;
 }
 
-class HelloViewHooks {
-    initContext(props: HelloProps): HelloContext {
-        return new HelloContext()
-    }
+type HelloState = {
+    locale: Locale;
+    options: HelloOptions;
 }
 
 export function HelloView(
     {hello}: HelloProps,
-    context: HelloContext
+    {options, locale}: HelloState
 ) {
     return <div>
-        <h3>{context.actionName}, {hello.name}</h3>
-
+        <h3>{options.actionName}, {hello.name}</h3>
+        Lang: {locale.lang}
         Name: <input value={hello.name} onInput={({target}: Event) => {
             hello.name = (target: any).value
         }} />
         <br/>
 
-        Action: <input value={context.actionName} onInput={({target}: Event) => {
-            context.actionName = (target: any).value
+        Action: <input value={options.actionName} onInput={({target}: Event) => {
+            options.actionName = (target: any).value
         }} />
 
     </div>
 }
-HelloView.hooks = HelloViewHooks
+
+HelloView.deps = [{options: HelloOptions, locale: Locale}]
+HelloView.provide = (props: HelloProps, prevState?: HelloState) => ([
+    new HelloOptions(props.name)
+])

@@ -1,7 +1,6 @@
 // @flow
 
-import {AtomForce} from './interfaces'
-import type {IAtom, IAtomHandler, IAtomKeyHandler, IAtomHost, IForceable} from './interfaces'
+import type {IAtom, IAtomHandler, IAtomKeyHandler, IAtomHost} from './interfaces'
 import Atom, {defaultContext} from './Atom'
 
 type TypedPropertyDescriptor<T> = {
@@ -43,9 +42,9 @@ function memMethod<V, P: Object>(
     return {
         enumerable: descr.enumerable,
         configurable: descr.configurable,
-        value(next?: V) {
+        value(next?: V, force?: boolean) {
             return getAtom(this, handler, name, isComponent)
-                .value(next)
+                .value(next, force)
         }
     }
 }
@@ -122,13 +121,13 @@ export function memkey<V, K, P: Object>(
     return {
         enumerable: descr.enumerable,
         configurable: descr.configurable,
-        value(rawKey: K, next?: V) {
+        value(rawKey: K, next?: V, force?: boolean) {
             function handlerWithKey(next?: V): V {
                 return handler.call(this, rawKey, next)
             }
 
             return getAtom(this, handlerWithKey, `${name}(${getKey(rawKey)})`)
-                .value(next)
+                .value(next, force)
         }
     }
 }
@@ -138,7 +137,7 @@ function forceGet() {
     return this
 }
 
-export function forceDecorator<V>(
+export function force<V>(
     proto: mixed,
     name: string,
     descr: TypedPropertyDescriptor<V>
@@ -149,23 +148,6 @@ export function forceDecorator<V>(
         get: forceGet
     }
 }
-
-declare function force<V>(v?: V): V
-
-declare function force<V>(
-    proto: Object,
-    name: string,
-    descr: TypedPropertyDescriptor<V>
-): TypedPropertyDescriptor<V>
-
-export function force<V>(v?: V) {
-    return arguments.length > 1
-        ? forceDecorator(v, arguments[1], arguments[2])
-        : ((new AtomForce(v): any): V)
-}
-
-// export const force: IForce<*> =(function<V>(v?: V) {
-// }: any)
 
 export default function mem<P: Object, V, K>(
     proto: P,

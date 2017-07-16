@@ -1,7 +1,6 @@
 // @flow
 
 import {catchedId} from './interfaces'
-import type {IHooks} from './interfaces'
 
 const throwOnAccess = {
     get(target: Error) {
@@ -68,14 +67,4 @@ export function shouldUpdate<Props: Object>(oldProps: Props, props: Props): bool
     }
 
     return lpKeys !== 0
-}
-
-export function defaultHooksFromComponent<Props: Object, Context>(
-    component: Function
-): ?IHooks<Props, Context> {
-    if (component.hooks) {
-        return new (component: any).hooks()
-    }
-
-    return null
 }

@@ -191,11 +191,12 @@ describe('mem', () => {
         let testResolve: ?() => void
 
         class Test {
+            @force force: Test
             @mem
             source(next?: string): string {
                 new Promise((resolve: () => void) => {
                     testResolve = () => {
-                        this.source(force('Jin'))
+                        this.force.source('Jin')
                         resolve()
                     }
                 })
