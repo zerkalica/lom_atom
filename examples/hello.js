@@ -10,9 +10,23 @@ export class Hello {
 class HelloOptions {
     @mem actionName: string
     constructor(name: string) {
-        this.actionName = name +'-hello'
+        this.actionName = name + '-hello'
     }
 }
+
+class SomeService {
+    _opts: HelloOptions
+    static deps = [HelloOptions]
+
+    constructor(opts: HelloOptions) {
+        this._opts = opts
+    }
+
+    value() {
+        return this._opts.actionName + '-srv'
+    }
+}
+
 
 type HelloProps = {
     hello: Hello;
@@ -22,15 +36,17 @@ type HelloProps = {
 type HelloState = {
     locale: Locale;
     options: HelloOptions;
+    service: SomeService;
 }
 
 export function HelloView(
     {hello}: HelloProps,
-    {options, locale}: HelloState
+    {options, locale, service}: HelloState
 ) {
     return <div>
         <h3>{options.actionName}, {hello.name}</h3>
-        Lang: {locale.lang}
+        Lang: {locale.lang}<br/>
+        Srv: {service.value()}<br/>
         Name: <input value={hello.name} onInput={({target}: Event) => {
             hello.name = (target: any).value
         }} />
@@ -43,7 +59,7 @@ export function HelloView(
     </div>
 }
 
-HelloView.deps = [{options: HelloOptions, locale: Locale}]
+HelloView.deps = [{options: HelloOptions, locale: Locale, service: SomeService}]
 HelloView.provide = (props: HelloProps, prevState?: HelloState) => ([
     new HelloOptions(props.name)
 ])

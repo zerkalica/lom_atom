@@ -594,6 +594,8 @@ var Context$1 = function () {
                 var item = items[i];
                 if (item instanceof Array) {
                     map.set(item[0], item[1]);
+                } else if (typeof item === 'function') {
+                    map.set(item, null);
                 } else {
                     map.set(item.constructor, item);
                 }
@@ -606,15 +608,43 @@ var Context$1 = function () {
         this.map = undefined;
     };
 
+    Context.prototype._fastCall = function _fastCall(key, args) {
+        switch (args.length) {
+            case 1:
+                return new key(args[0]);
+            case 2:
+                return new key(args[0], args[1]);
+            case 3:
+                return new key(args[0], args[1], args[2]);
+            case 4:
+                return new key(args[0], args[1], args[2], args[3]);
+            case 5:
+                return new key(args[0], args[1], args[2], args[3], args[4]);
+            default:
+                return new (Function.prototype.bind.apply(key, [null].concat(args)))();
+        }
+    };
+
     Context.prototype._get = function _get(key) {
         var ptr = this;
         var value = undefined;
         while (ptr !== undefined) {
             value = ptr.map.get(key);
             if (value !== undefined) {
+                if (value === null) {
+                    value = this._fastCall(key, this.resolve(key.deps));
+                    ptr.map.set(key, value);
+                }
                 return value;
             }
             ptr = ptr.parent;
+        }
+
+        if (key.deps) {
+            value = this._fastCall(key, this.resolve(key.deps));
+            this.map.set(key, value);
+
+            return value;
         }
 
         throw new Error('Context: not registered for key ' + String(key));
@@ -686,11 +716,11 @@ var StateDescriptor = (_class2 = function () {
     });
 
     StateDescriptor.prototype.state = function state() {
-        this.props();
         var deps = this.descr.deps;
-        if (deps === undefined || this.context === undefined) {
+        if (deps === undefined) {
             throw new Error('No state defined');
         }
+        this.props();
         this._state = this.context.resolve(deps)[0];
 
         return this._state;
@@ -19314,6 +19344,8 @@ var _class$2;
 var _descriptor$1;
 var _class3;
 var _descriptor2$1;
+var _class5;
+var _temp;
 
 function _initDefineProp$1(target, property, descriptor, context) {
     if (!descriptor) return;
@@ -19375,12 +19407,26 @@ var HelloOptions = (_class3 = function HelloOptions(name) {
     enumerable: true,
     initializer: null
 })), _class3);
+var SomeService = (_temp = _class5 = function () {
+    function SomeService(opts) {
+        classCallCheck(this, SomeService);
+
+        this._opts = opts;
+    }
+
+    SomeService.prototype.value = function value() {
+        return this._opts.actionName + '-srv';
+    };
+
+    return SomeService;
+}(), _class5.deps = [HelloOptions], _temp);
 
 
 function HelloView(_ref, _ref2) {
     var hello = _ref.hello;
     var options = _ref2.options,
-        locale = _ref2.locale;
+        locale = _ref2.locale,
+        service = _ref2.service;
 
     return lom_h(
         'div',
@@ -19394,6 +19440,10 @@ function HelloView(_ref, _ref2) {
         ),
         'Lang: ',
         locale.lang,
+        lom_h('br', null),
+        'Srv: ',
+        service.value(),
+        lom_h('br', null),
         'Name: ',
         lom_h('input', { value: hello.name, onInput: function onInput(_ref3) {
                 var target = _ref3.target;
@@ -19410,7 +19460,7 @@ function HelloView(_ref, _ref2) {
     );
 }
 
-HelloView.deps = [{ options: HelloOptions, locale: Locale }];
+HelloView.deps = [{ options: HelloOptions, locale: Locale, service: SomeService }];
 HelloView.provide = function (props, prevState) {
     return [new HelloOptions(props.name)];
 };

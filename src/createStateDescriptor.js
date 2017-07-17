@@ -17,6 +17,8 @@ class Context {
                 const item = items[i]
                 if (item instanceof Array) {
                     map.set(item[0], item[1])
+                } else if (typeof item === 'function') {
+                    map.set(item, null)
                 } else {
                     map.set(item.constructor, item)
                 }
@@ -29,16 +31,39 @@ class Context {
         this.map = (undefined: any)
     }
 
+    _fastCall<V>(key: any, args: mixed[]): V {
+        switch (args.length) {
+            case 1: return new key(args[0])
+            case 2: return new key(args[0], args[1])
+            case 3: return new key(args[0], args[1], args[2])
+            case 4: return new key(args[0], args[1], args[2], args[3])
+            case 5: return new key(args[0], args[1], args[2], args[3], args[4])
+            default: return new key(...args)
+        }
+    }
+
     _get<V>(key: Function): V | void {
         let ptr: Context | void = this
         let value: V | void = undefined
         while (ptr !== undefined) {
             value = ptr.map.get(key)
             if (value !== undefined) {
+                if (value === null) {
+                    value = this._fastCall(key, this.resolve(key.deps))
+                    ptr.map.set(key, value)
+                }
                 return value
             }
             ptr = ptr.parent
         }
+
+        if (key.deps) {
+            value = this._fastCall(key, this.resolve(key.deps))
+            this.map.set(key, value)
+
+            return value
+        }
+
 
         throw new Error('Context: not registered for key ' + String(key))
     }
@@ -78,7 +103,7 @@ export class StateDescriptor<State> {
     descr: IComponentDescriptor<State>
 
     _state: State | void = undefined
-    context: Context | void = undefined
+    context: Context = (undefined: any)
 
     constructor(
         descr: IComponentDescriptor<State>
@@ -92,7 +117,7 @@ export class StateDescriptor<State> {
         }
         this._state = undefined
         this.descr = (undefined: any)
-        this.context = undefined
+        this.context = (undefined: any)
     }
 
     @mem
@@ -116,11 +141,11 @@ export class StateDescriptor<State> {
 
     @mem
     state(): State | void {
-        this.props()
         const deps = this.descr.deps
-        if (deps === undefined || this.context === undefined) {
+        if (deps === undefined) {
             throw new Error('No state defined')
         }
+        this.props()
         this._state = (this.context.resolve(deps)[0]: any)
 
         return this._state
