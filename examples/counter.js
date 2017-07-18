@@ -1,17 +1,18 @@
 // @flow
 
-import {AtomWait, mem, force} from 'lom-atom'
+import {AtomWait, mem, force} from 'lom_atom'
 
 export class Counter {
     @mem get value(): number {
         setTimeout(() => {
-            this.value = 42
+            this.value = 1
+            // this.value = new Error('loading error')
         }, 500)
 
         throw new AtomWait()
     }
 
-    @mem set value(v: number) {
+    @mem set value(v: number | Error) {
         if (typeof v === 'string') {
             throw new TypeError('Test error')
         }

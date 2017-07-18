@@ -38,8 +38,8 @@ export interface IAtom<V> {
     status: IAtomStatus;
     field: string;
     get(force?: boolean): V;
-    set(v: V, force?: boolean): V;
-    value(next?: V, force?: boolean): V;
+    set(v: V | Error, force?: boolean): V;
+    value(next?: V | Error, force?: boolean): V;
     destroyed(isDestroyed?: boolean): boolean;
 }
 
@@ -52,9 +52,9 @@ export interface IAtomInt extends IAtom<*> {
     dislead(slave: IAtomInt): void;
     addMaster(master: IAtomInt): void;
 }
-
+//  | Error
 export type IAtomHandler<V> = (next?: V, force?: boolean) => V
-export type IAtomKeyHandler<V, K> = (key: K, next?: V, force?: boolean) => V
+export type IAtomKeyHandler<V, K> = (key: K, next?: V | Error, force?: boolean) => V
 
 export type IAtomHost<V> = {
     [key: string]: IAtomHandler<V> | IAtomKeyHandler<V, *>;

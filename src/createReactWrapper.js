@@ -2,7 +2,7 @@
 
 import mem, {force, detached} from './mem'
 import {defaultContext} from './Atom'
-import {shouldUpdate, AtomWait} from './utils'
+import {shouldUpdate} from './utils'
 import createStateDescriptor, {StateDescriptor} from './createStateDescriptor'
 
 type IReactComponent<IElement, Props> = {

@@ -1,6 +1,6 @@
 // @flow
 
-import {AtomWait, mem, force} from 'lom-atom'
+import {AtomWait, mem, force} from 'lom_atom'
 import {Locale} from './common'
 
 export class Hello {
@@ -45,16 +45,27 @@ export function HelloView(
 ) {
     return <div>
         <h3>{options.actionName}, {hello.name}</h3>
-        Lang: {locale.lang}<br/>
-        Srv: {service.value()}<br/>
-        Name: <input value={hello.name} onInput={({target}: Event) => {
-            hello.name = (target: any).value
-        }} />
-        <br/>
+        <div className="kv">
+            <div className="kv-key">Lang:</div><div className="kv-value">{locale.lang}</div>
+        </div>
 
-        Action: <input value={options.actionName} onInput={({target}: Event) => {
-            options.actionName = (target: any).value
-        }} />
+        <div className="kv">
+            <div className="kv-key">Srv:</div><div className="kv-value">{service.value()}</div>
+        </div>
+
+        <div className="kv">
+            <div className="kv-key">Name:</div>
+            <div className="kv-key"><input value={hello.name} onInput={({target}: Event) => {
+                hello.name = (target: any).value
+            }} /></div>
+        </div>
+
+        <div className="kv">
+            <div  className="kv-key">Action:</div>
+            <div className="kv-value"><input value={options.actionName} onInput={({target}: Event) => {
+                options.actionName = (target: any).value
+            }} /></div>
+        </div>
 
     </div>
 }

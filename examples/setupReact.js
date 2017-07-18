@@ -1,6 +1,6 @@
 // @flow
 
-import {AtomWait, createReactWrapper, createCreateElement} from 'lom-atom'
+import {AtomWait, createReactWrapper, createCreateElement} from 'lom_atom'
 
 import React from 'react'
 

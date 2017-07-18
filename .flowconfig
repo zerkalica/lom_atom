@@ -5,4 +5,4 @@ esproposal.decorators=ignore
 esproposal.class_static_fields=enable
 esproposal.class_instance_fields=enable
 unsafe.enable_getters_and_setters=true
-module.name_mapper='^lom-atom' -> '<PROJECT_ROOT>/src/index.js'
+module.name_mapper='^lom_atom' -> '<PROJECT_ROOT>/src/index.js'

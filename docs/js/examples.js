@@ -2,6 +2,24 @@ document.write('<script src="http://' + (location.host || 'localhost').split(':'
 (function () {
 'use strict';
 
+function __$styleInject(css, returnValue) {
+  if (typeof document === 'undefined') {
+    return returnValue;
+  }
+  css = css || '';
+  var head = document.head || document.getElementsByTagName('head')[0];
+  var style = document.createElement('style');
+  style.type = 'text/css';
+  head.appendChild(style);
+  
+  if (style.styleSheet){
+    style.styleSheet.cssText = css;
+  } else {
+    style.appendChild(document.createTextNode(css));
+  }
+  return returnValue;
+}
+
 var global$1 = typeof global !== "undefined" ? global :
             typeof self !== "undefined" ? self :
             typeof window !== "undefined" ? window : {};
@@ -15,6 +33,7 @@ var ATOM_STATUS = {
 };
 
 var catchedId = Symbol('lom_atom_catched');
+//  | Error
 
 var classCallCheck = function (instance, Constructor) {
   if (!(instance instanceof Constructor)) {
@@ -70,7 +89,9 @@ var inherits = function (subClass, superClass) {
 
 
 
-
+var objectDestructuringEmpty = function (obj) {
+  if (obj == null) throw new TypeError("Cannot destructure undefined");
+};
 
 
 
@@ -344,6 +365,7 @@ var Atom = function () {
 
     Atom.prototype.set = function set$$1(v, force) {
         var normalized = this._normalize(v, this._cached);
+
         if (this._cached === normalized) {
             return normalized;
         }
@@ -353,11 +375,11 @@ var Atom = function () {
 
         // console.log('set', this.field, 'value', normalized)
 
-        if (force || this._context.force) {
+        if (force || this._context.force || normalized instanceof Error) {
             this._context.force = false;
             this.status = ATOM_STATUS.ACTUAL;
             this._context.newValue(this, this._cached, normalized);
-            this._cached = normalized;
+            this._cached = normalized instanceof Error ? createMock(normalized) : normalized;
             if (this._slaves) {
                 this._slaves.forEach(obsoleteSlave);
             }
@@ -542,7 +564,18 @@ function memProp(proto, name, descr) {
 
 
 
+function forceGet() {
+    defaultContext.force = true;
+    return this;
+}
 
+function force(proto, name, descr) {
+    return {
+        enumerable: descr.enumerable,
+        configurable: descr.configurable,
+        get: forceGet
+    };
+}
 
 function mem(proto, name, descr) {
     return descr.value === undefined ? memProp(proto, name, descr) : memMethod(proto, name, descr);
@@ -935,6 +968,9 @@ function createReactWrapper(BaseComponent, defaultFromError) {
     };
 }
 
+// shim for using process in browser
+// based off https://github.com/defunctzombie/node-process/blob/master/browser.js
+
 function defaultSetTimout() {
     throw new Error('setTimeout has not been defined');
 }
@@ -1161,6 +1197,7 @@ object-assign
 @license MIT
 */
 
+/* eslint-disable no-unused-vars */
 var getOwnPropertySymbols = Object.getOwnPropertySymbols;
 var hasOwnProperty = Object.prototype.hasOwnProperty;
 var propIsEnumerable = Object.prototype.propertyIsEnumerable;
@@ -1255,6 +1292,17 @@ var index = shouldUseNative() ? Object.assign : function (target, source) {
  * 
  */
 
+/**
+ * Copyright (c) 2013-present, Facebook, Inc.
+ * All rights reserved.
+ *
+ * This source code is licensed under the BSD-style license found in the
+ * LICENSE file in the root directory of this source tree. An additional grant
+ * of patent rights can be found in the PATENTS file in the same directory.
+ *
+ * 
+ */
+
 function makeEmptyFunction(arg) {
   return function () {
     return arg;
@@ -1280,6 +1328,13 @@ emptyFunction.thatReturnsArgument = function (arg) {
 };
 
 var emptyFunction_1 = emptyFunction;
+
+/**
+ * Similar to invariant but only logs a warning if the condition is not met.
+ * This can be used to log issues in development environments in critical
+ * paths. Removing the logging code for production environments will keep the
+ * same logic and follow the same code paths.
+ */
 
 var warning = emptyFunction_1;
 
@@ -1429,6 +1484,17 @@ var emptyObject = {};
 
 var emptyObject_1 = emptyObject;
 
+/**
+ * Use invariant() to assert state which your program assumes to be true.
+ *
+ * Provide sprintf-style format (only %s is supported) and arguments
+ * to provide information about what broke and what you were
+ * expecting.
+ *
+ * The invariant message will be stripped in production, but the invariant
+ * will remain to ensure logic does not differ in production.
+ */
+
 var validateFormat = function validateFormat(format) {};
 
 {
@@ -1461,6 +1527,20 @@ function invariant(condition, format, a, b, c, d, e, f) {
 }
 
 var invariant_1 = invariant;
+
+/**
+ * Forked from fbjs/warning:
+ * https://github.com/facebook/fbjs/blob/e66ba20ad5be433eb54423f2b097d829324d9de6/packages/fbjs/src/__forks__/warning.js
+ *
+ * Only change is we use console.warn instead of console.error,
+ * and do nothing when 'console' is not supported.
+ * This really simplifies the code.
+ * ---
+ * Similar to invariant but only logs a warning if the condition is not met.
+ * This can be used to log issues in development environments in critical
+ * paths. Removing the logging code for production environments will keep the
+ * same logic and follow the same code paths.
+ */
 
 var lowPriorityWarning$1 = function () {};
 
@@ -1501,6 +1581,9 @@ var lowPriorityWarning$1 = function () {};
 
 var lowPriorityWarning_1 = lowPriorityWarning$1;
 
+/**
+ * Base class helpers for the updating state of a component.
+ */
 function ReactComponent(props, context, updater) {
   this.props = props;
   this.context = context;
@@ -1619,6 +1702,13 @@ var ReactBaseClasses = {
   PureComponent: ReactPureComponent
 };
 
+/**
+ * Static poolers. Several custom versions for each potential number of
+ * arguments. A completely generic pooler is easy to implement, but would
+ * require accessing the `arguments` object. In each of these, `this` refers to
+ * the Class itself, not an instance. If any others are needed, simply add them
+ * here, or in their own files.
+ */
 var oneArgumentPooler = function (copyFieldsFrom) {
   var Klass = this;
   if (Klass.instancePool.length) {
@@ -1718,6 +1808,12 @@ var PooledClass_1 = PooledClass;
  * 
  */
 
+/**
+ * Keeps track of the current owner.
+ *
+ * The current owner is the component who should own any components that are
+ * currently being constructed.
+ */
 var ReactCurrentOwner = {
   /**
    * @internal
@@ -1738,6 +1834,9 @@ var ReactCurrentOwner_1 = ReactCurrentOwner;
  *
  * 
  */
+
+// The Symbol used to tag the ReactElement type. If there is no native Symbol
+// nor polyfill, then a plain number is used for performance.
 
 var REACT_ELEMENT_TYPE = typeof Symbol === 'function' && Symbol['for'] && Symbol['for']('react.element') || 0xeac7;
 
@@ -2078,6 +2177,8 @@ var ReactElement_1 = ReactElement;
  * 
  */
 
+/* global Symbol */
+
 var ITERATOR_SYMBOL = typeof Symbol === 'function' && Symbol.iterator;
 var FAUX_ITERATOR_SYMBOL = '@@iterator'; // Before Symbol spec.
 
@@ -2113,6 +2214,13 @@ var getIteratorFn_1 = getIteratorFn;
  * of patent rights can be found in the PATENTS file in the same directory.
  *
  * 
+ */
+
+/**
+ * Escape and wrap key so it is safe to use as a reactid
+ *
+ * @param {string} key to be escaped.
+ * @return {string} the escaped key.
  */
 
 function escape(key) {
@@ -3159,6 +3267,11 @@ var ReactElementValidator$2 = {
 
 var ReactElementValidator_1 = ReactElementValidator$2;
 
+/**
+ * Create a factory that creates HTML tag elements.
+ *
+ * @private
+ */
 var createDOMFactory = ReactElement_1.createFactory;
 {
   var ReactElementValidator$1 = ReactElementValidator_1;
@@ -3867,6 +3980,11 @@ var factoryWithTypeCheckers = function(isValidElement, throwOnDirectAccess) {
 
   return ReactPropTypes;
 };
+
+// React 15.5 references this module, and assumes PropTypes are still callable in production.
+// Therefore we re-export development-only version with all the PropTypes checks here.
+// However if one is migrating to the `prop-types` npm library, they will go through the
+// `index.js` entry point, and it will branch depending on the environment.
 
 var factory_1 = function(isValidElement) {
   // It is still allowed in 15.5.
@@ -4755,6 +4873,20 @@ var isValidElement$1 = ReactElement_1.isValidElement;
 
 var createClass$1 = factory_1$2(Component, isValidElement$1, ReactNoopUpdateQueue_1);
 
+/**
+ * Returns the first child in a collection of children and verifies that there
+ * is only one child in the collection.
+ *
+ * See https://facebook.github.io/react/docs/top-level-api.html#react.children.only
+ *
+ * The current implementation of this function assumes that a single child gets
+ * passed without a wrapper, but the purpose of this helper function is to
+ * abstract away the particular structure of children.
+ *
+ * @param {?object} children Child collection structure.
+ * @return {ReactElement} The first and only `ReactElement` contained in the
+ * structure.
+ */
 function onlyChild(children) {
   !ReactElement_1.isValidElement(children) ? invariant_1(false, 'React.Children.only expected to receive a single React element child.') : void 0;
   return children;
@@ -5376,6 +5508,9 @@ var ARIADOMPropertyConfig = {
 
 var ARIADOMPropertyConfig_1 = ARIADOMPropertyConfig;
 
+/**
+ * Injectable ordering of event plugins.
+ */
 var eventPluginOrder = null;
 
 /**
@@ -5672,6 +5807,14 @@ var ReactErrorUtils = {
 
 var ReactErrorUtils_1 = ReactErrorUtils;
 
+/**
+ * Injected dependencies:
+ */
+
+/**
+ * - `ComponentTree`: [required] Module that can convert between React instances
+ *   and actual node references.
+ */
 var ComponentTree;
 var TreeTraversal;
 var injection = {
@@ -5871,6 +6014,19 @@ var EventPluginUtils = {
 
 var EventPluginUtils_1 = EventPluginUtils;
 
+/**
+ * Accumulates items that must not be null or undefined into the first one. This
+ * is used to conserve memory by avoiding array allocations, and thus sacrifices
+ * API cleanness. Since `current` can be null before being passed in and not
+ * null after this function, make sure to assign it back to `current`:
+ *
+ * `a = accumulateInto(a, b);`
+ *
+ * This API should be sparingly used. Try `accumulate` for something cleaner.
+ *
+ * @return {*|array<*>} An accumulation of items.
+ */
+
 function accumulateInto(current, next) {
   !(next != null) ? invariant_1(false, 'accumulateInto(...): Accumulated items must not be null or undefined.') : void 0;
 
@@ -5910,6 +6066,14 @@ var accumulateInto_1 = accumulateInto;
  * 
  */
 
+/**
+ * @param {array} arr an "accumulation" of items which is either an Array or
+ * a single item. Useful when paired with the `accumulate` module. This is a
+ * simple utility that allows us to reason about a collection of items, but
+ * handling the case when there is exactly one item (and we do not need to
+ * allocate an array).
+ */
+
 function forEachAccumulated(arr, cb, scope) {
   if (Array.isArray(arr)) {
     arr.forEach(cb, scope);
@@ -5920,6 +6084,9 @@ function forEachAccumulated(arr, cb, scope) {
 
 var forEachAccumulated_1 = forEachAccumulated;
 
+/**
+ * Internal store for event listeners
+ */
 var listenerBank = {};
 
 /**
@@ -6318,6 +6485,13 @@ var ExecutionEnvironment$1 = {
 
 var ExecutionEnvironment_1 = ExecutionEnvironment$1;
 
+/**
+ * Static poolers. Several custom versions for each potential number of
+ * arguments. A completely generic pooler is easy to implement, but would
+ * require accessing the `arguments` object. In each of these, `this` refers to
+ * the Class itself, not an instance. If any others are needed, simply add them
+ * here, or in their own files.
+ */
 var oneArgumentPooler$1 = function (copyFieldsFrom) {
   var Klass = this;
   if (Klass.instancePool.length) {
@@ -6425,6 +6599,17 @@ function getTextContentAccessor() {
 
 var getTextContentAccessor_1 = getTextContentAccessor;
 
+/**
+ * This helper class stores information about text content of a target node,
+ * allowing comparison of content before and after a given event.
+ *
+ * Identify the node where selection currently begins, then observe
+ * both its text content and its current position in the DOM. Since the
+ * browser may natively replace the target node during composition, we can
+ * use its position to find its replacement.
+ *
+ * @param {DOMEventTarget} root
+ */
 function FallbackCompositionState(root) {
   this._root = root;
   this._startText = this.getText();
@@ -6736,6 +6921,10 @@ function getPooledWarningPropertyDefinition(propName, getVal) {
   }
 }
 
+/**
+ * @interface Event
+ * @see http://www.w3.org/TR/DOM-Level-3-Events/#events-compositionevents
+ */
 var CompositionEventInterface = {
   data: null
 };
@@ -6754,6 +6943,11 @@ SyntheticEvent_1.augmentClass(SyntheticCompositionEvent, CompositionEventInterfa
 
 var SyntheticCompositionEvent_1 = SyntheticCompositionEvent;
 
+/**
+ * @interface Event
+ * @see http://www.w3.org/TR/2013/WD-DOM-Level-3-Events-20131105
+ *      /#events-inputevents
+ */
 var InputEventInterface = {
   data: null
 };
@@ -7262,6 +7456,11 @@ var ReactFeatureFlags = {
 
 var ReactFeatureFlags_1 = ReactFeatureFlags;
 
+/**
+ * @param {?object} object
+ * @return {boolean} True if `object` is a valid owner.
+ * @final
+ */
 function isValidOwner(object) {
   return !!(object && typeof object.attachRef === 'function' && typeof object.detachRef === 'function');
 }
@@ -7440,11 +7639,11 @@ var ReactInvalidSetStateWarningHook_1 = ReactInvalidSetStateWarningHook;
  * 
  */
 
-var history = [];
+var history$1 = [];
 
 var ReactHostOperationHistoryHook = {
   onHostOperation: function (operation) {
-    history.push(operation);
+    history$1.push(operation);
   },
   clearHistory: function () {
     if (ReactHostOperationHistoryHook._preventClearing) {
@@ -7452,10 +7651,10 @@ var ReactHostOperationHistoryHook = {
       return;
     }
 
-    history = [];
+    history$1 = [];
   },
   getHistory: function () {
-    return history;
+    return history$1;
   }
 };
 
@@ -7468,6 +7667,19 @@ if (ExecutionEnvironment_1.canUseDOM) {
 }
 
 var performance_1 = performance$2 || {};
+
+/**
+ * Copyright (c) 2013-present, Facebook, Inc.
+ * All rights reserved.
+ *
+ * This source code is licensed under the BSD-style license found in the
+ * LICENSE file in the root directory of this source tree. An additional grant
+ * of patent rights can be found in the PATENTS file in the same directory.
+ *
+ * @typechecks
+ */
+
+
 
 var performanceNow$1;
 
@@ -7828,6 +8040,8 @@ if (/[?&]react_perf\b/.test(url)) {
 
 var ReactDebugTool_1 = ReactDebugTool$1;
 
+// Trust the developer to only use ReactInstrumentation with a __DEV__ check
+
 var debugTool = null;
 
 {
@@ -7837,6 +8051,10 @@ var debugTool = null;
 
 var ReactInstrumentation$1 = { debugTool: debugTool };
 
+/**
+ * Helper to call ReactRef.attachRefs with this composite component, split out
+ * to avoid allocations in the transaction mount-ready queue.
+ */
 function attachRefs() {
   ReactRef_1.attachRefs(this, this._currentElement);
 }
@@ -8540,6 +8758,14 @@ var inputValueTracking_1 = inputValueTracking;
  *
  */
 
+/**
+ * Gets the target node from a native browser event by accounting for
+ * inconsistencies in browser DOM APIs.
+ *
+ * @param {object} nativeEvent Native browser event.
+ * @return {DOMEventTarget} Target node.
+ */
+
 function getEventTarget(nativeEvent) {
   var target = nativeEvent.target || nativeEvent.srcElement || window;
 
@@ -8610,6 +8836,10 @@ var isEventSupported_1 = isEventSupported;
  * of patent rights can be found in the PATENTS file in the same directory.
  *
  * 
+ */
+
+/**
+ * @see http://www.whatwg.org/specs/web-apps/current-work/multipage/the-input-element.html#input-type-attr-summary
  */
 
 var supportedInputTypes = {
@@ -8944,10 +9174,24 @@ var ChangeEventPlugin_1 = ChangeEventPlugin;
  *
  */
 
+/**
+ * Module that is injectable into `EventPluginHub`, that specifies a
+ * deterministic ordering of `EventPlugin`s. A convenient way to reason about
+ * plugins, without having to package every one of them. This is better than
+ * having plugins be ordered in the same order that they are injected because
+ * that ordering would be influenced by the packaging order.
+ * `ResponderEventPlugin` must occur before `SimpleEventPlugin` so that
+ * preventing default on events is convenient in `SimpleEventPlugin` handlers.
+ */
+
 var DefaultEventPluginOrder = ['ResponderEventPlugin', 'SimpleEventPlugin', 'TapEventPlugin', 'EnterLeaveEventPlugin', 'ChangeEventPlugin', 'SelectEventPlugin', 'BeforeInputEventPlugin'];
 
 var DefaultEventPluginOrder_1 = DefaultEventPluginOrder;
 
+/**
+ * @interface UIEvent
+ * @see http://www.w3.org/TR/DOM-Level-3-Events/
+ */
 var UIEventInterface = {
   view: function (event) {
     if (event.view) {
@@ -9020,6 +9264,11 @@ var ViewportMetrics_1 = ViewportMetrics;
  *
  */
 
+/**
+ * Translation from modifier key to the associated property in the event.
+ * @see http://www.w3.org/TR/DOM-Level-3-Events/#keys-Modifiers
+ */
+
 var modifierKeyToProp = {
   Alt: 'altKey',
   Control: 'ctrlKey',
@@ -9046,6 +9295,10 @@ function getEventModifierState(nativeEvent) {
 
 var getEventModifierState_1 = getEventModifierState;
 
+/**
+ * @interface MouseEvent
+ * @see http://www.w3.org/TR/DOM-Level-3-Events/
+ */
 var MouseEventInterface = {
   screenX: null,
   screenY: null,
@@ -9431,6 +9684,10 @@ var DOMNamespaces_1 = DOMNamespaces;
 
 /* globals MSApp */
 
+/**
+ * Create a function which has 'unsafe' privileges (required by windows8 apps)
+ */
+
 var createMicrosoftUnsafeLocalFunction = function (func) {
   if (typeof MSApp !== 'undefined' && MSApp.execUnsafeLocalFunction) {
     return function (arg0, arg1, arg2, arg3) {
@@ -9563,6 +9820,12 @@ var setInnerHTML_1 = setInnerHTML;
  *
  */
 
+// code copied and modified from escape-html
+/**
+ * Module variables.
+ * @private
+ */
+
 var matchHtmlRegExp = /["'&<>]/;
 
 /**
@@ -9642,6 +9905,16 @@ function escapeTextContentForBrowser(text) {
 
 var escapeTextContentForBrowser_1 = escapeTextContentForBrowser;
 
+/**
+ * Set the textContent property of a node, ensuring that whitespace is preserved
+ * even in IE8. innerText is a poor substitute for textContent and, among many
+ * issues, inserts <br> instead of the literal newline chars. innerHTML behaves
+ * as it should.
+ *
+ * @param {DOMElement} node
+ * @param {string} text
+ * @internal
+ */
 var setTextContent = function (node, text) {
   if (text) {
     var firstChild = node.firstChild;
@@ -9768,6 +10041,28 @@ DOMLazyTree.queueText = queueText;
 
 var DOMLazyTree_1 = DOMLazyTree;
 
+/**
+ * Copyright (c) 2013-present, Facebook, Inc.
+ * All rights reserved.
+ *
+ * This source code is licensed under the BSD-style license found in the
+ * LICENSE file in the root directory of this source tree. An additional grant
+ * of patent rights can be found in the PATENTS file in the same directory.
+ *
+ * @typechecks
+ */
+
+
+
+/**
+ * Convert array-like objects to arrays.
+ *
+ * This API assumes the caller knows the contents of the data type. For less
+ * well defined inputs use createArrayFromMixed.
+ *
+ * @param {object|function|filelist} obj
+ * @return {array}
+ */
 function toArray$2(obj) {
   var length = obj.length;
 
@@ -9871,6 +10166,25 @@ function createArrayFromMixed(obj) {
 
 var createArrayFromMixed_1 = createArrayFromMixed;
 
+/**
+ * Copyright (c) 2013-present, Facebook, Inc.
+ * All rights reserved.
+ *
+ * This source code is licensed under the BSD-style license found in the
+ * LICENSE file in the root directory of this source tree. An additional grant
+ * of patent rights can be found in the PATENTS file in the same directory.
+ *
+ */
+
+/*eslint-disable fb-www/unsafe-html */
+
+
+
+
+
+/**
+ * Dummy container used to detect which wraps are necessary.
+ */
 var dummyNode$1 = ExecutionEnvironment_1.canUseDOM ? document.createElement('div') : null;
 
 /**
@@ -9945,6 +10259,28 @@ function getMarkupWrap(nodeName) {
 
 var getMarkupWrap_1 = getMarkupWrap;
 
+/**
+ * Copyright (c) 2013-present, Facebook, Inc.
+ * All rights reserved.
+ *
+ * This source code is licensed under the BSD-style license found in the
+ * LICENSE file in the root directory of this source tree. An additional grant
+ * of patent rights can be found in the PATENTS file in the same directory.
+ *
+ * @typechecks
+ */
+
+/*eslint-disable fb-www/unsafe-html*/
+
+
+
+
+
+
+
+/**
+ * Dummy container used to render all markup.
+ */
 var dummyNode = ExecutionEnvironment_1.canUseDOM ? document.createElement('div') : null;
 
 /**
@@ -10235,6 +10571,9 @@ var DOMChildrenOperations = {
 
 var DOMChildrenOperations_1 = DOMChildrenOperations;
 
+/**
+ * Operations used to process updates to DOM nodes.
+ */
 var ReactDOMIDOperations = {
   /**
    * Updates a component's children by processing a series of updates.
@@ -10250,6 +10589,11 @@ var ReactDOMIDOperations = {
 
 var ReactDOMIDOperations_1 = ReactDOMIDOperations;
 
+/**
+ * Abstracts away all functionality of the reconciler that requires knowledge of
+ * the browser context. TODO: These callers should be refactored to avoid the
+ * need for this injection.
+ */
 var ReactComponentBrowserEnvironment = {
   processChildrenUpdates: ReactDOMIDOperations_1.dangerouslyProcessChildrenUpdates,
 
@@ -10266,6 +10610,10 @@ var ReactComponentBrowserEnvironment_1 = ReactComponentBrowserEnvironment;
  * LICENSE file in the root directory of this source tree. An additional grant
  * of patent rights can be found in the PATENTS file in the same directory.
  *
+ */
+
+/**
+ * @param {DOMElement} node input/textarea to focus
  */
 
 function focusNode(node) {
@@ -10295,6 +10643,10 @@ var AutoFocusUtils_1 = AutoFocusUtils;
  * LICENSE file in the root directory of this source tree. An additional grant
  * of patent rights can be found in the PATENTS file in the same directory.
  *
+ */
+
+/**
+ * CSS properties which accept numbers but are not in units of "px".
  */
 
 var isUnitlessNumber = {
@@ -10435,6 +10787,17 @@ var CSSProperty = {
 
 var CSSProperty_1 = CSSProperty;
 
+/**
+ * Copyright (c) 2013-present, Facebook, Inc.
+ * All rights reserved.
+ *
+ * This source code is licensed under the BSD-style license found in the
+ * LICENSE file in the root directory of this source tree. An additional grant
+ * of patent rights can be found in the PATENTS file in the same directory.
+ *
+ * @typechecks
+ */
+
 var _hyphenPattern = /-(.)/g;
 
 /**
@@ -10543,6 +10906,17 @@ function dangerousStyleValue(name, value, component, isCustomProperty) {
 
 var dangerousStyleValue_1 = dangerousStyleValue;
 
+/**
+ * Copyright (c) 2013-present, Facebook, Inc.
+ * All rights reserved.
+ *
+ * This source code is licensed under the BSD-style license found in the
+ * LICENSE file in the root directory of this source tree. An additional grant
+ * of patent rights can be found in the PATENTS file in the same directory.
+ *
+ * @typechecks
+ */
+
 var _uppercasePattern = /([A-Z])/g;
 
 /**
@@ -10597,6 +10971,10 @@ var hyphenateStyleName_1 = hyphenateStyleName;
  *
  * 
  * @typechecks static-only
+ */
+
+/**
+ * Memoizes the return value of a function that accepts one string argument.
  */
 
 function memoizeStringOnly(callback) {
@@ -10804,6 +11182,12 @@ var CSSPropertyOperations = {
 
 var CSSPropertyOperations_1 = CSSPropertyOperations;
 
+/**
+ * Escapes attribute value to prevent scripting attacks.
+ *
+ * @param {*} value Value to escape.
+ * @return {string} An escaped string.
+ */
 function quoteAttributeValueForBrowser(value) {
   return '"' + escapeTextContentForBrowser_1(value) + '"';
 }
@@ -11044,6 +11428,13 @@ var ReactEventEmitterMixin = {
 
 var ReactEventEmitterMixin_1 = ReactEventEmitterMixin;
 
+/**
+ * Generate a mapping of standard vendor prefixes using the defined style property and event name.
+ *
+ * @param {string} styleProp
+ * @param {string} eventName
+ * @returns {object}
+ */
 function makePrefixMap(styleProp, eventName) {
   var prefixes = {};
 
@@ -11123,6 +11514,61 @@ function getVendorPrefixedEventName(eventName) {
 }
 
 var getVendorPrefixedEventName_1 = getVendorPrefixedEventName;
+
+/**
+ * Summary of `ReactBrowserEventEmitter` event handling:
+ *
+ *  - Top-level delegation is used to trap most native browser events. This
+ *    may only occur in the main thread and is the responsibility of
+ *    ReactEventListener, which is injected and can therefore support pluggable
+ *    event sources. This is the only work that occurs in the main thread.
+ *
+ *  - We normalize and de-duplicate events to account for browser quirks. This
+ *    may be done in the worker thread.
+ *
+ *  - Forward these native events (with the associated top-level type used to
+ *    trap it) to `EventPluginHub`, which in turn will ask plugins if they want
+ *    to extract any synthetic events.
+ *
+ *  - The `EventPluginHub` will then process each event by annotating them with
+ *    "dispatches", a sequence of listeners and IDs that care about that event.
+ *
+ *  - The `EventPluginHub` then dispatches the events.
+ *
+ * Overview of React and the event system:
+ *
+ * +------------+    .
+ * |    DOM     |    .
+ * +------------+    .
+ *       |           .
+ *       v           .
+ * +------------+    .
+ * | ReactEvent |    .
+ * |  Listener  |    .
+ * +------------+    .                         +-----------+
+ *       |           .               +--------+|SimpleEvent|
+ *       |           .               |         |Plugin     |
+ * +-----|------+    .               v         +-----------+
+ * |     |      |    .    +--------------+                    +------------+
+ * |     +-----------.--->|EventPluginHub|                    |    Event   |
+ * |            |    .    |              |     +-----------+  | Propagators|
+ * | ReactEvent |    .    |              |     |TapEvent   |  |------------|
+ * |  Emitter   |    .    |              |<---+|Plugin     |  |other plugin|
+ * |            |    .    |              |     +-----------+  |  utilities |
+ * |     +-----------.--->|              |                    +------------+
+ * |     |      |    .    +--------------+
+ * +-----|------+    .                ^        +-----------+
+ *       |           .                |        |Enter/Leave|
+ *       +           .                +-------+|Plugin     |
+ * +-------------+   .                         +-----------+
+ * | application |   .
+ * |-------------|   .
+ * |             |   .
+ * |             |   .
+ * +-------------+   .
+ *                   .
+ *    React Core     .  General Purpose Event Plugin System
+ */
 
 var hasEventPageXY;
 var alreadyListeningTo = {};
@@ -12229,6 +12675,15 @@ var ReactComponentEnvironment_1 = ReactComponentEnvironment;
  *
  */
 
+/**
+ * `ReactInstanceMap` maintains a mapping from a public facing stateful
+ * instance (key) and the internal representation (value). This allows public
+ * methods to accept the user facing instance as an argument and map them back
+ * to internal methods.
+ */
+
+// TODO: Replace this with ES6: var ReactInstanceMap = new Map();
+
 var ReactInstanceMap = {
   /**
    * This API should be called `delete` but we'd have to make sure to always
@@ -12428,6 +12883,18 @@ var shallowEqual_1 = shallowEqual;
  * LICENSE file in the root directory of this source tree. An additional grant
  * of patent rights can be found in the PATENTS file in the same directory.
  *
+ */
+
+/**
+ * Given a `prevElement` and `nextElement`, determines if the existing
+ * instance should be updated as opposed to being destroyed or replaced by a new
+ * instance. Both arguments are elements. This ensures that this logic can
+ * operate on stateless trees without any backing instance.
+ *
+ * @param {?object} prevElement
+ * @param {?object} nextElement
+ * @return {boolean} True if the existing instance should be updated.
+ * @protected
  */
 
 function shouldUpdateReactComponent(prevElement, nextElement) {
@@ -13399,6 +13866,7 @@ function getNextDebugID() {
 
 var getNextDebugID_1 = getNextDebugID;
 
+// To avoid a cyclic dependency, we create the final class in this module
 var ReactCompositeComponentWrapper = function (element) {
   this.construct(element);
 };
@@ -13515,6 +13983,13 @@ var instantiateReactComponent_1 = instantiateReactComponent;
  * 
  */
 
+/**
+ * Escape and wrap key so it is safe to use as a reactid
+ *
+ * @param {string} key to be escaped.
+ * @return {string} the escaped key.
+ */
+
 function escape$1(key) {
   var escapeRegex = /[=:]/g;
   var escaperLookup = {
@@ -13565,6 +14040,9 @@ var KeyEscapeUtils_1$2 = KeyEscapeUtils$2;
  * 
  */
 
+// The Symbol used to tag the ReactElement type. If there is no native Symbol
+// nor polyfill, then a plain number is used for performance.
+
 var REACT_ELEMENT_TYPE$2 = typeof Symbol === 'function' && Symbol['for'] && Symbol['for']('react.element') || 0xeac7;
 
 var ReactElementSymbol$2 = REACT_ELEMENT_TYPE$2;
@@ -13579,6 +14057,8 @@ var ReactElementSymbol$2 = REACT_ELEMENT_TYPE$2;
  *
  * 
  */
+
+/* global Symbol */
 
 var ITERATOR_SYMBOL$1 = typeof Symbol === 'function' && Symbol.iterator;
 var FAUX_ITERATOR_SYMBOL$1 = '@@iterator'; // Before Symbol spec.
@@ -13948,6 +14428,13 @@ function flattenChildren$1(children, selfDebugID) {
 
 var flattenChildren_1 = flattenChildren$1;
 
+/**
+ * Make an update for markup to be rendered and inserted at a supplied index.
+ *
+ * @param {string} markup Markup that renders into an element.
+ * @param {number} toIndex Destination index.
+ * @private
+ */
 function makeInsertMarkup(markup, afterNode, toIndex) {
   // NOTE: Null values reduce hidden classes.
   return {
@@ -14699,6 +15186,11 @@ var ReactServerUpdateQueue = function () {
 
 var ReactServerUpdateQueue_1 = ReactServerUpdateQueue;
 
+/**
+ * Executed within the scope of the `Transaction` instance. Consider these as
+ * being member methods, but with an implied ordering while being isolated from
+ * each other.
+ */
 var TRANSACTION_WRAPPERS$1 = [];
 
 {
@@ -16127,6 +16619,10 @@ index(ReactDOMEmptyComponent.prototype, {
 
 var ReactDOMEmptyComponent_1 = ReactDOMEmptyComponent;
 
+/**
+ * Return the lowest common ancestor of A and B, or null if they are in
+ * different trees.
+ */
 function getLowestCommonAncestor(instA, instB) {
   !('_hostNode' in instA) ? invariant_1(false, 'getNodeFromInstance: Invalid argument.') : void 0;
   !('_hostNode' in instB) ? invariant_1(false, 'getNodeFromInstance: Invalid argument.') : void 0;
@@ -16243,6 +16739,21 @@ var ReactDOMTreeTraversal = {
   traverseEnterLeave: traverseEnterLeave
 };
 
+/**
+ * Text nodes violate a couple assumptions that React makes about components:
+ *
+ *  - When mounting text into the DOM, adjacent text nodes are merged.
+ *  - Text nodes cannot be assigned a React root ID.
+ *
+ * This component is used to wrap strings between comment nodes so that they
+ * can undergo the same reconciliation that is applied to elements.
+ *
+ * TODO: Investigate representing React components in the DOM with text nodes.
+ *
+ * @class ReactDOMTextComponent
+ * @extends ReactComponent
+ * @internal
+ */
 var ReactDOMTextComponent = function (text) {
   // TODO: This is really a ReactText (ReactNode), not a ReactElement
   this._currentElement = text;
@@ -16416,6 +16927,30 @@ var ReactDefaultBatchingStrategy = {
 
 var ReactDefaultBatchingStrategy_1 = ReactDefaultBatchingStrategy;
 
+/**
+ * Copyright (c) 2013-present, Facebook, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * @typechecks
+ */
+
+
+
+/**
+ * Upstream version of event listener. Does not take into account specific
+ * nature of platform.
+ */
 var EventListener = {
   /**
    * Listen to DOM events during the bubble phase.
@@ -16485,6 +17020,17 @@ var EventListener_1 = EventListener;
  * @typechecks
  */
 
+/**
+ * Gets the scroll position of the supplied element or window.
+ *
+ * The return values are unbounded, unlike `getScrollPosition`. This means they
+ * may be negative or exceed the element boundaries (which is possible using
+ * inertial scrolling).
+ *
+ * @param {DOMWindow|DOMElement} scrollable
+ * @return {object} Map with `x` and `y` keys.
+ */
+
 function getUnboundedScrollPosition(scrollable) {
   if (scrollable.Window && scrollable instanceof scrollable.Window) {
     return {
@@ -16500,6 +17046,11 @@ function getUnboundedScrollPosition(scrollable) {
 
 var getUnboundedScrollPosition_1 = getUnboundedScrollPosition;
 
+/**
+ * Find the deepest React component completely containing the root of the
+ * passed-in instance (for use when entire React trees are nested within each
+ * other). If React trees are not nested, returns null.
+ */
 function findParent(inst) {
   // TODO: It may be a good idea to cache this to prevent unnecessary DOM
   // traversal, but caching is difficult to do correctly without using a
@@ -16650,6 +17201,13 @@ var ReactInjection_1 = ReactInjection;
  *
  */
 
+/**
+ * Given any node return the first leaf node without children.
+ *
+ * @param {DOMElement|DOMTextNode} node
+ * @return {DOMElement|DOMTextNode}
+ */
+
 function getLeafNode(node) {
   while (node && node.firstChild) {
     node = node.firstChild;
@@ -16705,6 +17263,11 @@ function getNodeForCharacterOffset(root, offset) {
 
 var getNodeForCharacterOffset_1 = getNodeForCharacterOffset;
 
+/**
+ * While `isCollapsed` is available on the Selection object and `collapsed`
+ * is available on the Range object, IE11 sometimes gets them wrong.
+ * If the anchor/focus nodes and offsets are the same, the range is collapsed.
+ */
 function isCollapsed(anchorNode, anchorOffset, focusNode, focusOffset) {
   return anchorNode === focusNode && anchorOffset === focusOffset;
 }
@@ -16895,6 +17458,21 @@ var ReactDOMSelection = {
 
 var ReactDOMSelection_1 = ReactDOMSelection;
 
+/**
+ * Copyright (c) 2013-present, Facebook, Inc.
+ * All rights reserved.
+ *
+ * This source code is licensed under the BSD-style license found in the
+ * LICENSE file in the root directory of this source tree. An additional grant
+ * of patent rights can be found in the PATENTS file in the same directory.
+ *
+ * @typechecks
+ */
+
+/**
+ * @param {*} object The object to check.
+ * @return {boolean} Whether or not the object is a DOM node.
+ */
 function isNode(object) {
   var doc = object ? object.ownerDocument || object : document;
   var defaultView = doc.defaultView || window;
@@ -16903,12 +17481,47 @@ function isNode(object) {
 
 var isNode_1 = isNode;
 
+/**
+ * Copyright (c) 2013-present, Facebook, Inc.
+ * All rights reserved.
+ *
+ * This source code is licensed under the BSD-style license found in the
+ * LICENSE file in the root directory of this source tree. An additional grant
+ * of patent rights can be found in the PATENTS file in the same directory.
+ *
+ * @typechecks
+ */
+
+
+
+/**
+ * @param {*} object The object to check.
+ * @return {boolean} Whether or not the object is a DOM text node.
+ */
 function isTextNode(object) {
   return isNode_1(object) && object.nodeType == 3;
 }
 
 var isTextNode_1 = isTextNode;
 
+/**
+ * Copyright (c) 2013-present, Facebook, Inc.
+ * All rights reserved.
+ *
+ * This source code is licensed under the BSD-style license found in the
+ * LICENSE file in the root directory of this source tree. An additional grant
+ * of patent rights can be found in the PATENTS file in the same directory.
+ *
+ * 
+ */
+
+
+
+/*eslint-disable no-bitwise */
+
+/**
+ * Checks if a given DOM node contains or is another DOM node.
+ */
 function containsNode(outerNode, innerNode) {
   if (!outerNode || !innerNode) {
     return false;
@@ -16929,6 +17542,29 @@ function containsNode(outerNode, innerNode) {
 
 var containsNode_1 = containsNode;
 
+/**
+ * Copyright (c) 2013-present, Facebook, Inc.
+ * All rights reserved.
+ *
+ * This source code is licensed under the BSD-style license found in the
+ * LICENSE file in the root directory of this source tree. An additional grant
+ * of patent rights can be found in the PATENTS file in the same directory.
+ *
+ * @typechecks
+ */
+
+/* eslint-disable fb-www/typeof-undefined */
+
+/**
+ * Same as document.activeElement but wraps in a try-catch block. In IE it is
+ * not safe to call document.activeElement if there is nothing focused.
+ *
+ * The activeElement will be null only if the document or document body is not
+ * yet defined.
+ *
+ * @param {?DOMDocument} doc Defaults to current document.
+ * @return {?DOMElement}
+ */
 function getActiveElement(doc) /*?DOMElement*/{
   doc = doc || (typeof document !== 'undefined' ? document : undefined);
   if (typeof doc === 'undefined') {
@@ -17048,6 +17684,10 @@ var ReactInputSelection = {
 
 var ReactInputSelection_1 = ReactInputSelection;
 
+/**
+ * Ensures that, when possible, the selection range (currently selected text
+ * input) is not disturbed by performing the transaction.
+ */
 var SELECTION_RESTORATION = {
   /**
    * @return {Selection} Selection information.
@@ -17666,6 +18306,11 @@ var SelectEventPlugin = {
 
 var SelectEventPlugin_1 = SelectEventPlugin;
 
+/**
+ * @interface Event
+ * @see http://www.w3.org/TR/css3-animations/#AnimationEvent-interface
+ * @see https://developer.mozilla.org/en-US/docs/Web/API/AnimationEvent
+ */
 var AnimationEventInterface = {
   animationName: null,
   elapsedTime: null,
@@ -17686,6 +18331,10 @@ SyntheticEvent_1.augmentClass(SyntheticAnimationEvent, AnimationEventInterface);
 
 var SyntheticAnimationEvent_1 = SyntheticAnimationEvent;
 
+/**
+ * @interface Event
+ * @see http://www.w3.org/TR/clipboard-apis/
+ */
 var ClipboardEventInterface = {
   clipboardData: function (event) {
     return 'clipboardData' in event ? event.clipboardData : window.clipboardData;
@@ -17706,6 +18355,10 @@ SyntheticEvent_1.augmentClass(SyntheticClipboardEvent, ClipboardEventInterface);
 
 var SyntheticClipboardEvent_1 = SyntheticClipboardEvent;
 
+/**
+ * @interface FocusEvent
+ * @see http://www.w3.org/TR/DOM-Level-3-Events/
+ */
 var FocusEventInterface = {
   relatedTarget: null
 };
@@ -17732,6 +18385,17 @@ var SyntheticFocusEvent_1 = SyntheticFocusEvent;
  * LICENSE file in the root directory of this source tree. An additional grant
  * of patent rights can be found in the PATENTS file in the same directory.
  *
+ */
+
+/**
+ * `charCode` represents the actual "character code" and is safe to use with
+ * `String.fromCharCode`. As such, only keys that correspond to printable
+ * characters produce a valid `charCode`, the only exception to this is Enter.
+ * The Tab-key is considered non-printable and does not have a `charCode`,
+ * presumably because it does not produce a tab-character in browsers.
+ *
+ * @param {object} nativeEvent Native browser event.
+ * @return {number} Normalized `charCode` property.
  */
 
 function getEventCharCode(nativeEvent) {
@@ -17761,6 +18425,10 @@ function getEventCharCode(nativeEvent) {
 
 var getEventCharCode_1 = getEventCharCode;
 
+/**
+ * Normalization of deprecated HTML5 `key` values
+ * @see https://developer.mozilla.org/en-US/docs/Web/API/KeyboardEvent#Key_names
+ */
 var normalizeKey = {
   Esc: 'Escape',
   Spacebar: ' ',
@@ -17855,6 +18523,10 @@ function getEventKey(nativeEvent) {
 
 var getEventKey_1 = getEventKey;
 
+/**
+ * @interface KeyboardEvent
+ * @see http://www.w3.org/TR/DOM-Level-3-Events/
+ */
 var KeyboardEventInterface = {
   key: getEventKey_1,
   location: null,
@@ -17917,6 +18589,10 @@ SyntheticUIEvent_1.augmentClass(SyntheticKeyboardEvent, KeyboardEventInterface);
 
 var SyntheticKeyboardEvent_1 = SyntheticKeyboardEvent;
 
+/**
+ * @interface DragEvent
+ * @see http://www.w3.org/TR/DOM-Level-3-Events/
+ */
 var DragEventInterface = {
   dataTransfer: null
 };
@@ -17935,6 +18611,10 @@ SyntheticMouseEvent_1.augmentClass(SyntheticDragEvent, DragEventInterface);
 
 var SyntheticDragEvent_1 = SyntheticDragEvent;
 
+/**
+ * @interface TouchEvent
+ * @see http://www.w3.org/TR/touch-events/
+ */
 var TouchEventInterface = {
   touches: null,
   targetTouches: null,
@@ -17960,6 +18640,11 @@ SyntheticUIEvent_1.augmentClass(SyntheticTouchEvent, TouchEventInterface);
 
 var SyntheticTouchEvent_1 = SyntheticTouchEvent;
 
+/**
+ * @interface Event
+ * @see http://www.w3.org/TR/2009/WD-css3-transitions-20090320/#transition-events-
+ * @see https://developer.mozilla.org/en-US/docs/Web/API/TransitionEvent
+ */
 var TransitionEventInterface = {
   propertyName: null,
   elapsedTime: null,
@@ -17980,6 +18665,10 @@ SyntheticEvent_1.augmentClass(SyntheticTransitionEvent, TransitionEventInterface
 
 var SyntheticTransitionEvent_1 = SyntheticTransitionEvent;
 
+/**
+ * @interface WheelEvent
+ * @see http://www.w3.org/TR/DOM-Level-3-Events/
+ */
 var WheelEventInterface = {
   deltaX: function (event) {
     return 'deltaX' in event ? event.deltaX : // Fallback to `wheelDeltaX` for Webkit and normalize (right is positive).
@@ -18013,6 +18702,24 @@ SyntheticMouseEvent_1.augmentClass(SyntheticWheelEvent, WheelEventInterface);
 
 var SyntheticWheelEvent_1 = SyntheticWheelEvent;
 
+/**
+ * Turns
+ * ['abort', ...]
+ * into
+ * eventTypes = {
+ *   'abort': {
+ *     phasedRegistrationNames: {
+ *       bubbled: 'onAbort',
+ *       captured: 'onAbortCapture',
+ *     },
+ *     dependencies: ['topAbort'],
+ *   },
+ *   ...
+ * };
+ * topLevelEventsToDispatchConfig = {
+ *   'topAbort': { sameConfig }
+ * };
+ */
 var eventTypes$4 = {};
 var topLevelEventsToDispatchConfig = {};
 ['abort', 'animationEnd', 'animationIteration', 'animationStart', 'blur', 'canPlay', 'canPlayThrough', 'click', 'contextMenu', 'copy', 'cut', 'doubleClick', 'drag', 'dragEnd', 'dragEnter', 'dragExit', 'dragLeave', 'dragOver', 'dragStart', 'drop', 'durationChange', 'emptied', 'encrypted', 'ended', 'error', 'focus', 'input', 'invalid', 'keyDown', 'keyPress', 'keyUp', 'load', 'loadedData', 'loadedMetadata', 'loadStart', 'mouseDown', 'mouseMove', 'mouseOut', 'mouseOver', 'mouseUp', 'paste', 'pause', 'play', 'playing', 'progress', 'rateChange', 'reset', 'scroll', 'seeked', 'seeking', 'stalled', 'submit', 'suspend', 'timeUpdate', 'touchCancel', 'touchEnd', 'touchMove', 'touchStart', 'transitionEnd', 'volumeChange', 'waiting', 'wheel'].forEach(function (event) {
@@ -18884,6 +19591,14 @@ function getHostComponentFromComposite(inst) {
 
 var getHostComponentFromComposite_1 = getHostComponentFromComposite;
 
+/**
+ * Returns the DOM node rendered by this element.
+ *
+ * See https://facebook.github.io/react/docs/top-level-api.html#reactdom.finddomnode
+ *
+ * @param {ReactComponent|DOMElement} componentOrElement
+ * @return {?DOMElement} The root node of this element.
+ */
 function findDOMNode(componentOrElement) {
   {
     var owner = ReactCurrentOwner_1.current;
@@ -19242,7 +19957,8 @@ var Counter = (_class$1 = function () {
             var _this = this;
 
             setTimeout(function () {
-                _this.value = 42;
+                _this.value = 1;
+                // this.value = new Error('loading error')
             }, 500);
 
             throw new AtomWait();
@@ -19327,18 +20043,34 @@ function _applyDecoratedDescriptor$5(target, property, decorators, descriptor, c
     return desc;
 }
 
-var Locale = (_class$3 = function Locale(lang) {
-    classCallCheck(this, Locale);
+var Locale = (_class$3 = function () {
+    createClass(Locale, [{
+        key: 'lang',
+        get: function get$$1() {
+            var _this = this;
 
-    _initDefineProp$2(this, 'lang', _descriptor$2, this);
+            setTimeout(function () {
+                _this.$.lang = 'gb';
+            }, 400);
 
-    this.lang = lang;
-}, (_descriptor$2 = _applyDecoratedDescriptor$5(_class$3.prototype, 'lang', [mem], {
-    enumerable: true,
-    initializer: function initializer() {
-        return 'en';
+            return this._defaultLang;
+        },
+        set: function set$$1(lang) {}
+    }]);
+
+    function Locale(lang) {
+        classCallCheck(this, Locale);
+
+        _initDefineProp$2(this, '$', _descriptor$2, this);
+
+        this._defaultLang = lang;
     }
-})), _class$3);
+
+    return Locale;
+}(), (_descriptor$2 = _applyDecoratedDescriptor$5(_class$3.prototype, '$', [force], {
+    enumerable: true,
+    initializer: null
+}), _applyDecoratedDescriptor$5(_class$3.prototype, 'lang', [mem], Object.getOwnPropertyDescriptor(_class$3.prototype, 'lang'), _class$3.prototype), _applyDecoratedDescriptor$5(_class$3.prototype, 'lang', [mem], Object.getOwnPropertyDescriptor(_class$3.prototype, 'lang'), _class$3.prototype)), _class$3);
 
 var _class$2;
 var _descriptor$1;
@@ -19438,31 +20170,2250 @@ function HelloView(_ref, _ref2) {
             ', ',
             hello.name
         ),
-        'Lang: ',
-        locale.lang,
-        lom_h('br', null),
-        'Srv: ',
-        service.value(),
-        lom_h('br', null),
-        'Name: ',
-        lom_h('input', { value: hello.name, onInput: function onInput(_ref3) {
-                var target = _ref3.target;
+        lom_h(
+            'div',
+            { className: 'kv' },
+            lom_h(
+                'div',
+                { className: 'kv-key' },
+                'Lang:'
+            ),
+            lom_h(
+                'div',
+                { className: 'kv-value' },
+                locale.lang
+            )
+        ),
+        lom_h(
+            'div',
+            { className: 'kv' },
+            lom_h(
+                'div',
+                { className: 'kv-key' },
+                'Srv:'
+            ),
+            lom_h(
+                'div',
+                { className: 'kv-value' },
+                service.value()
+            )
+        ),
+        lom_h(
+            'div',
+            { className: 'kv' },
+            lom_h(
+                'div',
+                { className: 'kv-key' },
+                'Name:'
+            ),
+            lom_h(
+                'div',
+                { className: 'kv-key' },
+                lom_h('input', { value: hello.name, onInput: function onInput(_ref3) {
+                        var target = _ref3.target;
 
-                hello.name = target.value;
-            } }),
-        lom_h('br', null),
-        'Action: ',
-        lom_h('input', { value: options.actionName, onInput: function onInput(_ref4) {
-                var target = _ref4.target;
+                        hello.name = target.value;
+                    } })
+            )
+        ),
+        lom_h(
+            'div',
+            { className: 'kv' },
+            lom_h(
+                'div',
+                { className: 'kv-key' },
+                'Action:'
+            ),
+            lom_h(
+                'div',
+                { className: 'kv-value' },
+                lom_h('input', { value: options.actionName, onInput: function onInput(_ref4) {
+                        var target = _ref4.target;
 
-                options.actionName = target.value;
-            } })
+                        options.actionName = target.value;
+                    } })
+            )
+        )
     );
 }
 
 HelloView.deps = [{ options: HelloOptions, locale: Locale, service: SomeService }];
 HelloView.provide = function (props, prevState) {
     return [new HelloOptions(props.name)];
+};
+
+__$styleInject("html,\nbody {\n\tmargin: 0;\n\tpadding: 0;\n}\n\nbutton {\n\tmargin: 0;\n\tpadding: 0;\n\tborder: 0;\n\tbackground: none;\n\tfont-size: 100%;\n\tvertical-align: baseline;\n\tfont-family: inherit;\n\tfont-weight: inherit;\n\tcolor: inherit;\n\t-webkit-appearance: none;\n\tappearance: none;\n\t-webkit-font-smoothing: antialiased;\n\t-moz-osx-font-smoothing: grayscale;\n}\n\nbody {\n\tfont: 14px 'Helvetica Neue', Helvetica, Arial, sans-serif;\n\tline-height: 1.4em;\n\tbackground: #f5f5f5;\n\tcolor: #4d4d4d;\n\tmin-width: 230px;\n\tmax-width: 550px;\n\tmargin: 0 auto;\n\t-webkit-font-smoothing: antialiased;\n\t-moz-osx-font-smoothing: grayscale;\n\tfont-weight: 300;\n}\n\n:focus {\n\toutline: 0;\n}\n\n.hidden {\n\tdisplay: none;\n}\n\n.todoapp {\n\tbackground: #fff;\n\tmargin: 130px 0 40px 0;\n\tposition: relative;\n\tbox-shadow: 0 2px 4px 0 rgba(0, 0, 0, 0.2),\n\t            0 25px 50px 0 rgba(0, 0, 0, 0.1);\n}\n\n.todoapp input::-webkit-input-placeholder {\n\tfont-style: italic;\n\tfont-weight: 300;\n\tcolor: #e6e6e6;\n}\n\n.todoapp input::-moz-placeholder {\n\tfont-style: italic;\n\tfont-weight: 300;\n\tcolor: #e6e6e6;\n}\n\n.todoapp input::input-placeholder {\n\tfont-style: italic;\n\tfont-weight: 300;\n\tcolor: #e6e6e6;\n}\n\n.todoapp h1 {\n\tposition: absolute;\n\ttop: -155px;\n\twidth: 100%;\n\tfont-size: 100px;\n\tfont-weight: 100;\n\ttext-align: center;\n\tcolor: rgba(175, 47, 47, 0.15);\n\t-webkit-text-rendering: optimizeLegibility;\n\t-moz-text-rendering: optimizeLegibility;\n\ttext-rendering: optimizeLegibility;\n}\n\n.new-todo,\n.edit {\n\tposition: relative;\n\tmargin: 0;\n\twidth: 100%;\n\tfont-size: 24px;\n\tfont-family: inherit;\n\tfont-weight: inherit;\n\tline-height: 1.4em;\n\tborder: 0;\n\tcolor: inherit;\n\tpadding: 6px;\n\tborder: 1px solid #999;\n\tbox-shadow: inset 0 -1px 5px 0 rgba(0, 0, 0, 0.2);\n\tbox-sizing: border-box;\n\t-webkit-font-smoothing: antialiased;\n\t-moz-osx-font-smoothing: grayscale;\n}\n\n.new-todo {\n\tpadding: 16px 16px 16px 60px;\n\tborder: none;\n\tbackground: rgba(0, 0, 0, 0.003);\n\tbox-shadow: inset 0 -2px 1px rgba(0,0,0,0.03);\n}\n\n.main {\n\tposition: relative;\n\tz-index: 2;\n\tborder-top: 1px solid #e6e6e6;\n}\n\n.toggle-all {\n\ttext-align: center;\n\tborder: none; /* Mobile Safari */\n\topacity: 0;\n\tposition: absolute;\n}\n\n.toggle-all + label {\n\twidth: 60px;\n\theight: 34px;\n\tfont-size: 0;\n\tposition: absolute;\n\ttop: -52px;\n\tleft: -13px;\n\t-webkit-transform: rotate(90deg);\n\ttransform: rotate(90deg);\n}\n\n.toggle-all + label:before {\n\tcontent: '❯';\n\tfont-size: 22px;\n\tcolor: #e6e6e6;\n\tpadding: 10px 27px 10px 27px;\n}\n\n.toggle-all:checked + label:before {\n\tcolor: #737373;\n}\n\n.todo-list {\n\tmargin: 0;\n\tpadding: 0;\n\tlist-style: none;\n}\n\n.todo-list li {\n\tposition: relative;\n\tfont-size: 24px;\n\tborder-bottom: 1px solid #ededed;\n}\n\n.todo-list li:last-child {\n\tborder-bottom: none;\n}\n\n.todo-list li.editing {\n\tborder-bottom: none;\n\tpadding: 0;\n}\n\n.todo-list li.editing .edit {\n\tdisplay: block;\n\twidth: 506px;\n\tpadding: 12px 16px;\n\tmargin: 0 0 0 43px;\n}\n\n.todo-list li.editing .view {\n\tdisplay: none;\n}\n\n.todo-list li .toggle {\n\ttext-align: center;\n\twidth: 40px;\n\t/* auto, since non-WebKit browsers doesn't support input styling */\n\theight: auto;\n\tposition: absolute;\n\ttop: 0;\n\tbottom: 0;\n\tmargin: auto 0;\n\tborder: none; /* Mobile Safari */\n\t-webkit-appearance: none;\n\tappearance: none;\n}\n\n.todo-list li .toggle {\n\topacity: 0;\n}\n\n.todo-list li .toggle + label {\n\t/*\n\t\tFirefox requires `#` to be escaped - https://bugzilla.mozilla.org/show_bug.cgi?id=922433\n\t\tIE and Edge requires *everything* to be escaped to render, so we do that instead of just the `#` - https://developer.microsoft.com/en-us/microsoft-edge/platform/issues/7157459/\n\t*/\n\tbackground-image: url('data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%2240%22%20height%3D%2240%22%20viewBox%3D%22-10%20-18%20100%20135%22%3E%3Ccircle%20cx%3D%2250%22%20cy%3D%2250%22%20r%3D%2250%22%20fill%3D%22none%22%20stroke%3D%22%23ededed%22%20stroke-width%3D%223%22/%3E%3C/svg%3E');\n\tbackground-repeat: no-repeat;\n\tbackground-position: center left;\n}\n\n.todo-list li .toggle:checked + label {\n\tbackground-image: url('data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%2240%22%20height%3D%2240%22%20viewBox%3D%22-10%20-18%20100%20135%22%3E%3Ccircle%20cx%3D%2250%22%20cy%3D%2250%22%20r%3D%2250%22%20fill%3D%22none%22%20stroke%3D%22%23bddad5%22%20stroke-width%3D%223%22/%3E%3Cpath%20fill%3D%22%235dc2af%22%20d%3D%22M72%2025L42%2071%2027%2056l-4%204%2020%2020%2034-52z%22/%3E%3C/svg%3E');\n}\n\n.todo-list li label {\n\tword-break: break-all;\n\tpadding: 15px 15px 15px 60px;\n\tdisplay: block;\n\tline-height: 1.2;\n\ttransition: color 0.4s;\n}\n\n.todo-list li.completed label {\n\tcolor: #d9d9d9;\n\ttext-decoration: line-through;\n}\n\n.todo-list li .destroy {\n\tdisplay: none;\n\tposition: absolute;\n\ttop: 0;\n\tright: 10px;\n\tbottom: 0;\n\twidth: 40px;\n\theight: 40px;\n\tmargin: auto 0;\n\tfont-size: 30px;\n\tcolor: #cc9a9a;\n\tmargin-bottom: 11px;\n\ttransition: color 0.2s ease-out;\n}\n\n.todo-list li .destroy:hover {\n\tcolor: #af5b5e;\n}\n\n.todo-list li .destroy:after {\n\tcontent: '×';\n}\n\n.todo-list li:hover .destroy {\n\tdisplay: block;\n}\n\n.todo-list li .edit {\n\tdisplay: none;\n}\n\n.todo-list li.editing:last-child {\n\tmargin-bottom: -1px;\n}\n\n.footer {\n\tcolor: #777;\n\tpadding: 10px 15px;\n\theight: 20px;\n\ttext-align: center;\n\tborder-top: 1px solid #e6e6e6;\n}\n\n.footer:before {\n\tcontent: '';\n\tposition: absolute;\n\tright: 0;\n\tbottom: 0;\n\tleft: 0;\n\theight: 50px;\n\toverflow: hidden;\n\tbox-shadow: 0 1px 1px rgba(0, 0, 0, 0.2),\n\t            0 8px 0 -3px #f6f6f6,\n\t            0 9px 1px -3px rgba(0, 0, 0, 0.2),\n\t            0 16px 0 -6px #f6f6f6,\n\t            0 17px 2px -6px rgba(0, 0, 0, 0.2);\n}\n\n.todo-count {\n\tfloat: left;\n\ttext-align: left;\n}\n\n.todo-count strong {\n\tfont-weight: 300;\n}\n\n.filters {\n\tmargin: 0;\n\tpadding: 0;\n\tlist-style: none;\n\tposition: absolute;\n\tright: 0;\n\tleft: 0;\n}\n\n.filters li {\n\tdisplay: inline;\n}\n\n.filters li a {\n\tcolor: inherit;\n\tmargin: 3px;\n\tpadding: 3px 7px;\n\ttext-decoration: none;\n\tborder: 1px solid transparent;\n\tborder-radius: 3px;\n}\n\n.filters li a:hover {\n\tborder-color: rgba(175, 47, 47, 0.1);\n}\n\n.filters li a.selected {\n\tborder-color: rgba(175, 47, 47, 0.2);\n}\n\n.clear-completed,\nhtml .clear-completed:active {\n\tfloat: right;\n\tposition: relative;\n\tline-height: 20px;\n\ttext-decoration: none;\n\tcursor: pointer;\n}\n\n.clear-completed:hover {\n\ttext-decoration: underline;\n}\n\n.info {\n\tmargin: 65px auto 0;\n\tcolor: #bfbfbf;\n\tfont-size: 10px;\n\ttext-shadow: 0 1px 0 rgba(255, 255, 255, 0.5);\n\ttext-align: center;\n}\n\n.info p {\n\tline-height: 1;\n}\n\n.info a {\n\tcolor: inherit;\n\ttext-decoration: none;\n\tfont-weight: 400;\n}\n\n.info a:hover {\n\ttext-decoration: underline;\n}\n\n/*\n\tHack to remove background from Mobile Safari.\n\tCan't use it globally since it destroys checkboxes in Firefox\n*/\n@media screen and (-webkit-min-device-pixel-ratio:0) {\n\t.toggle-all,\n\t.todo-list li .toggle {\n\t\tbackground: none;\n\t}\n\n\t.todo-list li .toggle {\n\t\theight: 40px;\n\t}\n}\n\n@media (max-width: 430px) {\n\t.footer {\n\t\theight: 50px;\n\t}\n\n\t.filters {\n\t\tbottom: 10px;\n\t}\n}\n",undefined);
+
+__$styleInject("button {\n  color: #292b2c;\n  background-color: #fff;\n\n  display: inline-block;\n  font-weight: 400;\n  line-height: 1.25;\n  text-align: center;\n  white-space: nowrap;\n  vertical-align: middle;\n  -webkit-user-select: none;\n  -moz-user-select: none;\n  -ms-user-select: none;\n  user-select: none;\n  border: 1px solid #ccc;\n  padding: .5rem 1rem;\n  font-size: 1rem;\n  border-radius: .25rem;\n  -webkit-transition: all .2s ease-in-out;\n  -o-transition: all .2s ease-in-out;\n  transition: all .2s ease-in-out;\n}\n\n.kv {\n  display: flex;\n  padding: 0.3em 0.3em;\n}\n\n.kv-key {\n  display: inline-block;\n  width: 20%;\n}\n\n.kv-value {\n  display: inline-block;\n  width: 80%;\n}\n", undefined);
+
+var index$4 = function (glob, opts) {
+  if (typeof glob !== 'string') {
+    throw new TypeError('Expected a string');
+  }
+
+  var str = String(glob);
+
+  // The regexp we are building, as a string.
+  var reStr = "";
+
+  // Whether we are matching so called "extended" globs (like bash) and should
+  // support single character matching, matching ranges of characters, group
+  // matching, etc.
+  var extended = opts ? !!opts.extended : false;
+
+  // When globstar is _false_ (default), '/foo/*' is translated a regexp like
+  // '^\/foo\/.*$' which will match any string beginning with '/foo/'
+  // When globstar is _true_, '/foo/*' is translated to regexp like
+  // '^\/foo\/[^/]*$' which will match any string beginning with '/foo/' BUT
+  // which does not have a '/' to the right of it.
+  // E.g. with '/foo/*' these will match: '/foo/bar', '/foo/bar.txt' but
+  // these will not '/foo/bar/baz', '/foo/bar/baz.txt'
+  // Lastely, when globstar is _true_, '/foo/**' is equivelant to '/foo/*' when
+  // globstar is _false_
+  var globstar = opts ? !!opts.globstar : false;
+
+  // If we are doing extended matching, this boolean is true when we are inside
+  // a group (eg {*.html,*.js}), and false otherwise.
+  var inGroup = false;
+
+  // RegExp flags (eg "i" ) to pass in to RegExp constructor.
+  var flags = opts && typeof( opts.flags ) === "string" ? opts.flags : "";
+
+  var c;
+  for (var i = 0, len = str.length; i < len; i++) {
+    c = str[i];
+
+    switch (c) {
+    case "\\":
+    case "/":
+    case "$":
+    case "^":
+    case "+":
+    case ".":
+    case "(":
+    case ")":
+    case "=":
+    case "!":
+    case "|":
+      reStr += "\\" + c;
+      break;
+
+    case "?":
+      if (extended) {
+        reStr += ".";
+	    break;
+      }
+
+    case "[":
+    case "]":
+      if (extended) {
+        reStr += c;
+	    break;
+      }
+
+    case "{":
+      if (extended) {
+        inGroup = true;
+	    reStr += "(";
+	    break;
+      }
+
+    case "}":
+      if (extended) {
+        inGroup = false;
+	    reStr += ")";
+	    break;
+      }
+
+    case ",":
+      if (inGroup) {
+        reStr += "|";
+	    break;
+      }
+      reStr += "\\" + c;
+      break;
+
+    case "*":
+      // Move over all consecutive "*"'s.
+      // Also store the previous and next characters
+      var prevChar = str[i - 1];
+      var starCount = 1;
+      while(str[i + 1] === "*") {
+        starCount++;
+        i++;
+      }
+      var nextChar = str[i + 1];
+
+      if (!globstar) {
+        // globstar is disabled, so treat any number of "*" as one
+        reStr += ".*";
+      } else {
+        // globstar is enabled, so determine if this is a globstar segment
+        var isGlobstar = starCount > 1                      // multiple "*"'s
+          && (prevChar === "/" || prevChar === undefined)   // from the start of the segment
+          && (nextChar === "/" || nextChar === undefined);   // to the end of the segment
+
+        if (isGlobstar) {
+          // it's a globstar, so match zero or more path segments
+          reStr += "(?:[^/]*(?:\/|$))*";
+          i++; // move over the "/"
+        } else {
+          // it's not a globstar, so only match one path segment
+          reStr += "[^/]*";
+        }
+      }
+      break;
+
+    default:
+      reStr += c;
+    }
+  }
+
+  // When regexp 'g' flag is specified don't
+  // constrain the regular expression with ^ & $
+  if (!flags || !~flags.indexOf('g')) {
+    reStr = "^" + reStr + "$";
+  }
+
+  return new RegExp(reStr, flags);
+};
+
+var index$8 = Array.isArray || function (arr) {
+  return Object.prototype.toString.call(arr) == '[object Array]';
+};
+
+/**
+ * Expose `pathToRegexp`.
+ */
+var index$6 = pathToRegexp;
+var parse_1 = parse;
+var compile_1 = compile;
+var tokensToFunction_1 = tokensToFunction;
+var tokensToRegExp_1 = tokensToRegExp;
+
+/**
+ * The main path matching regexp utility.
+ *
+ * @type {RegExp}
+ */
+var PATH_REGEXP = new RegExp([
+  // Match escaped characters that would otherwise appear in future matches.
+  // This allows the user to escape special characters that won't transform.
+  '(\\\\.)',
+  // Match Express-style parameters and un-named parameters with a prefix
+  // and optional suffixes. Matches appear as:
+  //
+  // "/:test(\\d+)?" => ["/", "test", "\d+", undefined, "?", undefined]
+  // "/route(\\d+)"  => [undefined, undefined, undefined, "\d+", undefined, undefined]
+  // "/*"            => ["/", undefined, undefined, undefined, undefined, "*"]
+  '([\\/.])?(?:(?:\\:(\\w+)(?:\\(((?:\\\\.|[^\\\\()])+)\\))?|\\(((?:\\\\.|[^\\\\()])+)\\))([+*?])?|(\\*))'
+].join('|'), 'g');
+
+/**
+ * Parse a string for the raw tokens.
+ *
+ * @param  {string}  str
+ * @param  {Object=} options
+ * @return {!Array}
+ */
+function parse (str, options) {
+  var tokens = [];
+  var key = 0;
+  var index = 0;
+  var path = '';
+  var defaultDelimiter = options && options.delimiter || '/';
+  var res;
+
+  while ((res = PATH_REGEXP.exec(str)) != null) {
+    var m = res[0];
+    var escaped = res[1];
+    var offset = res.index;
+    path += str.slice(index, offset);
+    index = offset + m.length;
+
+    // Ignore already escaped sequences.
+    if (escaped) {
+      path += escaped[1];
+      continue
+    }
+
+    var next = str[index];
+    var prefix = res[2];
+    var name = res[3];
+    var capture = res[4];
+    var group = res[5];
+    var modifier = res[6];
+    var asterisk = res[7];
+
+    // Push the current path onto the tokens.
+    if (path) {
+      tokens.push(path);
+      path = '';
+    }
+
+    var partial = prefix != null && next != null && next !== prefix;
+    var repeat = modifier === '+' || modifier === '*';
+    var optional = modifier === '?' || modifier === '*';
+    var delimiter = res[2] || defaultDelimiter;
+    var pattern = capture || group;
+
+    tokens.push({
+      name: name || key++,
+      prefix: prefix || '',
+      delimiter: delimiter,
+      optional: optional,
+      repeat: repeat,
+      partial: partial,
+      asterisk: !!asterisk,
+      pattern: pattern ? escapeGroup(pattern) : (asterisk ? '.*' : '[^' + escapeString(delimiter) + ']+?')
+    });
+  }
+
+  // Match any characters still remaining.
+  if (index < str.length) {
+    path += str.substr(index);
+  }
+
+  // If the path exists, push it onto the end.
+  if (path) {
+    tokens.push(path);
+  }
+
+  return tokens
+}
+
+/**
+ * Compile a string to a template function for the path.
+ *
+ * @param  {string}             str
+ * @param  {Object=}            options
+ * @return {!function(Object=, Object=)}
+ */
+function compile (str, options) {
+  return tokensToFunction(parse(str, options))
+}
+
+/**
+ * Prettier encoding of URI path segments.
+ *
+ * @param  {string}
+ * @return {string}
+ */
+function encodeURIComponentPretty (str) {
+  return encodeURI(str).replace(/[\/?#]/g, function (c) {
+    return '%' + c.charCodeAt(0).toString(16).toUpperCase()
+  })
+}
+
+/**
+ * Encode the asterisk parameter. Similar to `pretty`, but allows slashes.
+ *
+ * @param  {string}
+ * @return {string}
+ */
+function encodeAsterisk (str) {
+  return encodeURI(str).replace(/[?#]/g, function (c) {
+    return '%' + c.charCodeAt(0).toString(16).toUpperCase()
+  })
+}
+
+/**
+ * Expose a method for transforming tokens into the path function.
+ */
+function tokensToFunction (tokens) {
+  // Compile all the tokens into regexps.
+  var matches = new Array(tokens.length);
+
+  // Compile all the patterns before compilation.
+  for (var i = 0; i < tokens.length; i++) {
+    if (typeof tokens[i] === 'object') {
+      matches[i] = new RegExp('^(?:' + tokens[i].pattern + ')$');
+    }
+  }
+
+  return function (obj, opts) {
+    var path = '';
+    var data = obj || {};
+    var options = opts || {};
+    var encode = options.pretty ? encodeURIComponentPretty : encodeURIComponent;
+
+    for (var i = 0; i < tokens.length; i++) {
+      var token = tokens[i];
+
+      if (typeof token === 'string') {
+        path += token;
+
+        continue
+      }
+
+      var value = data[token.name];
+      var segment;
+
+      if (value == null) {
+        if (token.optional) {
+          // Prepend partial segment prefixes.
+          if (token.partial) {
+            path += token.prefix;
+          }
+
+          continue
+        } else {
+          throw new TypeError('Expected "' + token.name + '" to be defined')
+        }
+      }
+
+      if (index$8(value)) {
+        if (!token.repeat) {
+          throw new TypeError('Expected "' + token.name + '" to not repeat, but received `' + JSON.stringify(value) + '`')
+        }
+
+        if (value.length === 0) {
+          if (token.optional) {
+            continue
+          } else {
+            throw new TypeError('Expected "' + token.name + '" to not be empty')
+          }
+        }
+
+        for (var j = 0; j < value.length; j++) {
+          segment = encode(value[j]);
+
+          if (!matches[i].test(segment)) {
+            throw new TypeError('Expected all "' + token.name + '" to match "' + token.pattern + '", but received `' + JSON.stringify(segment) + '`')
+          }
+
+          path += (j === 0 ? token.prefix : token.delimiter) + segment;
+        }
+
+        continue
+      }
+
+      segment = token.asterisk ? encodeAsterisk(value) : encode(value);
+
+      if (!matches[i].test(segment)) {
+        throw new TypeError('Expected "' + token.name + '" to match "' + token.pattern + '", but received "' + segment + '"')
+      }
+
+      path += token.prefix + segment;
+    }
+
+    return path
+  }
+}
+
+/**
+ * Escape a regular expression string.
+ *
+ * @param  {string} str
+ * @return {string}
+ */
+function escapeString (str) {
+  return str.replace(/([.+*?=^!:${}()[\]|\/\\])/g, '\\$1')
+}
+
+/**
+ * Escape the capturing group by escaping special characters and meaning.
+ *
+ * @param  {string} group
+ * @return {string}
+ */
+function escapeGroup (group) {
+  return group.replace(/([=!:$\/()])/g, '\\$1')
+}
+
+/**
+ * Attach the keys as a property of the regexp.
+ *
+ * @param  {!RegExp} re
+ * @param  {Array}   keys
+ * @return {!RegExp}
+ */
+function attachKeys (re, keys) {
+  re.keys = keys;
+  return re
+}
+
+/**
+ * Get the flags for a regexp from the options.
+ *
+ * @param  {Object} options
+ * @return {string}
+ */
+function flags (options) {
+  return options.sensitive ? '' : 'i'
+}
+
+/**
+ * Pull out keys from a regexp.
+ *
+ * @param  {!RegExp} path
+ * @param  {!Array}  keys
+ * @return {!RegExp}
+ */
+function regexpToRegexp (path, keys) {
+  // Use a negative lookahead to match only capturing groups.
+  var groups = path.source.match(/\((?!\?)/g);
+
+  if (groups) {
+    for (var i = 0; i < groups.length; i++) {
+      keys.push({
+        name: i,
+        prefix: null,
+        delimiter: null,
+        optional: false,
+        repeat: false,
+        partial: false,
+        asterisk: false,
+        pattern: null
+      });
+    }
+  }
+
+  return attachKeys(path, keys)
+}
+
+/**
+ * Transform an array into a regexp.
+ *
+ * @param  {!Array}  path
+ * @param  {Array}   keys
+ * @param  {!Object} options
+ * @return {!RegExp}
+ */
+function arrayToRegexp (path, keys, options) {
+  var parts = [];
+
+  for (var i = 0; i < path.length; i++) {
+    parts.push(pathToRegexp(path[i], keys, options).source);
+  }
+
+  var regexp = new RegExp('(?:' + parts.join('|') + ')', flags(options));
+
+  return attachKeys(regexp, keys)
+}
+
+/**
+ * Create a path regexp from string input.
+ *
+ * @param  {string}  path
+ * @param  {!Array}  keys
+ * @param  {!Object} options
+ * @return {!RegExp}
+ */
+function stringToRegexp (path, keys, options) {
+  return tokensToRegExp(parse(path, options), keys, options)
+}
+
+/**
+ * Expose a function for taking tokens and returning a RegExp.
+ *
+ * @param  {!Array}          tokens
+ * @param  {(Array|Object)=} keys
+ * @param  {Object=}         options
+ * @return {!RegExp}
+ */
+function tokensToRegExp (tokens, keys, options) {
+  if (!index$8(keys)) {
+    options = /** @type {!Object} */ (keys || options);
+    keys = [];
+  }
+
+  options = options || {};
+
+  var strict = options.strict;
+  var end = options.end !== false;
+  var route = '';
+
+  // Iterate over the tokens and create our regexp string.
+  for (var i = 0; i < tokens.length; i++) {
+    var token = tokens[i];
+
+    if (typeof token === 'string') {
+      route += escapeString(token);
+    } else {
+      var prefix = escapeString(token.prefix);
+      var capture = '(?:' + token.pattern + ')';
+
+      keys.push(token);
+
+      if (token.repeat) {
+        capture += '(?:' + prefix + capture + ')*';
+      }
+
+      if (token.optional) {
+        if (!token.partial) {
+          capture = '(?:' + prefix + '(' + capture + '))?';
+        } else {
+          capture = prefix + '(' + capture + ')?';
+        }
+      } else {
+        capture = prefix + '(' + capture + ')';
+      }
+
+      route += capture;
+    }
+  }
+
+  var delimiter = escapeString(options.delimiter || '/');
+  var endsWithDelimiter = route.slice(-delimiter.length) === delimiter;
+
+  // In non-strict mode we allow a slash at the end of match. If the path to
+  // match already ends with a slash, we remove it for consistency. The slash
+  // is valid at the end of a path match, not in the middle. This is important
+  // in non-ending mode, where "/test/" shouldn't match "/test//route".
+  if (!strict) {
+    route = (endsWithDelimiter ? route.slice(0, -delimiter.length) : route) + '(?:' + delimiter + '(?=$))?';
+  }
+
+  if (end) {
+    route += '$';
+  } else {
+    // In non-ending mode, we need the capturing groups to match as much as
+    // possible by using a positive lookahead to the end or next path segment.
+    route += strict && endsWithDelimiter ? '' : '(?=' + delimiter + '|$)';
+  }
+
+  return attachKeys(new RegExp('^' + route, flags(options)), keys)
+}
+
+/**
+ * Normalize the given path string, returning a regular expression.
+ *
+ * An empty array can be passed in for the keys, which will hold the
+ * placeholder key descriptions. For example, using `/user/:id`, `keys` will
+ * contain `[{ name: 'id', delimiter: '/', optional: false, repeat: false }]`.
+ *
+ * @param  {(string|RegExp|Array)} path
+ * @param  {(Array|Object)=}       keys
+ * @param  {Object=}               options
+ * @return {!RegExp}
+ */
+function pathToRegexp (path, keys, options) {
+  if (!index$8(keys)) {
+    options = /** @type {!Object} */ (keys || options);
+    keys = [];
+  }
+
+  options = options || {};
+
+  if (path instanceof RegExp) {
+    return regexpToRegexp(path, /** @type {!Array} */ (keys))
+  }
+
+  if (index$8(path)) {
+    return arrayToRegexp(/** @type {!Array} */ (path), /** @type {!Array} */ (keys), options)
+  }
+
+  return stringToRegexp(/** @type {string} */ (path), /** @type {!Array} */ (keys), options)
+}
+
+index$6.parse = parse_1;
+index$6.compile = compile_1;
+index$6.tokensToFunction = tokensToFunction_1;
+index$6.tokensToRegExp = tokensToRegExp_1;
+
+var _extends$2 = Object.assign || function (target) { for (var i = 1; i < arguments.length; i++) { var source = arguments[i]; for (var key in source) { if (Object.prototype.hasOwnProperty.call(source, key)) { target[key] = source[key]; } } } return target; };
+
+
+
+
+var stringMatchers = {
+	begin: function begin(targetString) {
+		return function (url) {
+			return url.indexOf(targetString) === 0;
+		};
+	},
+	end: function end(targetString) {
+		return function (url) {
+			return url.substr(-targetString.length) === targetString;
+		};
+	},
+	glob: function glob(targetString) {
+		var urlRX = index$4(targetString.replace(/^glob:/, ''));
+		return function (url) {
+			return urlRX.test(url);
+		};
+	},
+	express: function express(targetString) {
+		var urlRX = index$6(targetString.replace(/^express:/, ''));
+		return function (url) {
+			return urlRX.test(url);
+		};
+	}
+};
+
+function getHeaderMatcher(expectedHeaders, HeadersConstructor) {
+	var expectation = Object.keys(expectedHeaders).map(function (k) {
+		return { key: k.toLowerCase(), val: expectedHeaders[k] };
+	});
+	return function (headers) {
+		if (!headers) {
+			headers = {};
+		}
+
+		if (headers instanceof HeadersConstructor) {
+			headers = headers.raw();
+		}
+
+		var lowerCaseHeaders = Object.keys(headers).reduce(function (obj, k) {
+			obj[k.toLowerCase()] = headers[k];
+			return obj;
+		}, {});
+
+		return expectation.every(function (header) {
+			return areHeadersEqual(lowerCaseHeaders, header);
+		});
+	};
+}
+
+function areHeadersEqual(currentHeader, expectedHeader) {
+	var key = expectedHeader.key;
+	var val = expectedHeader.val;
+	var currentHeaderValue = Array.isArray(currentHeader[key]) ? currentHeader[key] : [currentHeader[key]];
+	var expectedHeaderValue = Array.isArray(val) ? val : [val];
+
+	if (currentHeaderValue.length !== expectedHeaderValue.length) {
+		return false;
+	}
+
+	for (var i = 0; i < currentHeaderValue.length; ++i) {
+		if (currentHeaderValue[i] !== expectedHeaderValue[i]) {
+			return false;
+		}
+	}
+
+	return true;
+}
+
+function normalizeRequest(url, options, Request) {
+	if (Request.prototype.isPrototypeOf(url)) {
+		return {
+			url: url.url,
+			method: url.method,
+			headers: function () {
+				var headers = {};
+				url.headers.forEach(function (name) {
+					return headers[name] = url.headers.name;
+				});
+				return headers;
+			}()
+		};
+	} else {
+		return {
+			url: url,
+			method: options && options.method || 'GET',
+			headers: options && options.headers
+		};
+	}
+}
+
+var compileRoute = function (route, Request, HeadersConstructor) {
+	route = _extends$2({}, route);
+
+	if (typeof route.response === 'undefined') {
+		throw new Error('Each route must define a response');
+	}
+
+	if (!route.matcher) {
+		throw new Error('each route must specify a string, regex or function to match calls to fetch');
+	}
+
+	if (!route.name) {
+		route.name = route.matcher.toString();
+		route.__unnamed = true;
+	}
+
+	// If user has provided a function as a matcher we assume they are handling all the
+	// matching logic they need
+	if (typeof route.matcher === 'function') {
+		return route;
+	}
+
+	var expectedMethod = route.method && route.method.toLowerCase();
+
+	function matchMethod(method) {
+		return !expectedMethod || expectedMethod === (method ? method.toLowerCase() : 'get');
+	}
+
+	var matchHeaders = route.headers ? getHeaderMatcher(route.headers, HeadersConstructor) : function () {
+		return true;
+	};
+
+	var matchUrl = void 0;
+
+	if (typeof route.matcher === 'string') {
+
+		Object.keys(stringMatchers).some(function (name) {
+			if (route.matcher.indexOf(name + ':') === 0) {
+				var url = route.matcher.replace(new RegExp('^' + name + ':'), '');
+				matchUrl = stringMatchers[name](url);
+				return true;
+			}
+		});
+		if (!matchUrl) {
+			if (route.matcher === '*') {
+				matchUrl = function matchUrl() {
+					return true;
+				};
+			} else if (route.matcher.indexOf('^') === 0) {
+				(function () {
+					console.warn('Using \'^\' to denote the start of a url is deprecated. Use \'begin:\' instead');
+					var expectedUrl = route.matcher.substr(1);
+					matchUrl = function matchUrl(url) {
+						return url.indexOf(expectedUrl) === 0;
+					};
+				})();
+			} else {
+				(function () {
+					var expectedUrl = route.matcher;
+					matchUrl = function matchUrl(url) {
+						return url === expectedUrl;
+					};
+				})();
+			}
+		}
+	} else if (route.matcher instanceof RegExp) {
+		(function () {
+			var urlRX = route.matcher;
+			matchUrl = function matchUrl(url) {
+				return urlRX.test(url);
+			};
+		})();
+	}
+
+	var matcher = function matcher(url, options) {
+		var req = normalizeRequest(url, options, Request);
+		return matchHeaders(req.headers) && matchMethod(req.method) && matchUrl(req.url);
+	};
+
+	if (route.times) {
+		(function () {
+			var timesLeft = route.times;
+			route.matcher = function (url, options) {
+				var match = timesLeft && matcher(url, options);
+				if (match) {
+					timesLeft--;
+					return true;
+				}
+			};
+			route.reset = function () {
+				return timesLeft = route.times;
+			};
+		})();
+	} else {
+		route.matcher = matcher;
+	}
+
+	return route;
+};
+
+var _typeof$1 = typeof Symbol === "function" && typeof Symbol.iterator === "symbol" ? function (obj) { return typeof obj; } : function (obj) { return obj && typeof Symbol === "function" && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj; };
+
+var _extends$1 = Object.assign || function (target) { for (var i = 1; i < arguments.length; i++) { var source = arguments[i]; for (var key in source) { if (Object.prototype.hasOwnProperty.call(source, key)) { target[key] = source[key]; } } } return target; };
+
+
+
+var FetchMock = function FetchMock() {
+
+	this.routes = [];
+	this._calls = {};
+	this._matchedCalls = [];
+	this._unmatchedCalls = [];
+	this._holdingPromises = [];
+	this.bindMethods();
+};
+
+FetchMock.prototype.bindMethods = function () {
+	this.fetchMock = FetchMock.prototype.fetchMock.bind(this);
+	this.restore = FetchMock.prototype.restore.bind(this);
+	this.reset = FetchMock.prototype.reset.bind(this);
+};
+
+FetchMock.prototype.mock = function (matcher, response, options) {
+
+	var route = void 0;
+
+	// Handle the variety of parameters accepted by mock (see README)
+	if (matcher && response && options) {
+		route = _extends$1({
+			matcher: matcher,
+			response: response
+		}, options);
+	} else if (matcher && response) {
+		route = {
+			matcher: matcher,
+			response: response
+		};
+	} else if (matcher && matcher.matcher) {
+		route = matcher;
+	} else {
+		throw new Error('Invalid parameters passed to fetch-mock');
+	}
+
+	this.addRoute(route);
+
+	return this._mock();
+};
+
+FetchMock.prototype.once = function (matcher, response, options) {
+	return this.mock(matcher, response, _extends$1({}, options, { times: 1 }));
+};
+
+FetchMock.prototype._mock = function () {
+	if (!this.isSandbox) {
+		// Do this here rather than in the constructor to ensure it's scoped to the test
+		this.realFetch = this.realFetch || FetchMock.global.fetch;
+		FetchMock.global.fetch = this.fetchMock;
+	}
+	return this;
+};
+
+FetchMock.prototype._unMock = function () {
+	if (this.realFetch) {
+		FetchMock.global.fetch = this.realFetch;
+		this.realFetch = null;
+	}
+	this.fallbackResponse = null;
+	return this;
+};
+
+FetchMock.prototype.catch = function (response) {
+	if (this.fallbackResponse) {
+		console.warn('calling fetchMock.catch() twice - are you sure you want to overwrite the previous fallback response');
+	}
+	this.fallbackResponse = response || 'ok';
+	return this._mock();
+};
+
+FetchMock.prototype.spy = function () {
+	this._mock();
+	return this.catch(this.realFetch);
+};
+
+FetchMock.prototype.fetchMock = function (url, opts) {
+	var _this = this;
+
+	var Promise = this.Promise || FetchMock.Promise;
+	var resolveHoldingPromise = void 0;
+	var holdingPromise = new Promise(function (res) {
+		return resolveHoldingPromise = res;
+	});
+	this._holdingPromises.push(holdingPromise);
+	var response = this.router(url, opts);
+
+	if (!response) {
+		console.warn('Unmatched ' + (opts && opts.method || 'GET') + ' to ' + url);
+		this.push(null, [url, opts]);
+
+		if (this.fallbackResponse) {
+			response = this.fallbackResponse;
+		} else {
+			throw new Error('No fallback response defined for ' + (opts && opts.method || 'GET') + ' to ' + url);
+		}
+	}
+
+	if (typeof response === 'function') {
+		response = response(url, opts);
+	}
+
+	if (typeof response.then === 'function') {
+		var responsePromise = response.then(function (response) {
+			return _this.mockResponse(url, response, opts, resolveHoldingPromise);
+		});
+		return Promise.resolve(responsePromise); // Ensure Promise is always our implementation.
+	} else {
+		return this.mockResponse(url, response, opts, resolveHoldingPromise);
+	}
+};
+
+FetchMock.prototype.router = function (url, opts) {
+	var route = void 0;
+	for (var i = 0, il = this.routes.length; i < il; i++) {
+		route = this.routes[i];
+		if (route.matcher(url, opts)) {
+			this.push(route.name, [url, opts]);
+			return route.response;
+		}
+	}
+};
+
+FetchMock.prototype.addRoute = function (route) {
+
+	if (!route) {
+		throw new Error('.mock() must be passed configuration for a route');
+	}
+
+	// Allows selective application of some of the preregistered routes
+	this.routes.push(compileRoute(route, FetchMock.Request, FetchMock.Headers));
+};
+
+FetchMock.prototype.mockResponse = function (url, responseConfig, fetchOpts, resolveHoldingPromise) {
+	var Promise = this.Promise || FetchMock.Promise;
+
+	// It seems odd to call this in here even though it's already called within fetchMock
+	// It's to handle the fact that because we want to support making it very easy to add a
+	// delay to any sort of response (including responses which are defined with a function)
+	// while also allowing function responses to return a Promise for a response config.
+	if (typeof responseConfig === 'function') {
+		responseConfig = responseConfig(url, fetchOpts);
+	}
+
+	// If the response is a pre-made Response, respond with it
+	if (FetchMock.Response.prototype.isPrototypeOf(responseConfig)) {
+		return this.respond(Promise.resolve(responseConfig), resolveHoldingPromise);
+	}
+
+	// If the response says to throw an error, throw it
+	if (responseConfig.throws) {
+		return this.respond(Promise.reject(responseConfig.throws), resolveHoldingPromise);
+	}
+
+	// If the response config looks like a status, start to generate a simple response
+	if (typeof responseConfig === 'number') {
+		responseConfig = {
+			status: responseConfig
+		};
+		// If the response config is not an object, or is an object that doesn't use
+		// any reserved properties, assume it is meant to be the body of the response
+	} else if (typeof responseConfig === 'string' || !(responseConfig.body || responseConfig.headers || responseConfig.throws || responseConfig.status || responseConfig.__redirectUrl)) {
+		responseConfig = {
+			body: responseConfig
+		};
+	}
+
+	// Now we are sure we're dealing with a response config object, so start to
+	// construct a real response from it
+	var opts = responseConfig.opts || {};
+
+	// set the response url
+	opts.url = responseConfig.__redirectUrl || url;
+
+	// Handle a reasonably common misuse of the library - returning an object
+	// with the property 'status'
+	if (responseConfig.status && (typeof responseConfig.status !== 'number' || parseInt(responseConfig.status, 10) !== responseConfig.status || responseConfig.status < 200 || responseConfig.status > 599)) {
+		throw new TypeError('Invalid status ' + responseConfig.status + ' passed on response object.\nTo respond with a JSON object that has status as a property assign the object to body\ne.g. {"body": {"status: "registered"}}');
+	}
+
+	// set up the response status
+	opts.status = responseConfig.status || 200;
+	opts.statusText = FetchMock.statusTextMap['' + opts.status];
+
+	// Set up response headers. The ternary operator is to cope with
+	// new Headers(undefined) throwing in Chrome
+	// https://code.google.com/p/chromium/issues/detail?id=335871
+	opts.headers = responseConfig.headers ? new FetchMock.Headers(responseConfig.headers) : new FetchMock.Headers();
+
+	// start to construct the body
+	var body = responseConfig.body;
+
+	// convert to json if we need to
+	opts.sendAsJson = responseConfig.sendAsJson === undefined ? FetchMock.config.sendAsJson : responseConfig.sendAsJson;
+	if (opts.sendAsJson && responseConfig.body != null && (typeof body === 'undefined' ? 'undefined' : _typeof$1(body)) === 'object') {
+		//eslint-disable-line
+		body = JSON.stringify(body);
+	}
+
+	// On the server we need to manually construct the readable stream for the
+	// Response object (on the client this is done automatically)
+	if (FetchMock.stream) {
+		var s = new FetchMock.stream.Readable();
+		if (body != null) {
+			//eslint-disable-line
+			s.push(body, 'utf-8');
+		}
+		s.push(null);
+		body = s;
+	}
+	var response = new FetchMock.Response(body, opts);
+
+	// When mocking a followed redirect we must wrap the response in an object
+	// which sets the redirected flag (not a writable property on the actual response)
+	if (responseConfig.__redirectUrl) {
+		response = Object.create(response, {
+			redirected: {
+				value: true
+			}
+		});
+	}
+
+	return this.respond(Promise.resolve(response), resolveHoldingPromise);
+};
+
+FetchMock.prototype.respond = function (response, resolveHoldingPromise) {
+	response.then(resolveHoldingPromise, resolveHoldingPromise);
+
+	return response;
+};
+
+FetchMock.prototype.flush = function () {
+	return Promise.all(this._holdingPromises);
+};
+
+FetchMock.prototype.push = function (name, call) {
+	if (name) {
+		this._calls[name] = this._calls[name] || [];
+		this._calls[name].push(call);
+		this._matchedCalls.push(call);
+	} else {
+		this._unmatchedCalls.push(call);
+	}
+};
+
+FetchMock.prototype.restore = function () {
+	this._unMock();
+	this.reset();
+	this.routes = [];
+	return this;
+};
+
+FetchMock.prototype.reset = function () {
+	this._calls = {};
+	this._matchedCalls = [];
+	this._unmatchedCalls = [];
+	this._holdingPromises = [];
+	this.routes.forEach(function (route) {
+		return route.reset && route.reset();
+	});
+	return this;
+};
+
+FetchMock.prototype.calls = function (name) {
+	return name ? this._calls[name] || [] : {
+		matched: this._matchedCalls,
+		unmatched: this._unmatchedCalls
+	};
+};
+
+FetchMock.prototype.lastCall = function (name) {
+	var calls = name ? this.calls(name) : this.calls().matched;
+	if (calls && calls.length) {
+		return calls[calls.length - 1];
+	} else {
+		return undefined;
+	}
+};
+
+FetchMock.prototype.lastUrl = function (name) {
+	var call = this.lastCall(name);
+	return call && call[0];
+};
+
+FetchMock.prototype.lastOptions = function (name) {
+	var call = this.lastCall(name);
+	return call && call[1];
+};
+
+FetchMock.prototype.called = function (name) {
+	if (!name) {
+		return !!(this._matchedCalls.length || this._unmatchedCalls.length);
+	}
+	return !!(this._calls[name] && this._calls[name].length);
+};
+
+FetchMock.prototype.done = function (name) {
+	var _this2 = this;
+
+	var names = name ? [name] : this.routes.map(function (r) {
+		return r.name;
+	});
+	// Can't use array.every because
+	// a) not widely supported
+	// b) would exit after first failure, which would break the logging
+	return names.map(function (name) {
+		if (!_this2.called(name)) {
+			console.warn('Warning: ' + name + ' not called');
+			return false;
+		}
+		// would use array.find... but again not so widely supported
+		var expectedTimes = (_this2.routes.filter(function (r) {
+			return r.name === name;
+		}) || [{}])[0].times;
+
+		if (!expectedTimes) {
+			return true;
+		}
+
+		var actualTimes = _this2.calls(name).length;
+		if (expectedTimes > actualTimes) {
+			console.warn('Warning: ' + name + ' only called ' + actualTimes + ' times, but ' + expectedTimes + ' expected');
+			return false;
+		} else {
+			return true;
+		}
+	}).filter(function (bool) {
+		return !bool;
+	}).length === 0;
+};
+
+FetchMock.config = {
+	sendAsJson: true
+};
+
+FetchMock.prototype.configure = function (opts) {
+	_extends$1(FetchMock.config, opts);
+};
+
+FetchMock.setImplementations = FetchMock.prototype.setImplementations = function (implementations) {
+	FetchMock.Headers = implementations.Headers || FetchMock.Headers;
+	FetchMock.Request = implementations.Request || FetchMock.Request;
+	FetchMock.Response = implementations.Response || FetchMock.Response;
+	FetchMock.Promise = implementations.Promise || FetchMock.Promise;
+};
+
+FetchMock.prototype.sandbox = function (Promise) {
+	if (this.routes.length || this.fallbackResponse) {
+		throw new Error('.sandbox() can only be called on fetch-mock instances that don\'t have routes configured already');
+	}
+	var instance = new FetchMock();
+
+	// this construct allows us to create a fetch-mock instance which is also
+	// a callable function, while circumventing circularity when defining the
+	// object that this function should be bound to
+	var boundMock = void 0;
+	var proxy = function proxy() {
+		return boundMock.apply(null, arguments);
+	};
+
+	var functionInstance = _extends$1(proxy, // Ensures that the entire returned object is a callable function
+	FetchMock.prototype, // all prototype methods
+	instance // instance data
+	);
+	functionInstance.bindMethods();
+	boundMock = functionInstance.fetchMock;
+	functionInstance.isSandbox = true;
+	if (Promise) {
+		functionInstance.Promise = Promise;
+	}
+
+	return functionInstance;
+};
+
+['get', 'post', 'put', 'delete', 'head', 'patch'].forEach(function (method) {
+	FetchMock.prototype[method] = function (matcher, response, options) {
+		return this.mock(matcher, response, _extends$1({}, options, { method: method.toUpperCase() }));
+	};
+	FetchMock.prototype[method + 'Once'] = function (matcher, response, options) {
+		return this.once(matcher, response, _extends$1({}, options, { method: method.toUpperCase() }));
+	};
+});
+
+var fetchMock$1 = FetchMock;
+
+var statusTextMap = {
+  '100': 'Continue',
+  '101': 'Switching Protocols',
+  '102': 'Processing',
+  '200': 'OK',
+  '201': 'Created',
+  '202': 'Accepted',
+  '203': 'Non-Authoritative Information',
+  '204': 'No Content',
+  '205': 'Reset Content',
+  '206': 'Partial Content',
+  '207': 'Multi-Status',
+  '208': 'Already Reported',
+  '226': 'IM Used',
+  '300': 'Multiple Choices',
+  '301': 'Moved Permanently',
+  '302': 'Found',
+  '303': 'See Other',
+  '304': 'Not Modified',
+  '305': 'Use Proxy',
+  '307': 'Temporary Redirect',
+  '308': 'Permanent Redirect',
+  '400': 'Bad Request',
+  '401': 'Unauthorized',
+  '402': 'Payment Required',
+  '403': 'Forbidden',
+  '404': 'Not Found',
+  '405': 'Method Not Allowed',
+  '406': 'Not Acceptable',
+  '407': 'Proxy Authentication Required',
+  '408': 'Request Timeout',
+  '409': 'Conflict',
+  '410': 'Gone',
+  '411': 'Length Required',
+  '412': 'Precondition Failed',
+  '413': 'Payload Too Large',
+  '414': 'URI Too Long',
+  '415': 'Unsupported Media Type',
+  '416': 'Range Not Satisfiable',
+  '417': 'Expectation Failed',
+  '418': 'I\'m a teapot',
+  '421': 'Misdirected Request',
+  '422': 'Unprocessable Entity',
+  '423': 'Locked',
+  '424': 'Failed Dependency',
+  '425': 'Unordered Collection',
+  '426': 'Upgrade Required',
+  '428': 'Precondition Required',
+  '429': 'Too Many Requests',
+  '431': 'Request Header Fields Too Large',
+  '451': 'Unavailable For Legal Reasons',
+  '500': 'Internal Server Error',
+  '501': 'Not Implemented',
+  '502': 'Bad Gateway',
+  '503': 'Service Unavailable',
+  '504': 'Gateway Timeout',
+  '505': 'HTTP Version Not Supported',
+  '506': 'Variant Also Negotiates',
+  '507': 'Insufficient Storage',
+  '508': 'Loop Detected',
+  '509': 'Bandwidth Limit Exceeded',
+  '510': 'Not Extended',
+  '511': 'Network Authentication Required'
+};
+
+var statusText = statusTextMap;
+
+var theGlobal = typeof window !== 'undefined' ? window : self;
+
+fetchMock$1.global = theGlobal;
+fetchMock$1.statusTextMap = statusText;
+
+fetchMock$1.setImplementations({
+	Promise: theGlobal.Promise,
+	Request: theGlobal.Request,
+	Response: theGlobal.Response,
+	Headers: theGlobal.Headers
+});
+
+var client = new fetchMock$1();
+
+var commonjsGlobal = typeof window !== 'undefined' ? window : typeof global !== 'undefined' ? global : typeof self !== 'undefined' ? self : {};
+
+// Unique ID creation requires a high quality random # generator.  In the
+// browser this is a little complicated due to unknown quality of Math.random()
+// and inconsistent support for the `crypto` API.  We do the best we can via
+// feature-detection
+var rng;
+
+var crypto = commonjsGlobal.crypto || commonjsGlobal.msCrypto; // for IE 11
+if (crypto && crypto.getRandomValues) {
+  // WHATWG crypto RNG - http://wiki.whatwg.org/wiki/Crypto
+  var rnds8 = new Uint8Array(16); // eslint-disable-line no-undef
+  rng = function whatwgRNG() {
+    crypto.getRandomValues(rnds8);
+    return rnds8;
+  };
+}
+
+if (!rng) {
+  // Math.random()-based (RNG)
+  //
+  // If all else fails, use Math.random().  It's fast, but is of unspecified
+  // quality.
+  var rnds = new Array(16);
+  rng = function() {
+    for (var i = 0, r; i < 16; i++) {
+      if ((i & 0x03) === 0) r = Math.random() * 0x100000000;
+      rnds[i] = r >>> ((i & 0x03) << 3) & 0xff;
+    }
+
+    return rnds;
+  };
+}
+
+var rngBrowser = rng;
+
+/**
+ * Convert array of 16 byte values to UUID string format of the form:
+ * XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX
+ */
+var byteToHex = [];
+for (var i$1 = 0; i$1 < 256; ++i$1) {
+  byteToHex[i$1] = (i$1 + 0x100).toString(16).substr(1);
+}
+
+function bytesToUuid(buf, offset) {
+  var i = offset || 0;
+  var bth = byteToHex;
+  return bth[buf[i++]] + bth[buf[i++]] +
+          bth[buf[i++]] + bth[buf[i++]] + '-' +
+          bth[buf[i++]] + bth[buf[i++]] + '-' +
+          bth[buf[i++]] + bth[buf[i++]] + '-' +
+          bth[buf[i++]] + bth[buf[i++]] + '-' +
+          bth[buf[i++]] + bth[buf[i++]] +
+          bth[buf[i++]] + bth[buf[i++]] +
+          bth[buf[i++]] + bth[buf[i++]];
+}
+
+var bytesToUuid_1 = bytesToUuid;
+
+function v4(options, buf, offset) {
+  var i = buf && offset || 0;
+
+  if (typeof(options) == 'string') {
+    buf = options == 'binary' ? new Array(16) : null;
+    options = null;
+  }
+  options = options || {};
+
+  var rnds = options.random || (options.rng || rngBrowser)();
+
+  // Per 4.4, set bits for version and `clock_seq_hi_and_reserved`
+  rnds[6] = (rnds[6] & 0x0f) | 0x40;
+  rnds[8] = (rnds[8] & 0x3f) | 0x80;
+
+  // Copy bytes to buffer, if provided
+  if (buf) {
+    for (var ii = 0; ii < 16; ++ii) {
+      buf[i + ii] = rnds[ii];
+    }
+  }
+
+  return buf || bytesToUuid_1(rnds);
+}
+
+var v4_1 = v4;
+
+var BrowserLocalStorage = function () {
+    function BrowserLocalStorage(storage, key) {
+        classCallCheck(this, BrowserLocalStorage);
+
+        this._storage = storage;
+        this._key = key;
+    }
+
+    BrowserLocalStorage.prototype.get = function get$$1() {
+        var value = this._storage.getItem(this._key);
+        return !value ? null : JSON.parse(value || '');
+    };
+
+    BrowserLocalStorage.prototype.set = function set$$1(value, _opts) {
+        this._storage.setItem(this._key, JSON.stringify(value));
+    };
+
+    BrowserLocalStorage.prototype.clear = function clear() {
+        this._storage.removeItem(this._key);
+    };
+
+    BrowserLocalStorage.prototype.clearAll = function clearAll() {
+        this._storage.clear();
+    };
+
+    return BrowserLocalStorage;
+}();
+
+function getBody(body) {
+    return typeof body === 'string' ? JSON.parse(body) : body || {};
+}
+
+function sortByDate(el1, el2) {
+    if (!el2.created || el1.created) {
+        return 0;
+    }
+
+    if (String(el1.created) > String(el2.created)) {
+        return 1;
+    }
+    if (String(el1.created) < String(el2.created)) {
+        return -1;
+    }
+    return 0;
+}
+
+function createTodoEmulatedApi(rawStorage) {
+    var storage = new BrowserLocalStorage(rawStorage, 'lom_todomvc');
+    var defaultTodos = [{
+        id: 't1',
+        title: 'test todo #1',
+        completed: false
+    }, {
+        id: 't2',
+        title: 'test todo #2',
+        completed: true
+    }];
+
+    return [{
+        method: 'GET',
+        matcher: new RegExp('/api/todos'),
+        response: function response(url, params) {
+            // eslint-disable-line
+            var newTodos = storage.get();
+            if (!newTodos) {
+                newTodos = defaultTodos;
+                storage.set(newTodos);
+            }
+            return newTodos.sort(sortByDate);
+        }
+    }, {
+        method: 'PUT',
+        matcher: new RegExp('/api/todos'),
+        response: function response(url, params) {
+            // eslint-disable-line
+            var data = storage.get();
+            var todos = data || defaultTodos;
+            var updates = new Map(getBody(params.body));
+
+            var newTodos = todos.map(function (todo) {
+                return updates.has(todo.id) ? todo : Object.assign({}, todo, updates.get(todo.id));
+            }).sort(sortByDate);
+            storage.set(newTodos);
+
+            return newTodos;
+        }
+    }, {
+        method: 'DELETE',
+        matcher: new RegExp('/api/todos'),
+        response: function response(url, params) {
+            // eslint-disable-line
+            var data = storage.get();
+            var todos = data || defaultTodos;
+            var ids = getBody(params.body);
+            var newTodos = todos.filter(function (todo) {
+                return ids.indexOf(todo.id) === -1;
+            });
+            storage.set(newTodos);
+
+            return newTodos.map(function (_ref) {
+                var id = _ref.id;
+                return id;
+            });
+        }
+    }, {
+        method: 'DELETE',
+        matcher: new RegExp('/api/todo/(.*)'),
+        response: function response(url, params) {
+            // eslint-disable-line
+            var data = storage.get();
+            var todos = data || [];
+            var id = url.match(new RegExp('/api/todo/(.+)'))[1];
+            var newTodos = todos.filter(function (todo) {
+                return todo.id !== id;
+            });
+            storage.set(newTodos.sort(sortByDate));
+
+            return { id: id };
+        }
+    }, {
+        method: 'POST',
+        matcher: new RegExp('/api/todo/(.*)'),
+        response: function response(url, params) {
+            // eslint-disable-line
+            var data = storage.get();
+            var id = url.match(new RegExp('/api/todo/(.+)'))[1];
+            var newTodo = getBody(params.body);
+            var newTodos = (data || []).map(function (todo) {
+                return todo.id === id ? newTodo : todo;
+            });
+            storage.set(newTodos);
+
+            return newTodo;
+        }
+    }, {
+        method: 'PUT',
+        matcher: new RegExp('/api/todo'),
+        response: function response(url, params) {
+            // eslint-disable-line
+            var todos = storage.get();
+            var body = getBody(params.body);
+            var newTodo = Object.assign({}, body, {
+                id: v4_1()
+            });
+            todos.push(newTodo);
+            storage.set(todos);
+
+            return newTodo;
+        }
+    }];
+}
+
+function delayed(v, delay) {
+    return function resp(url, params) {
+        return new Promise(function (resolve) {
+            setTimeout(function () {
+                resolve(v);
+            }, delay);
+        });
+    };
+}
+
+var delay = 500;
+createTodoEmulatedApi(localStorage).forEach(function (data) {
+    client.mock(Object.assign({}, data, { response: delayed(data.response, delay) }));
+});
+
+var _class2$1;
+var _descriptor$3;
+
+function _initDefineProp$3(target, property, descriptor, context) {
+    if (!descriptor) return;
+    Object.defineProperty(target, property, {
+        enumerable: descriptor.enumerable,
+        configurable: descriptor.configurable,
+        writable: descriptor.writable,
+        value: descriptor.initializer ? descriptor.initializer.call(context) : void 0
+    });
+}
+
+function _applyDecoratedDescriptor$6(target, property, decorators, descriptor, context) {
+    var desc = {};
+    Object['ke' + 'ys'](descriptor).forEach(function (key) {
+        desc[key] = descriptor[key];
+    });
+    desc.enumerable = !!desc.enumerable;
+    desc.configurable = !!desc.configurable;
+
+    if ('value' in desc || desc.initializer) {
+        desc.writable = true;
+    }
+
+    desc = decorators.slice().reverse().reduce(function (desc, decorator) {
+        return decorator(target, property, desc) || desc;
+    }, desc);
+
+    if (context && desc.initializer !== void 0) {
+        desc.value = desc.initializer ? desc.initializer.call(context) : void 0;
+        desc.initializer = undefined;
+    }
+
+    if (desc.initializer === void 0) {
+        Object['define' + 'Property'](target, property, desc);
+        desc = null;
+    }
+
+    return desc;
+}
+
+function toJson(r) {
+    return r.json();
+}
+
+var TodoModel = function () {
+    function TodoModel() {
+        var todo = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {};
+        var store = arguments[1];
+        classCallCheck(this, TodoModel);
+
+        this._title = todo.title || '';
+        this.id = todo.id || v4_1();
+        this.completed = todo.completed || false;
+        this._store = store;
+    }
+
+    TodoModel.prototype.destroy = function destroy() {
+        this._store.remove(this.id);
+    };
+
+    TodoModel.prototype.toggle = function toggle() {
+        this.completed = !this.completed;
+        this._store.saveTodo(this.toJSON());
+    };
+
+    TodoModel.prototype.toJSON = function toJSON() {
+        return {
+            completed: this.completed,
+            title: this._title,
+            id: this.id
+        };
+    };
+
+    createClass(TodoModel, [{
+        key: 'title',
+        get: function get$$1() {
+            return this._title;
+        },
+        set: function set$$1(t) {
+            this._title = t;
+            this._store.saveTodo(this.toJSON());
+        }
+    }]);
+    return TodoModel;
+}();
+
+var TodoStore = (_class2$1 = function () {
+    function TodoStore() {
+        classCallCheck(this, TodoStore);
+
+        _initDefineProp$3(this, 'opCount', _descriptor$3, this);
+    }
+
+    TodoStore.prototype._handlePromise = function _handlePromise(p) {
+        var _this = this;
+
+        this.opCount++;
+        return p.then(function () {
+            _this.opCount--;
+        }).catch(function (e) {
+            _this.opCount--;
+            _this.todos = e;
+        });
+    };
+
+    TodoStore.prototype.addTodo = function addTodo(title) {
+        var _this2 = this;
+
+        var todo = new TodoModel({ title: title }, this);
+        this.todos = this.todos.concat([todo]);
+        this._handlePromise(fetch('/api/todo', {
+            method: 'PUT',
+            body: JSON.stringify(todo)
+        }).then(toJson).then(function (updatedTodo) {
+            _this2.todos = _this2.todos.map(function (t) {
+                return t.id === todo.id ? new TodoModel(updatedTodo, _this2) : t;
+            });
+        }));
+    };
+
+    TodoStore.prototype.saveTodo = function saveTodo(todo) {
+        var _this3 = this;
+
+        this.todos = this.todos.map(function (t) {
+            return t.id === todo.id ? new TodoModel(todo, _this3) : t;
+        });
+        this._handlePromise(fetch('/api/todo/' + todo.id, {
+            method: 'POST',
+            body: JSON.stringify(todo)
+        }).then(toJson).then(function (updatedTodo) {
+            _this3.todos = _this3.todos.map(function (t) {
+                return t.id === todo.id ? new TodoModel(updatedTodo, _this3) : t;
+            });
+        }));
+    };
+
+    TodoStore.prototype.remove = function remove(id) {
+        this.todos = this.todos.filter(function (todo) {
+            return todo.id !== id;
+        });
+
+        this._handlePromise(fetch('/api/todo/' + id, {
+            method: 'DELETE'
+        }));
+    };
+
+    TodoStore.prototype.toggleAll = function toggleAll(completed) {
+        var _this4 = this;
+
+        this.todos = this.todos.map(function (todo) {
+            return new TodoModel(Object.assign({}, todo, {
+                completed: completed
+            }), _this4);
+        });
+
+        this._handlePromise(fetch('/api/todos', {
+            method: 'PUT',
+            body: JSON.stringify(this.todos.map(function (todo) {
+                return [todo.id, { completed: completed }];
+            }))
+        }));
+    };
+
+    TodoStore.prototype.clearCompleted = function clearCompleted() {
+        var newTodos = [];
+        var delIds = [];
+        for (var i = 0; i < this.todos.length; i++) {
+            var todo = this.todos[i];
+            if (todo.completed) {
+                delIds.push(todo.id);
+            } else {
+                newTodos.push(todo);
+            }
+        }
+        this.todos = newTodos;
+
+        this._handlePromise(fetch('/api/todos', {
+            method: 'DELETE',
+            body: JSON.stringify(delIds)
+        }));
+    };
+
+    createClass(TodoStore, [{
+        key: 'isOperationRunning',
+        get: function get$$1() {
+            return this.opCount !== 0;
+        }
+    }, {
+        key: 'todos',
+        get: function get$$1() {
+            var _this5 = this;
+
+            fetch('/api/todos', {
+                method: 'GET'
+            }).then(toJson).then(function (todos) {
+                _this5.todos = todos.map(function (todo) {
+                    return new TodoModel(todo, _this5);
+                });
+            }).catch(function (e) {
+                _this5.todos = e;
+            });
+            throw new AtomWait();
+        },
+        set: function set$$1(todos) {}
+    }, {
+        key: 'activeTodoCount',
+        get: function get$$1() {
+            return this.todos.reduce(function (sum, todo) {
+                return sum + (todo.completed ? 0 : 1);
+            }, 0);
+        }
+    }, {
+        key: 'completedCount',
+        get: function get$$1() {
+            return this.todos.length - this.activeTodoCount;
+        }
+    }]);
+    return TodoStore;
+}(), (_descriptor$3 = _applyDecoratedDescriptor$6(_class2$1.prototype, 'opCount', [mem], {
+    enumerable: true,
+    initializer: function initializer() {
+        return 0;
+    }
+}), _applyDecoratedDescriptor$6(_class2$1.prototype, 'todos', [mem], Object.getOwnPropertyDescriptor(_class2$1.prototype, 'todos'), _class2$1.prototype), _applyDecoratedDescriptor$6(_class2$1.prototype, 'todos', [mem], Object.getOwnPropertyDescriptor(_class2$1.prototype, 'todos'), _class2$1.prototype), _applyDecoratedDescriptor$6(_class2$1.prototype, 'activeTodoCount', [mem], Object.getOwnPropertyDescriptor(_class2$1.prototype, 'activeTodoCount'), _class2$1.prototype)), _class2$1);
+
+var _class$4;
+var _class2$2;
+var _temp$1;
+
+function _applyDecoratedDescriptor$7(target, property, decorators, descriptor, context) {
+    var desc = {};
+    Object['ke' + 'ys'](descriptor).forEach(function (key) {
+        desc[key] = descriptor[key];
+    });
+    desc.enumerable = !!desc.enumerable;
+    desc.configurable = !!desc.configurable;
+
+    if ('value' in desc || desc.initializer) {
+        desc.writable = true;
+    }
+
+    desc = decorators.slice().reverse().reduce(function (desc, decorator) {
+        return decorator(target, property, desc) || desc;
+    }, desc);
+
+    if (context && desc.initializer !== void 0) {
+        desc.value = desc.initializer ? desc.initializer.call(context) : void 0;
+        desc.initializer = undefined;
+    }
+
+    if (desc.initializer === void 0) {
+        Object['define' + 'Property'](target, property, desc);
+        desc = null;
+    }
+
+    return desc;
+}
+
+var TODO_FILTER = {
+    ALL: 'all',
+    COMPLETE: 'complete',
+    ACTIVE: 'active'
+};
+
+var ViewStore = (_class$4 = (_temp$1 = _class2$2 = function () {
+    function ViewStore(todoStore) {
+        classCallCheck(this, ViewStore);
+
+        this._todoStore = todoStore;
+    }
+
+    createClass(ViewStore, [{
+        key: 'filter',
+        get: function get$$1() {
+            var params = new URLSearchParams(location.search);
+            var filter = params.get('todo_filter') || TODO_FILTER.ALL;
+
+            return filter;
+        },
+        set: function set$$1(filter) {
+            history.pushState(null, filter, '?todo_filter=' + filter);
+        }
+    }, {
+        key: 'filteredTodos',
+        get: function get$$1() {
+            var todos = this._todoStore.todos;
+            switch (this.filter) {
+                case TODO_FILTER.ALL:
+                    return todos;
+                case TODO_FILTER.COMPLETE:
+                    return todos.filter(function (todo) {
+                        return !!todo.completed;
+                    });
+                case TODO_FILTER.ACTIVE:
+                    return todos.filter(function (todo) {
+                        return !todo.completed;
+                    });
+                default:
+                    throw new Error('Unknown filter value: ' + this.filter);
+            }
+        }
+    }]);
+    return ViewStore;
+}(), _class2$2.deps = [TodoStore], _temp$1), (_applyDecoratedDescriptor$7(_class$4.prototype, 'filter', [mem], Object.getOwnPropertyDescriptor(_class$4.prototype, 'filter'), _class$4.prototype), _applyDecoratedDescriptor$7(_class$4.prototype, 'filter', [mem], Object.getOwnPropertyDescriptor(_class$4.prototype, 'filter'), _class$4.prototype), _applyDecoratedDescriptor$7(_class$4.prototype, 'filteredTodos', [mem], Object.getOwnPropertyDescriptor(_class$4.prototype, 'filteredTodos'), _class$4.prototype)), _class$4);
+
+var _class$5;
+var _descriptor$4;
+
+function _initDefineProp$4(target, property, descriptor, context) {
+    if (!descriptor) return;
+    Object.defineProperty(target, property, {
+        enumerable: descriptor.enumerable,
+        configurable: descriptor.configurable,
+        writable: descriptor.writable,
+        value: descriptor.initializer ? descriptor.initializer.call(context) : void 0
+    });
+}
+
+function _applyDecoratedDescriptor$8(target, property, decorators, descriptor, context) {
+    var desc = {};
+    Object['ke' + 'ys'](descriptor).forEach(function (key) {
+        desc[key] = descriptor[key];
+    });
+    desc.enumerable = !!desc.enumerable;
+    desc.configurable = !!desc.configurable;
+
+    if ('value' in desc || desc.initializer) {
+        desc.writable = true;
+    }
+
+    desc = decorators.slice().reverse().reduce(function (desc, decorator) {
+        return decorator(target, property, desc) || desc;
+    }, desc);
+
+    if (context && desc.initializer !== void 0) {
+        desc.value = desc.initializer ? desc.initializer.call(context) : void 0;
+        desc.initializer = undefined;
+    }
+
+    if (desc.initializer === void 0) {
+        Object['define' + 'Property'](target, property, desc);
+        desc = null;
+    }
+
+    return desc;
+}
+
+var TodoToAdd = (_class$5 = function TodoToAdd(todoStore) {
+    var _this = this;
+
+    classCallCheck(this, TodoToAdd);
+
+    _initDefineProp$4(this, 'title', _descriptor$4, this);
+
+    this.onChange = function (_ref) {
+        var target = _ref.target;
+
+        _this.title = target.value;
+    };
+
+    this.onKeyDown = function (e) {
+        if (e.keyCode === 13 && _this.title) {
+            _this._store.addTodo(_this.title);
+            _this.title = '';
+        }
+    };
+
+    this._store = todoStore;
+}, (_descriptor$4 = _applyDecoratedDescriptor$8(_class$5.prototype, 'title', [mem], {
+    enumerable: true,
+    initializer: function initializer() {
+        return '';
+    }
+})), _class$5);
+
+
+function TodoEntry(_, _ref2) {
+    var todoToAdd = _ref2.todoToAdd;
+
+    return lom_h(
+        'div',
+        null,
+        lom_h('input', {
+            className: 'new-todo',
+            placeholder: 'What needs to be done?',
+            onChange: todoToAdd.onChange,
+            value: todoToAdd.title,
+            onKeyDown: todoToAdd.onKeyDown,
+            autoFocus: true
+        })
+    );
+}
+TodoEntry.deps = [{ todoToAdd: TodoToAdd }];
+TodoEntry.provide = function (_ref3) {
+    var todoStore = _ref3.todoStore;
+    return [new TodoToAdd(todoStore)];
+};
+
+var _class$6;
+var _descriptor$5;
+var _descriptor2$2;
+
+function _initDefineProp$5(target, property, descriptor, context) {
+    if (!descriptor) return;
+    Object.defineProperty(target, property, {
+        enumerable: descriptor.enumerable,
+        configurable: descriptor.configurable,
+        writable: descriptor.writable,
+        value: descriptor.initializer ? descriptor.initializer.call(context) : void 0
+    });
+}
+
+function _applyDecoratedDescriptor$9(target, property, decorators, descriptor, context) {
+    var desc = {};
+    Object['ke' + 'ys'](descriptor).forEach(function (key) {
+        desc[key] = descriptor[key];
+    });
+    desc.enumerable = !!desc.enumerable;
+    desc.configurable = !!desc.configurable;
+
+    if ('value' in desc || desc.initializer) {
+        desc.writable = true;
+    }
+
+    desc = decorators.slice().reverse().reduce(function (desc, decorator) {
+        return decorator(target, property, desc) || desc;
+    }, desc);
+
+    if (context && desc.initializer !== void 0) {
+        desc.value = desc.initializer ? desc.initializer.call(context) : void 0;
+        desc.initializer = undefined;
+    }
+
+    if (desc.initializer === void 0) {
+        Object['define' + 'Property'](target, property, desc);
+        desc = null;
+    }
+
+    return desc;
+}
+
+var ESCAPE_KEY = 27;
+var ENTER_KEY = 13;
+
+var TodoItemStore = (_class$6 = function TodoItemStore(todo) {
+    var _this = this;
+
+    classCallCheck(this, TodoItemStore);
+
+    _initDefineProp$5(this, 'todoBeingEdited', _descriptor$5, this);
+
+    _initDefineProp$5(this, 'editText', _descriptor2$2, this);
+
+    this.beginEdit = function () {
+        _this.todoBeingEdited = _this._todo;
+        _this.editText = _this._todo.title;
+    };
+
+    this.setText = function (_ref) {
+        var target = _ref.target;
+
+        _this.editText = target.value;
+    };
+
+    this.handleSubmit = function (event) {
+        var val = _this.editText.trim();
+        if (val) {
+            _this._todo.title = val;
+            _this.editText = '';
+        } else {
+            _this.handleDestroy();
+        }
+        _this.todoBeingEdited = null;
+    };
+
+    this.handleKeyDown = function (event) {
+        if (event.which === ESCAPE_KEY) {
+            _this.editText = _this._todo.title;
+            _this.todoBeingEdited = null;
+        } else if (event.which === ENTER_KEY) {
+            _this.handleSubmit(event);
+        }
+    };
+
+    this.toggle = function () {
+        _this._todo.toggle();
+    };
+
+    this.handleDestroy = function () {
+        _this._todo.destroy();
+        _this.todoBeingEdited = null;
+    };
+
+    this._todo = todo;
+}, (_descriptor$5 = _applyDecoratedDescriptor$9(_class$6.prototype, 'todoBeingEdited', [mem], {
+    enumerable: true,
+    initializer: function initializer() {
+        return null;
+    }
+}), _descriptor2$2 = _applyDecoratedDescriptor$9(_class$6.prototype, 'editText', [mem], {
+    enumerable: true,
+    initializer: function initializer() {
+        return '';
+    }
+})), _class$6);
+
+
+function TodoItem(_ref2, _ref3) {
+    var todo = _ref2.todo;
+    var itemStore = _ref3.itemStore;
+
+    return lom_h(
+        'li',
+        {
+            className: '' + (todo.completed ? 'completed ' : '') + (todo === itemStore.todoBeingEdited ? 'editing' : '')
+        },
+        lom_h(
+            'div',
+            { className: 'view' },
+            lom_h('input', {
+                id: 'toggle',
+                className: 'toggle',
+                type: 'checkbox',
+                checked: todo.completed,
+                onChange: itemStore.toggle
+            }),
+            lom_h(
+                'label',
+                { id: 'beginEdit', onDoubleClick: itemStore.beginEdit },
+                todo.title
+            ),
+            lom_h('button', { className: 'destroy', id: 'destroy', onClick: itemStore.handleDestroy })
+        ),
+        todo === itemStore.todoBeingEdited ? lom_h('input', {
+            id: 'edit',
+            className: 'edit',
+            value: itemStore.editText,
+            onBlur: itemStore.handleSubmit,
+            onChange: itemStore.setText,
+            onKeyDown: itemStore.handleKeyDown
+        }) : null
+    );
+}
+TodoItem.deps = [{ itemStore: TodoItemStore }];
+TodoItem.provide = function (_ref4) {
+    var todo = _ref4.todo;
+    return [new TodoItemStore(todo)];
+};
+
+function TodoOverview(_ref) {
+    var todoStore = _ref.todoStore,
+        viewStore = _ref.viewStore;
+
+    if (!todoStore.todos.length) {
+        return null;
+    }
+
+    return lom_h(
+        'section',
+        { className: 'main' },
+        lom_h('input', {
+            className: 'toggle-all',
+            type: 'checkbox',
+            onChange: function onChange(_ref2) {
+                var target = _ref2.target;
+                return todoStore.toggleAll(target.checked);
+            },
+            checked: todoStore.activeTodoCount === 0
+        }),
+        lom_h(
+            'ul',
+            { className: 'todo-list' },
+            viewStore.filteredTodos.map(function (todo) {
+                return lom_h(TodoItem, {
+                    key: todo.id,
+                    todo: todo,
+                    viewStore: viewStore
+                });
+            })
+        )
+    );
+}
+
+var links = [{
+    id: TODO_FILTER.ALL,
+    title: 'All'
+}, {
+    id: TODO_FILTER.ACTIVE,
+    title: 'Active'
+}, {
+    id: TODO_FILTER.COMPLETE,
+    title: 'Completed'
+}];
+
+function createHandler(viewStore, id) {
+    return function handler(e) {
+        e.preventDefault();
+        viewStore.filter = id;
+    };
+}
+
+function TodoFooter(_ref) {
+    var todoStore = _ref.todoStore,
+        viewStore = _ref.viewStore;
+
+    if (!todoStore.activeTodoCount && !todoStore.completedCount) {
+        return null;
+    }
+    var filter = viewStore.filter;
+
+    return lom_h(
+        'footer',
+        { className: 'footer' },
+        lom_h(
+            'span',
+            { className: 'todo-count' },
+            lom_h(
+                'strong',
+                null,
+                todoStore.activeTodoCount
+            ),
+            ' item(s) left'
+        ),
+        lom_h(
+            'ul',
+            { className: 'filters' },
+            links.map(function (link) {
+                return lom_h(
+                    'li',
+                    { key: link.id },
+                    lom_h(
+                        'a',
+                        {
+                            id: 'todo-filter-' + link.id,
+                            className: filter === link.id ? 'selected' : '',
+                            href: '?todo_filter=' + link.id,
+                            onClick: createHandler(viewStore, link.id)
+                        },
+                        link.title
+                    )
+                );
+            })
+        ),
+        todoStore.completedCount === 0 ? null : lom_h(
+            'button',
+            {
+                className: 'clear-completed',
+                onClick: function onClick() {
+                    return todoStore.clearCompleted();
+                } },
+            'Clear completed'
+        )
+    );
+}
+
+function TodoApp(_ref, _ref2) {
+    var todoStore = _ref2.todoStore,
+        viewStore = _ref2.viewStore;
+    objectDestructuringEmpty(_ref);
+
+    return lom_h(
+        'div',
+        null,
+        lom_h(
+            'header',
+            { className: 'header' },
+            todoStore.isOperationRunning ? 'Saving...' : 'Idle',
+            lom_h(TodoEntry, { todoStore: todoStore })
+        ),
+        lom_h(TodoOverview, { todoStore: todoStore, viewStore: viewStore }),
+        lom_h(TodoFooter, { todoStore: todoStore, viewStore: viewStore })
+    );
+}
+
+TodoApp.deps = [{ todoStore: TodoStore, viewStore: ViewStore }];
+TodoApp.provide = function (_) {
+    var todoStore = new TodoStore();
+    return [todoStore, new ViewStore(todoStore)];
 };
 
 var _class;
@@ -19510,7 +22461,7 @@ function _applyDecoratedDescriptor(target, property, decorators, descriptor, con
 
 var Store = (_class = function Store() {
     classCallCheck(this, Store);
-    this.links = ['hello', 'counter', 'error'];
+    this.links = ['hello', 'counter', 'error', 'todomvc'];
 
     _initDefineProp(this, 'route', _descriptor, this);
 
@@ -19544,34 +22495,26 @@ function AppView(_ref) {
             page = lom_h(CounterView, { counter: store.counter });
             break;
 
+        case 'todomvc':
+            page = lom_h(TodoApp, null);
+            break;
+
         default:
             throw new Error('Unknown page');
     }
 
     return lom_h(
         'div',
-        null,
-        lom_h(
-            'h1',
-            null,
-            store.route
-        ),
-        page,
+        { style: { dislay: 'flex', justifyContent: 'center' } },
         lom_h(
             'div',
-            null,
-            'APPName: ',
-            lom_h('input', { value: store.name, onInput: function onInput(_ref2) {
-                    var target = _ref2.target;
-
-                    store.name = target.value;
-                } }),
-            lom_h('br', null),
+            { style: { padding: '1em' } },
             store.links.map(function (link) {
                 return lom_h(
                     'button',
                     {
                         key: link,
+                        style: { margin: '0.3em' },
                         id: link,
                         onClick: function onClick() {
                             return store.route = link;
@@ -19580,6 +22523,34 @@ function AppView(_ref) {
                     link
                 );
             })
+        ),
+        lom_h(
+            'div',
+            { style: { border: '1px solid gray', padding: '0.5em', margin: '0 1em' } },
+            lom_h(
+                'h1',
+                null,
+                store.route
+            ),
+            page
+        ),
+        lom_h(
+            'div',
+            { className: 'kv' },
+            lom_h(
+                'div',
+                { className: 'kv-key' },
+                'APPName:'
+            ),
+            lom_h(
+                'div',
+                { className: 'kv-value' },
+                lom_h('input', { value: store.name, onInput: function onInput(_ref2) {
+                        var target = _ref2.target;
+
+                        store.name = target.value;
+                    } })
+            )
         )
     );
 }

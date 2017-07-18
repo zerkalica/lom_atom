@@ -10,7 +10,7 @@ type TypedPropertyDescriptor<T> = {
     value?: T;
     initializer?: () => T;
     get?: () => T;
-    set?: (value: T) => void;
+    set?: (value: T | Error) => void;
 }
 
 function getName(obj: Object): string {
@@ -42,14 +42,17 @@ function memMethod<V, P: Object>(
     return {
         enumerable: descr.enumerable,
         configurable: descr.configurable,
-        value(next?: V, force?: boolean) {
+        value(next?: V | Error, force?: boolean) {
             return getAtom(this, handler, name, isComponent)
                 .value(next, force)
         }
     }
 }
 
-function createGetSetHandler<V>(get?: () => V, set?: (v: V) => void): IAtomHandler<V> {
+function createGetSetHandler<V>(
+    get?: () => V,
+    set?: (v: V | Error) => void
+): IAtomHandler<V> {
     return function getSetHandler(next?: V) {
         if (next === undefined) {
             return (get: any).call(this)
@@ -60,7 +63,7 @@ function createGetSetHandler<V>(get?: () => V, set?: (v: V) => void): IAtomHandl
 }
 
 function createValueHandler<V>(initializer?: () => V): IAtomHandler<V> {
-    return function valueHandler(next?: V) {
+    return function valueHandler(next?: V | Error) {
         return next === undefined && initializer !== undefined
             ? initializer.call(this)
             : (next: any)
@@ -71,7 +74,7 @@ function memProp<V, P: Object>(
     proto: P,
     name: string,
     descr: TypedPropertyDescriptor<V>
-): TypedPropertyDescriptor<V> | void {
+): TypedPropertyDescriptor<*> | void {
     const handlerKey = `${name}$`
     if (proto[handlerKey] !== undefined) {
         return
@@ -87,7 +90,7 @@ function memProp<V, P: Object>(
         get() {
             return getAtom(this, handler, name).get()
         },
-        set(val: V) {
+        set(val: V | Error) {
             getAtom(this, handler, name).set(val)
         }
     }
@@ -121,8 +124,8 @@ export function memkey<V, K, P: Object>(
     return {
         enumerable: descr.enumerable,
         configurable: descr.configurable,
-        value(rawKey: K, next?: V, force?: boolean) {
-            function handlerWithKey(next?: V): V {
+        value(rawKey: K, next?: V | Error, force?: boolean) {
+            function handlerWithKey(next?: V | Error): V {
                 return handler.call(this, rawKey, next)
             }
 
@@ -153,7 +156,7 @@ export default function mem<P: Object, V, K>(
     proto: P,
     name: string,
     descr: TypedPropertyDescriptor<*>
-): TypedPropertyDescriptor<*> | void {
+): TypedPropertyDescriptor<any> | void {
     return descr.value === undefined
         ? memProp(proto, name, descr)
         : memMethod(proto, name, descr)
@@ -163,6 +166,6 @@ export function detached<P: Object, V, K>(
     proto: P,
     name: string,
     descr: TypedPropertyDescriptor<*>
-): TypedPropertyDescriptor<*> | void {
+): TypedPropertyDescriptor<any> | void {
     return memMethod(proto, name, descr, true)
 }

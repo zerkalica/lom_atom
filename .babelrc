@@ -28,7 +28,7 @@
         ["module-resolver", {
             "root": [""],
             "alias": {
-                "lom-atom": "./src/index.js"
+                "lom_atom": "./src/index.js"
             }
         }]
     ],
