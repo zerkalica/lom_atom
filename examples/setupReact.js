@@ -3,6 +3,8 @@
 import {AtomWait, createReactWrapper, createCreateElement} from 'lom_atom'
 
 import React from 'react'
+import {create as createJss} from 'jss'
+import jssCamel from 'jss-camel-case'
 
 function ErrorableView({
     error
@@ -27,6 +29,12 @@ function ErrorableView({
     )
 }
 
-const atomize = createReactWrapper(React.Component, ErrorableView)
+const jss = createJss({
+    plugins: [
+        jssCamel()
+    ]
+})
+
+const atomize = createReactWrapper(React.Component, ErrorableView, jss)
 const lomCreateElement = createCreateElement(atomize, React.createElement)
 global['lom_h'] = lomCreateElement

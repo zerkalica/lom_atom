@@ -1,10 +1,9 @@
 // @flow
-
+import {defaultContext} from './Context'
 import mem, {force, detached} from './mem'
-import {defaultContext} from './Atom'
 import {shouldUpdate} from './utils'
 import createStateDescriptor, {StateDescriptor} from './createStateDescriptor'
-
+import type {IProcessor} from './theme'
 type IReactComponent<IElement, Props> = {
     constructor(props: Props, context?: Object): IReactComponent<IElement, Props>;
     render(): IElement;
@@ -108,7 +107,8 @@ let parentContext: any = undefined
 
 export default function createReactWrapper<IElement>(
     BaseComponent: Class<*>,
-    defaultFromError: IFromError<IElement>
+    defaultFromError: IFromError<IElement>,
+    themeProcessor?: IProcessor
 ): IAtomize<IElement, *, *> {
     class AtomizedComponent<Props: Object, State> extends BaseComponent {
         _render: IRenderFn<IElement, Props, State>
@@ -127,7 +127,7 @@ export default function createReactWrapper<IElement>(
         ) {
             super(props, reactContext)
             this._render = render
-            this._stateDescriptor = createStateDescriptor(render)
+            this._stateDescriptor = createStateDescriptor(render, themeProcessor)
         }
 
         shouldComponentUpdate(props: Props) {
@@ -145,13 +145,13 @@ export default function createReactWrapper<IElement>(
             this._render = (undefined: any)
             this._fromError = (undefined: any)
             this._stateDescriptor = undefined
-            ;(this: Object)[this.constructor.displayName + '.view'].destroyed(true)
+            defaultContext.getAtom(this, this.r, 'r').destroyed(true)
         }
 
         @detached
-        view(next?: IElement, force?: boolean): IElement {
+        r(next?: IElement, force?: boolean): IElement {
             if (next !== undefined) {
-                throw new Error('Can]\'t set view' )
+                throw new Error('Can\'t set view' )
             }
 
             let data: IElement
@@ -191,7 +191,7 @@ export default function createReactWrapper<IElement>(
 
         render(): IElement {
             return this._renderedData === undefined
-                ? this.view(undefined, this._force)
+                ? this.r(undefined, this._force)
                 : this._renderedData
         }
     }

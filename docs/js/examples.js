@@ -175,105 +175,6 @@ function shouldUpdate(oldProps, props) {
     return lpKeys !== 0;
 }
 
-function reap(atom, key, reaping) {
-    reaping.delete(atom);
-    atom.destroyed(true);
-}
-
-var animationFrame = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : function (fn) {
-    return setTimeout(fn, 0);
-};
-
-var Context = function () {
-    function Context() {
-        var _this = this;
-
-        classCallCheck(this, Context);
-        this.last = null;
-        this.force = false;
-        this._logger = null;
-        this._updating = [];
-        this._reaping = new Set();
-        this._scheduled = false;
-
-        this._run = function () {
-            if (_this._scheduled) {
-                _this.run();
-            }
-        };
-    }
-
-    Context.prototype.setLogger = function setLogger(logger) {
-        this._logger = logger;
-    };
-
-    Context.prototype.newValue = function newValue(atom, from, to) {
-        if (this._logger) {
-            if (to instanceof AtomWait) {
-                this._logger.pulling(atom);
-            } else if (to instanceof Error) {
-                this._logger.error(atom, to);
-            } else {
-                this._logger.newValue(atom, from, to);
-            }
-        }
-    };
-
-    Context.prototype.proposeToPull = function proposeToPull(atom) {
-        // this.logger.pull(atom)
-        this._updating.push(atom);
-        this._schedule();
-    };
-
-    Context.prototype.proposeToReap = function proposeToReap(atom) {
-        // this.logger.reap(atom)
-        this._reaping.add(atom);
-        this._schedule();
-    };
-
-    Context.prototype.unreap = function unreap(atom) {
-        // this.logger.unreap(atom)
-        this._reaping.delete(atom);
-    };
-
-    Context.prototype._schedule = function _schedule() {
-        if (this._scheduled) {
-            return;
-        }
-        this._scheduled = true;
-        animationFrame(this._run);
-    };
-
-    Context.prototype.run = function run() {
-        var reaping = this._reaping;
-        var updating = this._updating;
-        var start = 0;
-        do {
-            var end = updating.length;
-
-            for (var i = start; i < end; i++) {
-                var atom = updating[i];
-                if (!reaping.has(atom) && !atom.destroyed()) {
-                    atom.actualize();
-                }
-            }
-
-            start = end;
-        } while (updating.length > start);
-        updating.length = 0;
-
-        while (reaping.size > 0) {
-            reaping.forEach(reap);
-        }
-        // console.log('---------------------------- state changed\n')
-        this._scheduled = false;
-    };
-
-    return Context;
-}();
-
-var defaultContext = new Context();
-
 function checkSlave(slave) {
     slave.check();
 }
@@ -305,8 +206,7 @@ var Atom = function () {
         this._host = host;
         this.isComponent = isComponent || false;
         this._normalize = normalize || defaultNormalize;
-        this._context = context || defaultContext;
-        // console.log('init', this.field)
+        this._context = context;
     }
 
     Atom.prototype.destroyed = function destroyed(isDestroyed) {
@@ -326,10 +226,7 @@ var Atom = function () {
                 this.status = ATOM_STATUS.DESTROYED;
                 var host = this._host;
                 if (host !== undefined) {
-                    if (host._destroy !== undefined) {
-                        host._destroy();
-                    }
-                    host[this.field] = undefined;
+                    this._context.destroyHost(host, this.field);
                 }
             }
 
@@ -496,19 +393,154 @@ var Atom = function () {
     return Atom;
 }();
 
-function getName(obj) {
-    return obj.constructor.displayName || obj.constructor.name;
+function reap(atom, key, reaping) {
+    reaping.delete(atom);
+    atom.destroyed(true);
 }
 
-function getAtom(t, handler, name, isComponent) {
-    var atomCacheKey = getName(t) + '.' + name;
-    var atom = t[atomCacheKey];
-    if (atom === undefined) {
-        t[atomCacheKey] = atom = new Atom(atomCacheKey, handler, t, isComponent);
+var animationFrame = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : function (fn) {
+    return setTimeout(fn, 0);
+};
+
+function createKeyedHandler(host, handler, key) {
+    return function keyedHandler(next, force) {
+        return handler.call(host, key, next, force);
+    };
+}
+
+var Context = function () {
+    function Context() {
+        var _this = this;
+
+        classCallCheck(this, Context);
+        this.last = null;
+        this.force = false;
+        this._logger = null;
+        this._updating = [];
+        this._reaping = new Set();
+        this._scheduled = false;
+        this._atomMap = new WeakMap();
+
+        this._run = function () {
+            if (_this._scheduled) {
+                _this.run();
+            }
+        };
     }
 
-    return atom;
-}
+    Context.prototype.getKeyAtom = function getKeyAtom(host, keyHandler, key) {
+        var map = this._atomMap.get(host);
+        if (map === undefined) {
+            map = new Map();
+            this._atomMap.set(host, map);
+        }
+        var atom = map.get(key);
+        if (atom === undefined) {
+            atom = new Atom(key, createKeyedHandler(host, keyHandler, key), host, undefined, this);
+            map.set(key, atom);
+        }
+
+        return atom;
+    };
+
+    Context.prototype.getAtom = function getAtom(host, handler, key, isComponent) {
+        var map = this._atomMap.get(host);
+        if (map === undefined) {
+            map = new Map();
+            this._atomMap.set(host, map);
+        }
+        var atom = map.get(key);
+        if (atom === undefined) {
+            atom = new Atom(key, handler, host, isComponent, this);
+            map.set(key, atom);
+        }
+
+        return atom;
+    };
+
+    Context.prototype.destroyHost = function destroyHost(host, key) {
+        var map = this._atomMap.get(host);
+        if (map !== undefined) {
+            map.delete(key);
+            if (map.size === 0) {
+                if (host._destroy !== undefined) {
+                    host._destroy();
+                }
+                this._atomMap.delete(host);
+            }
+        }
+    };
+
+    Context.prototype.setLogger = function setLogger(logger) {
+        this._logger = logger;
+    };
+
+    Context.prototype.newValue = function newValue(atom, from, to) {
+        if (this._logger) {
+            if (to instanceof AtomWait) {
+                this._logger.pulling(atom);
+            } else if (to instanceof Error) {
+                this._logger.error(atom, to);
+            } else {
+                this._logger.newValue(atom, from, to);
+            }
+        }
+    };
+
+    Context.prototype.proposeToPull = function proposeToPull(atom) {
+        // this.logger.pull(atom)
+        this._updating.push(atom);
+        this._schedule();
+    };
+
+    Context.prototype.proposeToReap = function proposeToReap(atom) {
+        // this.logger.reap(atom)
+        this._reaping.add(atom);
+        this._schedule();
+    };
+
+    Context.prototype.unreap = function unreap(atom) {
+        // this.logger.unreap(atom)
+        this._reaping.delete(atom);
+    };
+
+    Context.prototype._schedule = function _schedule() {
+        if (this._scheduled) {
+            return;
+        }
+        this._scheduled = true;
+        animationFrame(this._run);
+    };
+
+    Context.prototype.run = function run() {
+        var reaping = this._reaping;
+        var updating = this._updating;
+        var start = 0;
+        do {
+            var end = updating.length;
+
+            for (var i = start; i < end; i++) {
+                var atom = updating[i];
+                if (!reaping.has(atom) && !atom.destroyed()) {
+                    atom.actualize();
+                }
+            }
+
+            start = end;
+        } while (updating.length > start);
+        updating.length = 0;
+
+        while (reaping.size > 0) {
+            reaping.forEach(reap);
+        }
+        // console.log('---------------------------- state changed\n')
+        this._scheduled = false;
+    };
+
+    return Context;
+}();
+
+var defaultContext = new Context();
 
 function memMethod(proto, name, descr, isComponent) {
     proto[name + '$'] = descr.value;
@@ -521,7 +553,7 @@ function memMethod(proto, name, descr, isComponent) {
         enumerable: descr.enumerable,
         configurable: descr.configurable,
         value: function value(next, force) {
-            return getAtom(this, handler, name, isComponent).value(next, force);
+            return defaultContext.getAtom(this, handler, name, isComponent).value(next, force);
         }
     };
 }
@@ -554,15 +586,40 @@ function memProp(proto, name, descr) {
         enumerable: descr.enumerable,
         configurable: descr.configurable,
         get: function get() {
-            return getAtom(this, handler, name).get();
+            return defaultContext.getAtom(this, handler, name).get();
         },
         set: function set(val) {
-            getAtom(this, handler, name).set(val);
+            defaultContext.getAtom(this, handler, name).set(val);
         }
     };
 }
 
+function getKey(params) {
+    if (!params) {
+        return '';
+    }
 
+    return typeof params === 'object' ? Object.keys(params).sort().map(function (key) {
+        return key + ':' + JSON.stringify(params[key]);
+    }).join('.') : JSON.stringify(params);
+}
+
+function memkey(proto, name, descr) {
+    var handler = descr.value;
+    if (handler === undefined) {
+        throw new TypeError(name + ' is not an function (rawKey: K, next?: V)');
+    }
+
+    proto[name + '$'] = handler;
+
+    return {
+        enumerable: descr.enumerable,
+        configurable: descr.configurable,
+        value: function value(rawKey, next, force) {
+            return defaultContext.getKeyAtom(this, handler, typeof rawKey === 'function' ? rawKey : name + '(' + getKey(rawKey) + ')').value(next, force);
+        }
+    };
+}
 
 function forceGet() {
     defaultContext.force = true;
@@ -585,7 +642,40 @@ function detached(proto, name, descr) {
     return memMethod(proto, name, descr, true);
 }
 
-var _class2;
+var ThemeProvider = function () {
+    function ThemeProvider(getStyles, deps, processor) {
+        classCallCheck(this, ThemeProvider);
+
+        this._getStyles = getStyles;
+        this._processor = processor;
+        this._deps = deps;
+    }
+
+    ThemeProvider.prototype.theme = function theme() {
+        if (this._sheet) {
+            this._sheet.detach();
+        }
+        var sheet = this._sheet = this._processor.createStyleSheet(this._getStyles.apply(null, this._deps));
+        sheet.attach();
+
+        return sheet.classes;
+    };
+
+    ThemeProvider.prototype._destroy = function _destroy() {
+        if (this._sheet) {
+            this._sheet.detach();
+        }
+        this._getStyles = undefined;
+        this._processor = undefined;
+        this._deps = undefined;
+        this._sheet = undefined;
+    };
+
+    return ThemeProvider;
+}();
+
+var _class$1;
+var _class3;
 
 function _applyDecoratedDescriptor$2(target, property, decorators, descriptor, context) {
     var desc = {};
@@ -616,32 +706,37 @@ function _applyDecoratedDescriptor$2(target, property, decorators, descriptor, c
     return desc;
 }
 
-var Context$1 = function () {
-    function Context(parent, items) {
-        classCallCheck(this, Context);
+var Injector = (_class$1 = function () {
+    function Injector(parent, items, processor) {
+        classCallCheck(this, Injector);
 
         this.parent = parent;
-        var map = this.map = new Map();
+        this.top = parent ? parent.top : this;
+        this._processor = processor;
         if (items !== undefined) {
             for (var i = 0; i < items.length; i++) {
                 var item = items[i];
                 if (item instanceof Array) {
-                    map.set(item[0], item[1]);
+                    this.value(item[0], item[1], true);
                 } else if (typeof item === 'function') {
-                    map.set(item, null);
+                    this.value(item, null, true);
                 } else {
-                    map.set(item.constructor, item);
+                    this.value(item.constructor, item, true);
                 }
             }
         }
     }
 
-    Context.prototype._destroy = function _destroy() {
-        this.parent = undefined;
-        this.map = undefined;
+    Injector.prototype.value = function value(key, next, force$$1) {
+        return next;
     };
 
-    Context.prototype._fastCall = function _fastCall(key, args) {
+    Injector.prototype._destroy = function _destroy() {
+        this.parent = undefined;
+        this._processor = undefined;
+    };
+
+    Injector.prototype._fastCall = function _fastCall(key, args) {
         switch (args.length) {
             case 1:
                 return new key(args[0]);
@@ -658,60 +753,71 @@ var Context$1 = function () {
         }
     };
 
-    Context.prototype._get = function _get(key) {
-        var ptr = this;
+    Injector.prototype._get = function _get(key) {
         var value = undefined;
+        if (key.theme === true) {
+            value = this.top.value(key);
+            if (value === undefined) {
+                var processor = this._processor;
+                value = processor ? new ThemeProvider(key, this.top.resolve(key.deps), processor).theme() : {};
+                this.top.value(key, value);
+            }
+
+            return value;
+        }
+
+        var ptr = this;
         while (ptr !== undefined) {
-            value = ptr.map.get(key);
+            value = ptr.value(key);
             if (value !== undefined) {
                 if (value === null) {
-                    value = this._fastCall(key, this.resolve(key.deps));
-                    ptr.map.set(key, value);
+                    value = this._fastCall(key, ptr.resolve(key.deps));
+                    ptr.value(key, value, true);
                 }
                 return value;
             }
             ptr = ptr.parent;
         }
 
-        if (key.deps) {
-            value = this._fastCall(key, this.resolve(key.deps));
-            this.map.set(key, value);
+        value = this._fastCall(key, this.resolve(key.deps));
+        this.value(key, value, true);
 
-            return value;
-        }
-
-        throw new Error('Context: not registered for key ' + String(key));
+        return value;
     };
 
-    Context.prototype.resolve = function resolve(argDeps) {
+    Injector.prototype.resolve = function resolve(argDeps) {
         var result = [];
-        for (var i = 0, l = argDeps.length; i < l; i++) {
-            var argDep = argDeps[i];
-            if (typeof argDep === 'object') {
-                var obj = {};
-                for (var prop in argDep) {
-                    // eslint-disable-line
-                    obj[prop] = this._get(argDep[prop]);
+        if (argDeps !== undefined) {
+            for (var i = 0, l = argDeps.length; i < l; i++) {
+                var argDep = argDeps[i];
+                if (typeof argDep === 'object') {
+                    var obj = {};
+                    for (var prop in argDep) {
+                        // eslint-disable-line
+                        obj[prop] = this._get(argDep[prop]);
+                    }
+                    result.push(obj);
+                } else {
+                    result.push(this._get(argDep));
                 }
-                result.push(obj);
-            } else {
-                result.push(this._get(argDep));
             }
         }
 
         return result;
     };
 
-    return Context;
-}();
+    return Injector;
+}(), (_applyDecoratedDescriptor$2(_class$1.prototype, 'value', [memkey], Object.getOwnPropertyDescriptor(_class$1.prototype, 'value'), _class$1.prototype)), _class$1);
 
-var StateDescriptor = (_class2 = function () {
-    function StateDescriptor(descr) {
+
+var StateDescriptor = (_class3 = function () {
+    function StateDescriptor(descr, processor) {
         classCallCheck(this, StateDescriptor);
         this._state = undefined;
         this.context = undefined;
 
         this.descr = descr;
+        this._processor = processor;
     }
 
     StateDescriptor.prototype._destroy = function _destroy() {
@@ -737,9 +843,9 @@ var StateDescriptor = (_class2 = function () {
         if (props !== undefined) {
             var _provide = this.descr.provide;
             if (_provide !== undefined) {
-                this.context = new Context$1(props.__lom_ctx, _provide(props, this._state));
+                this.context = new Injector(props.__lom_ctx, _provide(props, this._state), this._processor);
             } else {
-                this.context = props.__lom_ctx || new Context$1();
+                this.context = props.__lom_ctx || new Injector(undefined, undefined, this._processor);
             }
 
             return props;
@@ -760,11 +866,11 @@ var StateDescriptor = (_class2 = function () {
     };
 
     return StateDescriptor;
-}(), (_applyDecoratedDescriptor$2(_class2.prototype, 'props', [mem], Object.getOwnPropertyDescriptor(_class2.prototype, 'props'), _class2.prototype), _applyDecoratedDescriptor$2(_class2.prototype, 'state', [mem], Object.getOwnPropertyDescriptor(_class2.prototype, 'state'), _class2.prototype)), _class2);
+}(), (_applyDecoratedDescriptor$2(_class3.prototype, 'props', [mem], Object.getOwnPropertyDescriptor(_class3.prototype, 'props'), _class3.prototype), _applyDecoratedDescriptor$2(_class3.prototype, 'state', [mem], Object.getOwnPropertyDescriptor(_class3.prototype, 'state'), _class3.prototype)), _class3);
 
-function createStateDescriptor(render) {
+function createStateDescriptor(render, processor) {
     if (render.deps !== undefined || render.provide !== undefined) {
-        return new StateDescriptor(render);
+        return new StateDescriptor(render, processor);
     }
 }
 
@@ -874,7 +980,7 @@ function createCreateElement(atomize, createElement) {
 
 var parentContext = undefined;
 
-function createReactWrapper(BaseComponent, defaultFromError) {
+function createReactWrapper(BaseComponent, defaultFromError, themeProcessor) {
     var _desc, _value, _class;
 
     var AtomizedComponent = (_class = function (_BaseComponent) {
@@ -889,7 +995,7 @@ function createReactWrapper(BaseComponent, defaultFromError) {
             _this._force = true;
 
             _this._render = render;
-            _this._stateDescriptor = createStateDescriptor(render);
+            _this._stateDescriptor = createStateDescriptor(render, themeProcessor);
             return _this;
         }
 
@@ -907,12 +1013,13 @@ function createReactWrapper(BaseComponent, defaultFromError) {
             this.props = undefined;
             this._render = undefined;
             this._fromError = undefined;
-            this._stateDescriptor = undefined;this[this.constructor.displayName + '.view'].destroyed(true);
+            this._stateDescriptor = undefined;
+            defaultContext.getAtom(this, this.r, 'r').destroyed(true);
         };
 
-        AtomizedComponent.prototype.view = function view(next, force$$1) {
+        AtomizedComponent.prototype.r = function r(next, force$$1) {
             if (next !== undefined) {
-                throw new Error('Can]\'t set view');
+                throw new Error('Can\'t set view');
             }
 
             var data = void 0;
@@ -948,11 +1055,11 @@ function createReactWrapper(BaseComponent, defaultFromError) {
         };
 
         AtomizedComponent.prototype.render = function render() {
-            return this._renderedData === undefined ? this.view(undefined, this._force) : this._renderedData;
+            return this._renderedData === undefined ? this.r(undefined, this._force) : this._renderedData;
         };
 
         return AtomizedComponent;
-    }(BaseComponent), (_applyDecoratedDescriptor$1(_class.prototype, 'view', [detached], Object.getOwnPropertyDescriptor(_class.prototype, 'view'), _class.prototype)), _class);
+    }(BaseComponent), (_applyDecoratedDescriptor$1(_class.prototype, 'r', [detached], Object.getOwnPropertyDescriptor(_class.prototype, 'r'), _class.prototype)), _class);
 
 
     return function reactWrapper(render, fromError) {
@@ -967,9 +1074,6 @@ function createReactWrapper(BaseComponent, defaultFromError) {
         return WrappedComponent;
     };
 }
-
-// shim for using process in browser
-// based off https://github.com/defunctzombie/node-process/blob/master/browser.js
 
 function defaultSetTimout() {
     throw new Error('setTimeout has not been defined');
@@ -1197,7 +1301,6 @@ object-assign
 @license MIT
 */
 
-/* eslint-disable no-unused-vars */
 var getOwnPropertySymbols = Object.getOwnPropertySymbols;
 var hasOwnProperty = Object.prototype.hasOwnProperty;
 var propIsEnumerable = Object.prototype.propertyIsEnumerable;
@@ -1254,7 +1357,7 @@ function shouldUseNative() {
 	}
 }
 
-var index = shouldUseNative() ? Object.assign : function (target, source) {
+var index$1 = shouldUseNative() ? Object.assign : function (target, source) {
 	var from;
 	var to = toObject(target);
 	var symbols;
@@ -1292,17 +1395,6 @@ var index = shouldUseNative() ? Object.assign : function (target, source) {
  * 
  */
 
-/**
- * Copyright (c) 2013-present, Facebook, Inc.
- * All rights reserved.
- *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
- *
- * 
- */
-
 function makeEmptyFunction(arg) {
   return function () {
     return arg;
@@ -1328,13 +1420,6 @@ emptyFunction.thatReturnsArgument = function (arg) {
 };
 
 var emptyFunction_1 = emptyFunction;
-
-/**
- * Similar to invariant but only logs a warning if the condition is not met.
- * This can be used to log issues in development environments in critical
- * paths. Removing the logging code for production environments will keep the
- * same logic and follow the same code paths.
- */
 
 var warning = emptyFunction_1;
 
@@ -1484,17 +1569,6 @@ var emptyObject = {};
 
 var emptyObject_1 = emptyObject;
 
-/**
- * Use invariant() to assert state which your program assumes to be true.
- *
- * Provide sprintf-style format (only %s is supported) and arguments
- * to provide information about what broke and what you were
- * expecting.
- *
- * The invariant message will be stripped in production, but the invariant
- * will remain to ensure logic does not differ in production.
- */
-
 var validateFormat = function validateFormat(format) {};
 
 {
@@ -1527,20 +1601,6 @@ function invariant(condition, format, a, b, c, d, e, f) {
 }
 
 var invariant_1 = invariant;
-
-/**
- * Forked from fbjs/warning:
- * https://github.com/facebook/fbjs/blob/e66ba20ad5be433eb54423f2b097d829324d9de6/packages/fbjs/src/__forks__/warning.js
- *
- * Only change is we use console.warn instead of console.error,
- * and do nothing when 'console' is not supported.
- * This really simplifies the code.
- * ---
- * Similar to invariant but only logs a warning if the condition is not met.
- * This can be used to log issues in development environments in critical
- * paths. Removing the logging code for production environments will keep the
- * same logic and follow the same code paths.
- */
 
 var lowPriorityWarning$1 = function () {};
 
@@ -1581,9 +1641,6 @@ var lowPriorityWarning$1 = function () {};
 
 var lowPriorityWarning_1 = lowPriorityWarning$1;
 
-/**
- * Base class helpers for the updating state of a component.
- */
 function ReactComponent(props, context, updater) {
   this.props = props;
   this.context = context;
@@ -1694,7 +1751,7 @@ ComponentDummy.prototype = ReactComponent.prototype;
 ReactPureComponent.prototype = new ComponentDummy();
 ReactPureComponent.prototype.constructor = ReactPureComponent;
 // Avoid an extra prototype jump for these methods.
-index(ReactPureComponent.prototype, ReactComponent.prototype);
+index$1(ReactPureComponent.prototype, ReactComponent.prototype);
 ReactPureComponent.prototype.isPureReactComponent = true;
 
 var ReactBaseClasses = {
@@ -1702,13 +1759,6 @@ var ReactBaseClasses = {
   PureComponent: ReactPureComponent
 };
 
-/**
- * Static poolers. Several custom versions for each potential number of
- * arguments. A completely generic pooler is easy to implement, but would
- * require accessing the `arguments` object. In each of these, `this` refers to
- * the Class itself, not an instance. If any others are needed, simply add them
- * here, or in their own files.
- */
 var oneArgumentPooler = function (copyFieldsFrom) {
   var Klass = this;
   if (Klass.instancePool.length) {
@@ -1808,12 +1858,6 @@ var PooledClass_1 = PooledClass;
  * 
  */
 
-/**
- * Keeps track of the current owner.
- *
- * The current owner is the component who should own any components that are
- * currently being constructed.
- */
 var ReactCurrentOwner = {
   /**
    * @internal
@@ -1834,9 +1878,6 @@ var ReactCurrentOwner_1 = ReactCurrentOwner;
  *
  * 
  */
-
-// The Symbol used to tag the ReactElement type. If there is no native Symbol
-// nor polyfill, then a plain number is used for performance.
 
 var REACT_ELEMENT_TYPE = typeof Symbol === 'function' && Symbol['for'] && Symbol['for']('react.element') || 0xeac7;
 
@@ -2095,7 +2136,7 @@ ReactElement.cloneElement = function (element, config$$1, children) {
   var propName;
 
   // Original props are copied
-  var props = index({}, element.props);
+  var props = index$1({}, element.props);
 
   // Reserved names are extracted
   var key = element.key;
@@ -2177,8 +2218,6 @@ var ReactElement_1 = ReactElement;
  * 
  */
 
-/* global Symbol */
-
 var ITERATOR_SYMBOL = typeof Symbol === 'function' && Symbol.iterator;
 var FAUX_ITERATOR_SYMBOL = '@@iterator'; // Before Symbol spec.
 
@@ -2214,13 +2253,6 @@ var getIteratorFn_1 = getIteratorFn;
  * of patent rights can be found in the PATENTS file in the same directory.
  *
  * 
- */
-
-/**
- * Escape and wrap key so it is safe to use as a reactid
- *
- * @param {string} key to be escaped.
- * @return {string} the escaped key.
  */
 
 function escape(key) {
@@ -3267,11 +3299,6 @@ var ReactElementValidator$2 = {
 
 var ReactElementValidator_1 = ReactElementValidator$2;
 
-/**
- * Create a factory that creates HTML tag elements.
- *
- * @private
- */
 var createDOMFactory = ReactElement_1.createFactory;
 {
   var ReactElementValidator$1 = ReactElementValidator_1;
@@ -3981,11 +4008,6 @@ var factoryWithTypeCheckers = function(isValidElement, throwOnDirectAccess) {
   return ReactPropTypes;
 };
 
-// React 15.5 references this module, and assumes PropTypes are still callable in production.
-// Therefore we re-export development-only version with all the PropTypes checks here.
-// However if one is migrating to the `prop-types` npm library, they will go through the
-// `index.js` entry point, and it will branch depending on the environment.
-
 var factory_1 = function(isValidElement) {
   // It is still allowed in 15.5.
   var throwOnDirectAccess = false;
@@ -4304,7 +4326,7 @@ function factory$1(ReactComponent, isValidElement, ReactNoopUpdateQueue) {
       {
         validateTypeDef(Constructor, childContextTypes, 'childContext');
       }
-      Constructor.childContextTypes = index(
+      Constructor.childContextTypes = index$1(
         {},
         Constructor.childContextTypes,
         childContextTypes
@@ -4314,7 +4336,7 @@ function factory$1(ReactComponent, isValidElement, ReactNoopUpdateQueue) {
       {
         validateTypeDef(Constructor, contextTypes, 'context');
       }
-      Constructor.contextTypes = index(
+      Constructor.contextTypes = index$1(
         {},
         Constructor.contextTypes,
         contextTypes
@@ -4338,7 +4360,7 @@ function factory$1(ReactComponent, isValidElement, ReactNoopUpdateQueue) {
       {
         validateTypeDef(Constructor, propTypes, 'prop');
       }
-      Constructor.propTypes = index({}, Constructor.propTypes, propTypes);
+      Constructor.propTypes = index$1({}, Constructor.propTypes, propTypes);
     },
     statics: function(Constructor, statics) {
       mixStaticSpecIntoComponent(Constructor, statics);
@@ -4734,7 +4756,7 @@ function factory$1(ReactComponent, isValidElement, ReactNoopUpdateQueue) {
   };
 
   var ReactClassComponent = function() {};
-  index(
+  index$1(
     ReactClassComponent.prototype,
     ReactComponent.prototype,
     ReactClassMixin
@@ -4873,20 +4895,6 @@ var isValidElement$1 = ReactElement_1.isValidElement;
 
 var createClass$1 = factory_1$2(Component, isValidElement$1, ReactNoopUpdateQueue_1);
 
-/**
- * Returns the first child in a collection of children and verifies that there
- * is only one child in the collection.
- *
- * See https://facebook.github.io/react/docs/top-level-api.html#react.children.only
- *
- * The current implementation of this function assumes that a single child gets
- * passed without a wrapper, but the purpose of this helper function is to
- * abstract away the particular structure of children.
- *
- * @param {?object} children Child collection structure.
- * @return {ReactElement} The first and only `ReactElement` contained in the
- * structure.
- */
 function onlyChild(children) {
   !ReactElement_1.isValidElement(children) ? invariant_1(false, 'React.Children.only expected to receive a single React element child.') : void 0;
   return children;
@@ -4908,7 +4916,7 @@ var cloneElement = ReactElement_1.cloneElement;
   cloneElement = ReactElementValidator.cloneElement;
 }
 
-var __spread = index;
+var __spread = index$1;
 var createMixin = function (mixin) {
   return mixin;
 };
@@ -4919,7 +4927,7 @@ var createMixin = function (mixin) {
   __spread = function () {
     lowPriorityWarning(warnedForSpread, 'React.__spread is deprecated and should not be used. Use ' + 'Object.assign directly or another helper function with similar ' + 'semantics. You may be seeing this warning due to your compiler. ' + 'See https://fb.me/react-spread-deprecation for more details.');
     warnedForSpread = true;
-    return index.apply(null, arguments);
+    return index$1.apply(null, arguments);
   };
 
   createMixin = function (mixin) {
@@ -5004,6 +5012,2470 @@ var React_1 = React$1;
 
 var react = React_1;
 
+var commonjsGlobal = typeof window !== 'undefined' ? window : typeof global !== 'undefined' ? global : typeof self !== 'undefined' ? self : {};
+
+
+
+function unwrapExports (x) {
+	return x && x.__esModule ? x['default'] : x;
+}
+
+function createCommonjsModule(fn, module) {
+	return module = { exports: {} }, fn(module, module.exports), module.exports;
+}
+
+var getDynamicStyles = createCommonjsModule(function (module, exports) {
+'use strict';
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+
+var _typeof = typeof Symbol === "function" && typeof Symbol.iterator === "symbol" ? function (obj) { return typeof obj; } : function (obj) { return obj && typeof Symbol === "function" && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj; };
+
+/**
+ * Extracts a styles object with only props that contain function values.
+ */
+exports['default'] = function (styles) {
+  // eslint-disable-next-line no-shadow
+  function extract(styles) {
+    var to = null;
+
+    for (var key in styles) {
+      var value = styles[key];
+      var type = typeof value === 'undefined' ? 'undefined' : _typeof(value);
+
+      if (type === 'function') {
+        if (!to) to = {};
+        to[key] = value;
+      } else if (type === 'object' && value !== null && !Array.isArray(value)) {
+        var extracted = extract(value);
+        if (extracted) {
+          if (!to) to = {};
+          to[key] = extracted;
+        }
+      }
+    }
+
+    return to;
+  }
+
+  return extract(styles);
+};
+});
+
+var SheetsRegistry_1 = createCommonjsModule(function (module, exports) {
+'use strict';
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+
+var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
+
+function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
+
+/**
+ * Sheets registry to access them all at one place.
+ */
+var SheetsRegistry = function () {
+  function SheetsRegistry() {
+    _classCallCheck(this, SheetsRegistry);
+
+    this.registry = [];
+  }
+
+  _createClass(SheetsRegistry, [{
+    key: 'add',
+
+
+    /**
+     * Register a Style Sheet.
+     */
+    value: function add(sheet) {
+      var registry = this.registry;
+      var index = sheet.options.index;
+
+
+      if (registry.indexOf(sheet) !== -1) return;
+
+      if (registry.length === 0 || index >= this.index) {
+        registry.push(sheet);
+        return;
+      }
+
+      // Find a position.
+      for (var i = 0; i < registry.length; i++) {
+        if (registry[i].options.index > index) {
+          registry.splice(i, 0, sheet);
+          return;
+        }
+      }
+    }
+
+    /**
+     * Reset the registry.
+     */
+
+  }, {
+    key: 'reset',
+    value: function reset() {
+      this.registry = [];
+    }
+
+    /**
+     * Remove a Style Sheet.
+     */
+
+  }, {
+    key: 'remove',
+    value: function remove(sheet) {
+      var index = this.registry.indexOf(sheet);
+      this.registry.splice(index, 1);
+    }
+
+    /**
+     * Convert all attached sheets to a CSS string.
+     */
+
+  }, {
+    key: 'toString',
+    value: function toString(options) {
+      return this.registry.filter(function (sheet) {
+        return sheet.attached;
+      }).map(function (sheet) {
+        return sheet.toString(options);
+      }).join('\n');
+    }
+  }, {
+    key: 'index',
+
+
+    /**
+     * Current highest index number.
+     */
+    get: function get() {
+      return this.registry.length === 0 ? 0 : this.registry[this.registry.length - 1].options.index;
+    }
+  }]);
+
+  return SheetsRegistry;
+}();
+
+exports['default'] = SheetsRegistry;
+});
+
+var warning$4 = function() {};
+
+{
+  warning$4 = function(condition, format, args) {
+    var len = arguments.length;
+    args = new Array(len > 2 ? len - 2 : 0);
+    for (var key = 2; key < len; key++) {
+      args[key - 2] = arguments[key];
+    }
+    if (format === undefined) {
+      throw new Error(
+        '`warning(condition, format, ...args)` requires a warning ' +
+        'message argument'
+      );
+    }
+
+    if (format.length < 10 || (/^[s\W]*$/).test(format)) {
+      throw new Error(
+        'The warning format should be able to uniquely identify this ' +
+        'warning. Please, use a more descriptive format than: ' + format
+      );
+    }
+
+    if (!condition) {
+      var argIndex = 0;
+      var message = 'Warning: ' +
+        format.replace(/%s/g, function() {
+          return args[argIndex++];
+        });
+      if (typeof console !== 'undefined') {
+        console.error(message);
+      }
+      try {
+        // This error was thrown as a convenience so that you can use this stack
+        // to find the callsite that caused this warning to fire.
+        throw new Error(message);
+      } catch(x) {}
+    }
+  };
+}
+
+var browser$1 = warning$4;
+
+var SheetsManager_1 = createCommonjsModule(function (module, exports) {
+'use strict';
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+
+var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
+
+
+
+var _warning2 = _interopRequireDefault(browser$1);
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
+
+function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
+
+/**
+ * SheetsManager is like a WeakMap which is designed to count StyleSheet
+ * instances and attach/detach automatically.
+ */
+var SheetsManager = function () {
+  function SheetsManager() {
+    _classCallCheck(this, SheetsManager);
+
+    this.sheets = [];
+    this.refs = [];
+    this.keys = [];
+  }
+
+  _createClass(SheetsManager, [{
+    key: 'get',
+    value: function get(key) {
+      var index = this.keys.indexOf(key);
+      return this.sheets[index];
+    }
+  }, {
+    key: 'add',
+    value: function add(key, sheet) {
+      var sheets = this.sheets,
+          refs = this.refs,
+          keys = this.keys;
+
+      var index = sheets.indexOf(sheet);
+
+      if (index !== -1) return index;
+
+      sheets.push(sheet);
+      refs.push(0);
+      keys.push(key);
+
+      return sheets.length - 1;
+    }
+  }, {
+    key: 'manage',
+    value: function manage(key) {
+      var index = this.keys.indexOf(key);
+      var sheet = this.sheets[index];
+      if (this.refs[index] === 0) sheet.attach();
+      this.refs[index]++;
+      if (!this.keys[index]) this.keys.splice(index, 0, key);
+      return sheet;
+    }
+  }, {
+    key: 'unmanage',
+    value: function unmanage(key) {
+      var index = this.keys.indexOf(key);
+      if (index === -1) {
+        // eslint-ignore-next-line no-console
+        (0, _warning2['default'])('SheetsManager: can\'t find sheet to unmanage');
+        return;
+      }
+      if (this.refs[index] > 0) {
+        this.refs[index]--;
+        if (this.refs[index] === 0) this.sheets[index].detach();
+      }
+    }
+  }]);
+
+  return SheetsManager;
+}();
+
+exports['default'] = SheetsManager;
+});
+
+var toCssValue_1 = createCommonjsModule(function (module, exports) {
+'use strict';
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports['default'] = toCssValue;
+var joinWithSpace = function joinWithSpace(value) {
+  return value.join(' ');
+};
+
+/**
+ * Converts array values to string.
+ *
+ * `margin: [['5px', '10px']]` > `margin: 5px 10px;`
+ * `border: ['1px', '2px']` > `border: 1px, 2px;`
+ */
+function toCssValue(value) {
+  if (!Array.isArray(value)) return value;
+
+  // Support space separated values.
+  if (Array.isArray(value[0])) {
+    return toCssValue(value.map(joinWithSpace));
+  }
+
+  return value.join(', ');
+}
+});
+
+var toCss_1 = createCommonjsModule(function (module, exports) {
+'use strict';
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports['default'] = toCss;
+
+
+
+var _toCssValue2 = _interopRequireDefault(toCssValue_1);
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
+
+/**
+ * Indent a string.
+ * http://jsperf.com/array-join-vs-for
+ */
+function indentStr(str, indent) {
+  var result = '';
+  for (var index = 0; index < indent; index++) {
+    result += '  ';
+  }return result + str;
+}
+
+/**
+ * Converts a Rule to CSS string.
+ */
+
+function toCss(selector, style) {
+  var options = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : {};
+
+  var result = '';
+
+  if (!style) return result;
+
+  var _options$indent = options.indent,
+      indent = _options$indent === undefined ? 0 : _options$indent;
+  var fallbacks = style.fallbacks;
+
+
+  indent++;
+
+  // Apply fallbacks first.
+  if (fallbacks) {
+    // Array syntax {fallbacks: [{prop: value}]}
+    if (Array.isArray(fallbacks)) {
+      for (var index = 0; index < fallbacks.length; index++) {
+        var fallback = fallbacks[index];
+        for (var prop in fallback) {
+          var value = fallback[prop];
+          if (value != null) {
+            result += '\n' + indentStr(prop + ': ' + (0, _toCssValue2['default'])(value) + ';', indent);
+          }
+        }
+      }
+    }
+    // Object syntax {fallbacks: {prop: value}}
+    else {
+        for (var _prop in fallbacks) {
+          var _value = fallbacks[_prop];
+          if (_value != null) {
+            result += '\n' + indentStr(_prop + ': ' + (0, _toCssValue2['default'])(_value) + ';', indent);
+          }
+        }
+      }
+  }
+
+  var hasFunctionValue = false;
+
+  for (var _prop2 in style) {
+    var _value2 = style[_prop2];
+    if (typeof _value2 === 'function') {
+      _value2 = style['$' + _prop2];
+      hasFunctionValue = true;
+    }
+    if (_value2 != null && _prop2 !== 'fallbacks') {
+      result += '\n' + indentStr(_prop2 + ': ' + (0, _toCssValue2['default'])(_value2) + ';', indent);
+    }
+  }
+
+  if (!result && !hasFunctionValue) return result;
+
+  indent--;
+  result = indentStr(selector + ' {' + result + '\n', indent) + indentStr('}', indent);
+
+  return result;
+}
+});
+
+var StyleRule_1 = createCommonjsModule(function (module, exports) {
+'use strict';
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+
+var _typeof = typeof Symbol === "function" && typeof Symbol.iterator === "symbol" ? function (obj) { return typeof obj; } : function (obj) { return obj && typeof Symbol === "function" && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj; };
+
+var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
+
+
+
+var _toCss2 = _interopRequireDefault(toCss_1);
+
+
+
+var _toCssValue2 = _interopRequireDefault(toCssValue_1);
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
+
+function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
+
+var StyleRule = function () {
+  function StyleRule(key, style, options) {
+    _classCallCheck(this, StyleRule);
+
+    this.type = 'style';
+    this.isProcessed = false;
+    var generateClassName = options.generateClassName,
+        sheet = options.sheet,
+        Renderer = options.Renderer,
+        selector = options.selector;
+
+    this.key = key;
+    this.options = options;
+    this.style = style;
+    this.selectorText = selector || '.' + generateClassName(this, sheet);
+    this.renderer = sheet ? sheet.renderer : new Renderer();
+  }
+
+  /**
+   * Set selector string.
+   * TODO rewrite this #419
+   * Attention: use this with caution. Most browsers didn't implement
+   * selectorText setter, so this may result in rerendering of entire Style Sheet.
+   */
+
+
+  _createClass(StyleRule, [{
+    key: 'prop',
+
+
+    /**
+     * Get or set a style property.
+     */
+    value: function prop(name, nextValue) {
+      var $name = typeof this.style[name] === 'function' ? '$' + name : name;
+      var currValue = this.style[$name];
+
+      // Its a setter.
+      if (nextValue != null) {
+        // Don't do anything if the value has not changed.
+        if (currValue !== nextValue) {
+          nextValue = this.options.jss.plugins.onChangeValue(nextValue, name, this);
+          Object.defineProperty(this.style, $name, {
+            value: nextValue,
+            writable: true
+          });
+          // Defined if StyleSheet option `link` is true.
+          if (this.renderable) this.renderer.setStyle(this.renderable, name, nextValue);
+        }
+        return this;
+      }
+
+      // Its a getter, read the value from the DOM if its not cached.
+      if (this.renderable && currValue == null) {
+        // Cache the value after we have got it from the DOM first time.
+        Object.defineProperty(this.style, $name, {
+          value: this.renderer.getStyle(this.renderable, name),
+          writable: true
+        });
+      }
+
+      return this.style[$name];
+    }
+
+    /**
+     * Apply rule to an element inline.
+     */
+
+  }, {
+    key: 'applyTo',
+    value: function applyTo(renderable) {
+      var json = this.toJSON();
+      for (var prop in json) {
+        this.renderer.setStyle(renderable, prop, json[prop]);
+      }return this;
+    }
+
+    /**
+     * Returns JSON representation of the rule.
+     * Fallbacks are not supported.
+     * Useful for inline styles.
+     */
+
+  }, {
+    key: 'toJSON',
+    value: function toJSON() {
+      var json = {};
+      for (var prop in this.style) {
+        var value = this.style[prop];
+        var type = typeof value === 'undefined' ? 'undefined' : _typeof(value);
+        if (type === 'function') json[prop] = this.style['$' + prop];else if (type !== 'object') json[prop] = value;else if (Array.isArray(value)) json[prop] = (0, _toCssValue2['default'])(value);
+      }
+      return json;
+    }
+
+    /**
+     * Generates a CSS string.
+     */
+
+  }, {
+    key: 'toString',
+    value: function toString(options) {
+      return (0, _toCss2['default'])(this.selector, this.style, options);
+    }
+  }, {
+    key: 'selector',
+    set: function set(selector) {
+      var sheet = this.options.sheet;
+
+      // After we modify a selector, ref by old selector needs to be removed.
+
+      if (sheet) sheet.rules.unregister(this);
+
+      this.selectorText = selector;
+
+      if (!this.renderable) {
+        // Register the rule with new selector.
+        if (sheet) sheet.rules.register(this);
+        return;
+      }
+
+      var changed = this.renderer.setSelector(this.renderable, selector);
+
+      if (changed && sheet) {
+        sheet.rules.register(this);
+        return;
+      }
+
+      // If selector setter is not implemented, rerender the sheet.
+      // We need to delete renderable from the rule, because when sheet.deploy()
+      // calls rule.toString, it will get the old selector.
+      delete this.renderable;
+      if (sheet) {
+        sheet.rules.register(this);
+        sheet.deploy().link();
+      }
+    }
+
+    /**
+     * Get selector string.
+     */
+    ,
+    get: function get() {
+      if (this.renderable) {
+        return this.renderer.getSelector(this.renderable);
+      }
+
+      return this.selectorText;
+    }
+  }]);
+
+  return StyleRule;
+}();
+
+exports['default'] = StyleRule;
+});
+
+var cloneStyle_1 = createCommonjsModule(function (module, exports) {
+'use strict';
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+
+var _typeof = typeof Symbol === "function" && typeof Symbol.iterator === "symbol" ? function (obj) { return typeof obj; } : function (obj) { return obj && typeof Symbol === "function" && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj; };
+
+exports.default = cloneStyle;
+var isArray = Array.isArray;
+function cloneStyle(style) {
+  // Support empty values in case user ends up with them by accident.
+  if (style == null) return style;
+
+  // Support string value for SimpleRule.
+  var typeOfStyle = typeof style === 'undefined' ? 'undefined' : _typeof(style);
+  if (typeOfStyle === 'string' || typeOfStyle === 'number') return style;
+
+  // Support array for FontFaceRule.
+  if (isArray(style)) return style.map(cloneStyle);
+
+  var newStyle = {};
+  for (var name in style) {
+    var value = style[name];
+    if ((typeof value === 'undefined' ? 'undefined' : _typeof(value)) === 'object') {
+      newStyle[name] = cloneStyle(value);
+      continue;
+    }
+    newStyle[name] = value;
+  }
+
+  return newStyle;
+}
+});
+
+var createRule_1 = createCommonjsModule(function (module, exports) {
+'use strict';
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports['default'] = createRule;
+
+
+
+var _warning2 = _interopRequireDefault(browser$1);
+
+
+
+var _StyleRule2 = _interopRequireDefault(StyleRule_1);
+
+
+
+var _cloneStyle2 = _interopRequireDefault(cloneStyle_1);
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
+
+/**
+ * Create a rule instance.
+ */
+function createRule() {
+  var name = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : 'unnamed';
+  var decl = arguments[1];
+  var options = arguments[2];
+  var jss = options.jss;
+
+  var declCopy = (0, _cloneStyle2['default'])(decl);
+
+  var rule = jss.plugins.onCreateRule(name, declCopy, options);
+  if (rule) return rule;
+
+  // It is an at-rule and it has no instance.
+  if (name[0] === '@') {
+    (0, _warning2['default'])(false, '[JSS] Unknown at-rule %s', name);
+  }
+
+  return new _StyleRule2['default'](name, declCopy, options);
+}
+});
+
+var updateRule = createCommonjsModule(function (module, exports) {
+'use strict';
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+
+exports['default'] = function (rule, data, RuleList) {
+  if (rule.type === 'style') {
+    for (var prop in rule.style) {
+      var value = rule.style[prop];
+      if (typeof value === 'function') {
+        rule.prop(prop, value(data));
+      }
+    }
+  } else if (rule.rules instanceof RuleList) {
+    rule.rules.update(data);
+  }
+};
+});
+
+var linkRule_1 = createCommonjsModule(function (module, exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports["default"] = linkRule;
+/**
+ * Link rule with CSSStyleRule and nested rules with corresponding nested cssRules if both exists.
+ */
+function linkRule(rule, cssRule) {
+  rule.renderable = cssRule;
+  if (rule.rules && cssRule.cssRules) rule.rules.link(cssRule.cssRules);
+}
+});
+
+var RuleList_1 = createCommonjsModule(function (module, exports) {
+'use strict';
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+
+var _extends = Object.assign || function (target) { for (var i = 1; i < arguments.length; i++) { var source = arguments[i]; for (var key in source) { if (Object.prototype.hasOwnProperty.call(source, key)) { target[key] = source[key]; } } } return target; };
+
+var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
+
+
+
+var _createRule2$$1 = _interopRequireDefault(createRule_1);
+
+
+
+var _updateRule2 = _interopRequireDefault(updateRule);
+
+
+
+var _linkRule2 = _interopRequireDefault(linkRule_1);
+
+
+
+var _StyleRule2 = _interopRequireDefault(StyleRule_1);
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
+
+function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
+
+/**
+ * Contains rules objects and allows adding/removing etc.
+ * Is used for e.g. by `StyleSheet` or `ConditionalRule`.
+ */
+var RuleList = function () {
+
+  // Original styles object.
+  function RuleList(options) {
+    _classCallCheck(this, RuleList);
+
+    this.map = {};
+    this.raw = {};
+    this.index = [];
+
+    this.options = options;
+    this.classes = options.classes;
+  }
+
+  /**
+   * Create and register rule.
+   *
+   * Will not render after Style Sheet was rendered the first time.
+   */
+
+
+  // Used to ensure correct rules order.
+
+  // Rules registry for access by .get() method.
+  // It contains the same rule registered by name and by selector.
+
+
+  _createClass(RuleList, [{
+    key: 'add',
+    value: function add(name, decl, options) {
+      var _options = this.options,
+          parent = _options.parent,
+          sheet = _options.sheet,
+          jss = _options.jss,
+          Renderer = _options.Renderer,
+          generateClassName = _options.generateClassName;
+
+
+      options = _extends({
+        classes: this.classes,
+        parent: parent,
+        sheet: sheet,
+        jss: jss,
+        Renderer: Renderer,
+        generateClassName: generateClassName
+      }, options);
+
+      if (!options.selector && this.classes[name]) options.selector = '.' + this.classes[name];
+
+      this.raw[name] = decl;
+
+      var rule = (0, _createRule2$$1['default'])(name, decl, options);
+      this.register(rule);
+
+      var index = options.index === undefined ? this.index.length : options.index;
+      this.index.splice(index, 0, rule);
+
+      return rule;
+    }
+
+    /**
+     * Get a rule.
+     */
+
+  }, {
+    key: 'get',
+    value: function get(name) {
+      return this.map[name];
+    }
+
+    /**
+     * Delete a rule.
+     */
+
+  }, {
+    key: 'remove',
+    value: function remove(rule) {
+      this.unregister(rule);
+      this.index.splice(this.indexOf(rule), 1);
+    }
+
+    /**
+     * Get index of a rule.
+     */
+
+  }, {
+    key: 'indexOf',
+    value: function indexOf(rule) {
+      return this.index.indexOf(rule);
+    }
+
+    /**
+     * Run `onProcessRule()` plugins on every rule.
+     */
+
+  }, {
+    key: 'process',
+    value: function process() {
+      var plugins = this.options.jss.plugins;
+      // We need to clone array because if we modify the index somewhere else during a loop
+      // we end up with very hard-to-track-down side effects.
+
+      this.index.slice(0).forEach(plugins.onProcessRule, plugins);
+    }
+
+    /**
+     * Register a rule in `.map` and `.classes` maps.
+     */
+
+  }, {
+    key: 'register',
+    value: function register(rule) {
+      this.map[rule.key] = rule;
+      if (rule instanceof _StyleRule2['default']) {
+        this.map[rule.selector] = rule;
+        this.classes[rule.key] = rule.selector.substr(1);
+      }
+    }
+
+    /**
+     * Unregister a rule.
+     */
+
+  }, {
+    key: 'unregister',
+    value: function unregister(rule) {
+      delete this.map[rule.key];
+      delete this.classes[rule.key];
+      if (rule instanceof _StyleRule2['default']) delete this.map[rule.selector];
+    }
+
+    /**
+     * Update the function values with a new data.
+     */
+
+  }, {
+    key: 'update',
+    value: function update(name, data) {
+      if (typeof name === 'string') {
+        (0, _updateRule2['default'])(this.get(name), data, RuleList);
+        return;
+      }
+
+      for (var index = 0; index < this.index.length; index++) {
+        (0, _updateRule2['default'])(this.index[index], name, RuleList);
+      }
+    }
+
+    /**
+     * Link renderable rules with CSSRuleList.
+     */
+
+  }, {
+    key: 'link',
+    value: function link(cssRules) {
+      for (var i = 0; i < cssRules.length; i++) {
+        var cssRule = cssRules[i];
+        var rule = this.get(this.options.sheet.renderer.getSelector(cssRule));
+        if (rule) (0, _linkRule2['default'])(rule, cssRule);
+      }
+    }
+
+    /**
+     * Convert rules to a CSS string.
+     */
+
+  }, {
+    key: 'toString',
+    value: function toString(options) {
+      var str = '';
+
+      for (var index = 0; index < this.index.length; index++) {
+        var rule = this.index[index];
+        var css = rule.toString(options);
+
+        // No need to render an empty rule.
+        if (!css) continue;
+
+        if (str) str += '\n';
+        str += css;
+      }
+
+      return str;
+    }
+  }]);
+
+  return RuleList;
+}();
+
+exports['default'] = RuleList;
+});
+
+var sheets = createCommonjsModule(function (module, exports) {
+'use strict';
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+
+
+
+var _SheetsRegistry2 = _interopRequireDefault(SheetsRegistry_1);
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
+
+/**
+ * This is a global sheets registry. Only DomRenderer will add sheets to it.
+ * On the server one should use an own SheetsRegistry instance and add the
+ * sheets to it, because you need to make sure to create a new registry for
+ * each request in order to not leak sheets across requests.
+ */
+exports['default'] = new _SheetsRegistry2['default']();
+});
+
+var StyleSheet_1 = createCommonjsModule(function (module, exports) {
+'use strict';
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+
+var _extends = Object.assign || function (target) { for (var i = 1; i < arguments.length; i++) { var source = arguments[i]; for (var key in source) { if (Object.prototype.hasOwnProperty.call(source, key)) { target[key] = source[key]; } } } return target; };
+
+var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
+
+
+
+var _linkRule2 = _interopRequireDefault(linkRule_1);
+
+
+
+var _RuleList2 = _interopRequireDefault(RuleList_1);
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
+
+function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
+
+var StyleSheet = function () {
+  function StyleSheet(styles, options) {
+    _classCallCheck(this, StyleSheet);
+
+    this.attached = false;
+    this.deployed = false;
+    this.linked = false;
+    this.classes = {};
+    this.options = _extends({}, options, {
+      sheet: this,
+      parent: this,
+      classes: this.classes
+    });
+    this.renderer = new options.Renderer(this);
+    this.rules = new _RuleList2['default'](this.options);
+
+    for (var name in styles) {
+      this.rules.add(name, styles[name]);
+    }
+
+    this.rules.process();
+  }
+
+  /**
+   * Attach renderable to the render tree.
+   */
+
+
+  _createClass(StyleSheet, [{
+    key: 'attach',
+    value: function attach() {
+      if (this.attached) return this;
+      if (!this.deployed) this.deploy();
+      this.renderer.attach();
+      if (!this.linked && this.options.link) this.link();
+      this.attached = true;
+      return this;
+    }
+
+    /**
+     * Remove renderable from render tree.
+     */
+
+  }, {
+    key: 'detach',
+    value: function detach() {
+      if (!this.attached) return this;
+      this.renderer.detach();
+      this.attached = false;
+      return this;
+    }
+
+    /**
+     * Add a rule to the current stylesheet.
+     * Will insert a rule also after the stylesheet has been rendered first time.
+     */
+
+  }, {
+    key: 'addRule',
+    value: function addRule(name, decl, options) {
+      var queue = this.queue;
+
+      // Plugins can create rules.
+      // In order to preserve the right order, we need to queue all `.addRule` calls,
+      // which happen after the first `rules.add()` call.
+
+      if (this.attached && !queue) this.queue = [];
+
+      var rule = this.rules.add(name, decl, options);
+      this.options.jss.plugins.onProcessRule(rule);
+
+      if (this.attached) {
+        if (!this.deployed) return rule;
+        // Don't insert rule directly if there is no stringified version yet.
+        // It will be inserted all together when .attach is called.
+        if (queue) queue.push(rule);else {
+          this.insertRule(rule);
+          if (this.queue) {
+            this.queue.forEach(this.insertRule, this);
+            this.queue = undefined;
+          }
+        }
+        return rule;
+      }
+
+      // We can't add rules to a detached style node.
+      // We will redeploy the sheet once user will attach it.
+      this.deployed = false;
+
+      return rule;
+    }
+
+    /**
+     * Insert rule into the StyleSheet
+     */
+
+  }, {
+    key: 'insertRule',
+    value: function insertRule(rule) {
+      var renderable = this.renderer.insertRule(rule);
+      if (renderable && this.options.link) (0, _linkRule2['default'])(rule, renderable);
+    }
+
+    /**
+     * Create and add rules.
+     * Will render also after Style Sheet was rendered the first time.
+     */
+
+  }, {
+    key: 'addRules',
+    value: function addRules(styles, options) {
+      var added = [];
+      for (var name in styles) {
+        added.push(this.addRule(name, styles[name], options));
+      }
+      return added;
+    }
+
+    /**
+     * Get a rule by name.
+     */
+
+  }, {
+    key: 'getRule',
+    value: function getRule(name) {
+      return this.rules.get(name);
+    }
+
+    /**
+     * Delete a rule by name.
+     * Returns `true`: if rule has been deleted from the DOM.
+     */
+
+  }, {
+    key: 'deleteRule',
+    value: function deleteRule(name) {
+      var rule = this.rules.get(name);
+
+      if (!rule) return false;
+
+      this.rules.remove(rule);
+
+      if (this.attached && rule.renderable) {
+        return this.renderer.deleteRule(rule.renderable);
+      }
+
+      return true;
+    }
+
+    /**
+     * Get index of a rule.
+     */
+
+  }, {
+    key: 'indexOf',
+    value: function indexOf(rule) {
+      return this.rules.indexOf(rule);
+    }
+
+    /**
+     * Deploy pure CSS string to a renderable.
+     */
+
+  }, {
+    key: 'deploy',
+    value: function deploy() {
+      this.renderer.deploy();
+      this.deployed = true;
+      return this;
+    }
+
+    /**
+     * Link renderable CSS rules from sheet with their corresponding models.
+     */
+
+  }, {
+    key: 'link',
+    value: function link() {
+      var cssRules = this.renderer.getRules();
+
+      // Is undefined when VirtualRenderer is used.
+      if (cssRules) this.rules.link(cssRules);
+      this.linked = true;
+      return this;
+    }
+
+    /**
+     * Update the function values with a new data.
+     */
+
+  }, {
+    key: 'update',
+    value: function update(name, data) {
+      this.rules.update(name, data);
+      return this;
+    }
+
+    /**
+     * Convert rules to a CSS string.
+     */
+
+  }, {
+    key: 'toString',
+    value: function toString(options) {
+      return this.rules.toString(options);
+    }
+  }]);
+
+  return StyleSheet;
+}();
+
+exports['default'] = StyleSheet;
+});
+
+var PluginsRegistry_1 = createCommonjsModule(function (module, exports) {
+'use strict';
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+
+var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
+
+
+
+var _warning2 = _interopRequireDefault(browser$1);
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
+
+function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
+
+var PluginsRegistry = function () {
+  function PluginsRegistry() {
+    _classCallCheck(this, PluginsRegistry);
+
+    this.hooks = {
+      onCreateRule: [],
+      onProcessRule: [],
+      onProcessStyle: [],
+      onProcessSheet: [],
+      onChangeValue: []
+
+      /**
+       * Call `onCreateRule` hooks and return an object if returned by a hook.
+       */
+    };
+  }
+
+  _createClass(PluginsRegistry, [{
+    key: 'onCreateRule',
+    value: function onCreateRule(name, decl, options) {
+      for (var i = 0; i < this.hooks.onCreateRule.length; i++) {
+        var rule = this.hooks.onCreateRule[i](name, decl, options);
+        if (rule) return rule;
+      }
+      return null;
+    }
+
+    /**
+     * Call `onProcessRule` hooks.
+     */
+
+  }, {
+    key: 'onProcessRule',
+    value: function onProcessRule(rule) {
+      if (rule.isProcessed) return;
+      var sheet = rule.options.sheet;
+
+      for (var i = 0; i < this.hooks.onProcessRule.length; i++) {
+        this.hooks.onProcessRule[i](rule, sheet);
+      }
+
+      // $FlowFixMe
+      if (rule.style) this.onProcessStyle(rule.style, rule, sheet);
+
+      rule.isProcessed = true;
+    }
+
+    /**
+     * Call `onProcessStyle` hooks.
+     */
+
+  }, {
+    key: 'onProcessStyle',
+    value: function onProcessStyle(style, rule, sheet) {
+      var nextStyle = style;
+
+      for (var i = 0; i < this.hooks.onProcessStyle.length; i++) {
+        nextStyle = this.hooks.onProcessStyle[i](nextStyle, rule, sheet);
+        // $FlowFixMe
+        rule.style = nextStyle;
+      }
+    }
+
+    /**
+     * Call `onProcessSheet` hooks.
+     */
+
+  }, {
+    key: 'onProcessSheet',
+    value: function onProcessSheet(sheet) {
+      for (var i = 0; i < this.hooks.onProcessSheet.length; i++) {
+        this.hooks.onProcessSheet[i](sheet);
+      }
+    }
+
+    /**
+     * Call `onChangeValue` hooks.
+     */
+
+  }, {
+    key: 'onChangeValue',
+    value: function onChangeValue(value, prop, rule) {
+      var processedValue = value;
+      for (var i = 0; i < this.hooks.onChangeValue.length; i++) {
+        processedValue = this.hooks.onChangeValue[i](processedValue, prop, rule);
+      }
+      return processedValue;
+    }
+
+    /**
+     * Register a plugin.
+     * If function is passed, it is a shortcut for `{onProcessRule}`.
+     */
+
+  }, {
+    key: 'use',
+    value: function use(plugin) {
+      for (var name in plugin) {
+        if (this.hooks[name]) this.hooks[name].push(plugin[name]);else (0, _warning2['default'])(false, '[JSS] Unknown hook "%s".', name);
+      }
+    }
+  }]);
+
+  return PluginsRegistry;
+}();
+
+exports['default'] = PluginsRegistry;
+});
+
+var SimpleRule_1 = createCommonjsModule(function (module, exports) {
+'use strict';
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+
+var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
+
+function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
+
+var SimpleRule = function () {
+  function SimpleRule(key, value, options) {
+    _classCallCheck(this, SimpleRule);
+
+    this.type = 'simple';
+    this.isProcessed = false;
+
+    this.key = key;
+    this.value = value;
+    this.options = options;
+  }
+
+  /**
+   * Generates a CSS string.
+   */
+  // eslint-disable-next-line no-unused-vars
+
+
+  _createClass(SimpleRule, [{
+    key: 'toString',
+    value: function toString(options) {
+      if (Array.isArray(this.value)) {
+        var str = '';
+        for (var index = 0; index < this.value.length; index++) {
+          str += this.key + ' ' + this.value[index] + ';';
+          if (this.value[index + 1]) str += '\n';
+        }
+        return str;
+      }
+
+      return this.key + ' ' + this.value + ';';
+    }
+  }]);
+
+  return SimpleRule;
+}();
+
+exports['default'] = SimpleRule;
+});
+
+var KeyframesRule_1 = createCommonjsModule(function (module, exports) {
+'use strict';
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+
+var _extends = Object.assign || function (target) { for (var i = 1; i < arguments.length; i++) { var source = arguments[i]; for (var key in source) { if (Object.prototype.hasOwnProperty.call(source, key)) { target[key] = source[key]; } } } return target; };
+
+var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
+
+
+
+var _RuleList2 = _interopRequireDefault(RuleList_1);
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
+
+function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
+
+/**
+ * Rule for @keyframes
+ */
+var KeyframesRule = function () {
+  function KeyframesRule(key, frames, options) {
+    _classCallCheck(this, KeyframesRule);
+
+    this.type = 'keyframes';
+    this.isProcessed = false;
+
+    this.key = key;
+    this.options = options;
+    this.rules = new _RuleList2['default'](_extends({}, options, { parent: this }));
+
+    for (var name in frames) {
+      this.rules.add(name, frames[name], _extends({}, this.options, {
+        parent: this,
+        selector: name
+      }));
+    }
+
+    this.rules.process();
+  }
+
+  /**
+   * Generates a CSS string.
+   */
+
+
+  _createClass(KeyframesRule, [{
+    key: 'toString',
+    value: function toString() {
+      var options = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : { indent: 1 };
+
+      var inner = this.rules.toString(options);
+      if (inner) inner += '\n';
+      return this.key + ' {\n' + inner + '}';
+    }
+  }]);
+
+  return KeyframesRule;
+}();
+
+exports['default'] = KeyframesRule;
+});
+
+var ConditionalRule_1 = createCommonjsModule(function (module, exports) {
+'use strict';
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+
+var _extends = Object.assign || function (target) { for (var i = 1; i < arguments.length; i++) { var source = arguments[i]; for (var key in source) { if (Object.prototype.hasOwnProperty.call(source, key)) { target[key] = source[key]; } } } return target; };
+
+var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
+
+
+
+var _RuleList2 = _interopRequireDefault(RuleList_1);
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
+
+function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
+
+/**
+ * Conditional rule for @media, @supports
+ */
+var ConditionalRule = function () {
+  function ConditionalRule(key, styles, options) {
+    _classCallCheck(this, ConditionalRule);
+
+    this.type = 'conditional';
+    this.isProcessed = false;
+
+    this.key = key;
+    this.options = options;
+    this.rules = new _RuleList2['default'](_extends({}, options, { parent: this }));
+
+    for (var name in styles) {
+      this.rules.add(name, styles[name]);
+    }
+
+    this.rules.process();
+  }
+
+  /**
+   * Get a rule.
+   */
+
+
+  _createClass(ConditionalRule, [{
+    key: 'getRule',
+    value: function getRule(name) {
+      return this.rules.get(name);
+    }
+
+    /**
+     * Get index of a rule.
+     */
+
+  }, {
+    key: 'indexOf',
+    value: function indexOf(rule) {
+      return this.rules.indexOf(rule);
+    }
+
+    /**
+     * Create and register rule, run plugins.
+     */
+
+  }, {
+    key: 'addRule',
+    value: function addRule(name, style, options) {
+      var rule = this.rules.add(name, style, options);
+      this.options.jss.plugins.onProcessRule(rule);
+      return rule;
+    }
+
+    /**
+     * Generates a CSS string.
+     */
+
+  }, {
+    key: 'toString',
+    value: function toString() {
+      var options = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : { indent: 1 };
+
+      var inner = this.rules.toString(options);
+      return inner ? this.key + ' {\n' + inner + '\n}' : '';
+    }
+  }]);
+
+  return ConditionalRule;
+}();
+
+exports['default'] = ConditionalRule;
+});
+
+var FontFaceRule_1 = createCommonjsModule(function (module, exports) {
+'use strict';
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+
+var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
+
+
+
+var _toCss2 = _interopRequireDefault(toCss_1);
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
+
+function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
+
+var FontFaceRule = function () {
+  function FontFaceRule(key, style, options) {
+    _classCallCheck(this, FontFaceRule);
+
+    this.type = 'font-face';
+    this.isProcessed = false;
+
+    this.key = key;
+    this.style = style;
+    this.options = options;
+  }
+
+  /**
+   * Generates a CSS string.
+   */
+
+
+  _createClass(FontFaceRule, [{
+    key: 'toString',
+    value: function toString(options) {
+      if (Array.isArray(this.style)) {
+        var str = '';
+        for (var index = 0; index < this.style.length; index++) {
+          str += (0, _toCss2['default'])(this.key, this.style[index]);
+          if (this.style[index + 1]) str += '\n';
+        }
+        return str;
+      }
+
+      return (0, _toCss2['default'])(this.key, this.style, options);
+    }
+  }]);
+
+  return FontFaceRule;
+}();
+
+exports['default'] = FontFaceRule;
+});
+
+var ViewportRule_1 = createCommonjsModule(function (module, exports) {
+'use strict';
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+
+var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
+
+
+
+var _toCss2 = _interopRequireDefault(toCss_1);
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
+
+function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
+
+var ViewportRule = function () {
+  function ViewportRule(key, style, options) {
+    _classCallCheck(this, ViewportRule);
+
+    this.type = 'viewport';
+    this.isProcessed = false;
+
+    this.key = key;
+    this.style = style;
+    this.options = options;
+  }
+
+  /**
+   * Generates a CSS string.
+   */
+
+
+  _createClass(ViewportRule, [{
+    key: 'toString',
+    value: function toString(options) {
+      return (0, _toCss2['default'])(this.key, this.style, options);
+    }
+  }]);
+
+  return ViewportRule;
+}();
+
+exports['default'] = ViewportRule;
+});
+
+var rules = createCommonjsModule(function (module, exports) {
+'use strict';
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+
+
+
+var _SimpleRule2 = _interopRequireDefault(SimpleRule_1);
+
+
+
+var _KeyframesRule2 = _interopRequireDefault(KeyframesRule_1);
+
+
+
+var _ConditionalRule2 = _interopRequireDefault(ConditionalRule_1);
+
+
+
+var _FontFaceRule2 = _interopRequireDefault(FontFaceRule_1);
+
+
+
+var _ViewportRule2 = _interopRequireDefault(ViewportRule_1);
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
+
+var classes = {
+  '@charset': _SimpleRule2['default'],
+  '@import': _SimpleRule2['default'],
+  '@namespace': _SimpleRule2['default'],
+  '@keyframes': _KeyframesRule2['default'],
+  '@media': _ConditionalRule2['default'],
+  '@supports': _ConditionalRule2['default'],
+  '@font-face': _FontFaceRule2['default'],
+  '@viewport': _ViewportRule2['default'],
+  '@-ms-viewport': _ViewportRule2['default']
+
+  /**
+   * Generate plugins which will register all rules.
+   */
+};
+exports['default'] = Object.keys(classes).map(function (key) {
+  // https://jsperf.com/indexof-vs-substr-vs-regex-at-the-beginning-3
+  var re = new RegExp('^' + key);
+  var onCreateRule = function onCreateRule(name, decl, options) {
+    return re.test(name) ? new classes[key](name, decl, options) : null;
+  };
+  return { onCreateRule: onCreateRule };
+});
+});
+
+var createGenerateClassName = createCommonjsModule(function (module, exports) {
+'use strict';
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+
+
+var globalRef = typeof window === 'undefined' ? commonjsGlobal : window;
+
+var namespace = '__JSS_VERSION_COUNTER__';
+if (globalRef[namespace] == null) globalRef[namespace] = 0;
+// In case we have more than one JSS version.
+var jssCounter = globalRef[namespace]++;
+
+/**
+ * Returns a function which generates unique class names based on counters.
+ * When new generator function is created, rule counter is reseted.
+ * We need to reset the rule counter for SSR for each request.
+ */
+
+exports['default'] = function () {
+  var ruleCounter = 0;
+
+  return function (rule) {
+    return rule.key + '-' + jssCounter + '-' + ruleCounter++;
+  };
+};
+});
+
+var _typeof$1 = typeof Symbol === "function" && typeof Symbol.iterator === "symbol" ? function (obj) { return typeof obj; } : function (obj) { return obj && typeof Symbol === "function" && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj; };
+
+var isBrowser = (typeof window === "undefined" ? "undefined" : _typeof$1(window)) === "object" && (typeof document === "undefined" ? "undefined" : _typeof$1(document)) === 'object' && document.nodeType === 9;
+
+
+
+
+var module$1 = Object.freeze({
+	isBrowser: isBrowser,
+	default: isBrowser
+});
+
+var DomRenderer_1 = createCommonjsModule(function (module, exports) {
+'use strict';
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+
+var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
+
+
+
+var _warning2 = _interopRequireDefault(browser$1);
+
+
+
+var _sheets2 = _interopRequireDefault(sheets);
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
+
+function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
+
+/**
+ * Get a style property.
+ */
+function getStyle(rule, prop) {
+  try {
+    return rule.style.getPropertyValue(prop);
+  } catch (err) {
+    // IE may throw if property is unknown.
+    return '';
+  }
+}
+
+/**
+ * Set a style property.
+ */
+function setStyle(rule, prop, value) {
+  try {
+    rule.style.setProperty(prop, value);
+  } catch (err) {
+    // IE may throw if property is unknown.
+    return false;
+  }
+  return true;
+}
+
+function extractSelector(cssText) {
+  var from = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : 0;
+
+  return cssText.substr(from, cssText.indexOf('{') - 1);
+}
+
+var CSSRuleTypes = {
+  STYLE_RULE: 1,
+  KEYFRAMES_RULE: 7
+
+  /**
+   * Get the selector.
+   */
+};function getSelector(rule) {
+  if (rule.type === CSSRuleTypes.STYLE_RULE) return rule.selectorText;
+  if (rule.type === CSSRuleTypes.KEYFRAMES_RULE) {
+    var name = rule.name;
+
+    if (name) return '@keyframes ' + name;
+
+    // There is no rule.name in the following browsers:
+    // - IE 9
+    // - Safari 7.1.8
+    // - Mobile Safari 9.0.0
+    var cssText = rule.cssText;
+
+    return '@' + extractSelector(cssText, cssText.indexOf('keyframes'));
+  }
+
+  return extractSelector(rule.cssText);
+}
+
+/**
+ * Set the selector.
+ */
+function setSelector(rule, selectorText) {
+  rule.selectorText = selectorText;
+
+  // Return false if setter was not successful.
+  // Currently works in chrome only.
+  return rule.selectorText === selectorText;
+}
+
+/**
+ * Gets the `head` element upon the first call and caches it.
+ */
+var getHead = function () {
+  var head = void 0;
+  return function () {
+    if (!head) head = document.head || document.getElementsByTagName('head')[0];
+    return head;
+  };
+}();
+
+/**
+ * Find attached sheet with an index higher than the passed one.
+ */
+function findHigherSheet(registry, options) {
+  for (var i = 0; i < registry.length; i++) {
+    var sheet = registry[i];
+    if (sheet.attached && sheet.options.index > options.index && sheet.options.insertionPoint === options.insertionPoint) {
+      return sheet;
+    }
+  }
+  return null;
+}
+
+/**
+ * Find attached sheet with the highest index.
+ */
+function findHighestSheet(registry, options) {
+  for (var i = registry.length - 1; i >= 0; i--) {
+    var sheet = registry[i];
+    if (sheet.attached && sheet.options.insertionPoint === options.insertionPoint) {
+      return sheet;
+    }
+  }
+  return null;
+}
+
+/**
+ * Find a comment with "jss" inside.
+ */
+function findCommentNode(text) {
+  var head = getHead();
+  for (var i = 0; i < head.childNodes.length; i++) {
+    var node = head.childNodes[i];
+    if (node.nodeType === 8 && node.nodeValue.trim() === text) {
+      return node;
+    }
+  }
+  return null;
+}
+
+/**
+ * Find a node before which we can insert the sheet.
+ */
+function findPrevNode(options) {
+  var registry = _sheets2['default'].registry;
+
+
+  if (registry.length > 0) {
+    // Try to insert before the next higher sheet.
+    var sheet = findHigherSheet(registry, options);
+    if (sheet) return sheet.renderer.element;
+
+    // Otherwise insert after the last attached.
+    sheet = findHighestSheet(registry, options);
+    if (sheet) return sheet.renderer.element.nextElementSibling;
+  }
+
+  // Try to find a comment placeholder if registry is empty.
+  var insertionPoint = options.insertionPoint;
+
+  if (insertionPoint && typeof insertionPoint === 'string') {
+    var comment = findCommentNode(insertionPoint);
+    if (comment) return comment.nextSibling;
+    // If user specifies an insertion point and it can't be found in the document -
+    // bad specificity issues may appear.
+    (0, _warning2['default'])(insertionPoint === 'jss', '[JSS] Insertion point "%s" not found.', insertionPoint);
+  }
+
+  return null;
+}
+
+/**
+ * Insert style element into the DOM.
+ */
+function insertStyle(style, options) {
+  var insertionPoint = options.insertionPoint;
+
+  var prevNode = findPrevNode(options);
+
+  if (prevNode) {
+    var parentNode = prevNode.parentNode;
+
+    if (parentNode) parentNode.insertBefore(style, prevNode);
+    return;
+  }
+
+  // Works with iframes and any node types.
+  if (insertionPoint && typeof insertionPoint.nodeType === 'number') {
+    // https://stackoverflow.com/questions/41328728/force-casting-in-flow
+    var insertionPointElement = insertionPoint;
+    var _parentNode = insertionPointElement.parentNode;
+
+    if (_parentNode) _parentNode.insertBefore(style, insertionPointElement.nextSibling);else (0, _warning2['default'])(false, '[JSS] Insertion point is not in the DOM.');
+    return;
+  }
+
+  getHead().insertBefore(style, prevNode);
+}
+
+var DomRenderer = function () {
+  function DomRenderer(sheet) {
+    _classCallCheck(this, DomRenderer);
+
+    this.getStyle = getStyle;
+    this.setStyle = setStyle;
+    this.setSelector = setSelector;
+    this.getSelector = getSelector;
+    this.hasInsertedRules = false;
+
+    // There is no sheet when the renderer is used from a standalone StyleRule.
+    if (sheet) _sheets2['default'].add(sheet);
+
+    this.sheet = sheet;
+
+    var _ref = this.sheet ? this.sheet.options : {},
+        media = _ref.media,
+        meta = _ref.meta,
+        element = _ref.element;
+
+    this.element = element || document.createElement('style');
+    this.element.type = 'text/css';
+    this.element.setAttribute('data-jss', '');
+    if (media) this.element.setAttribute('media', media);
+    if (meta) this.element.setAttribute('data-meta', meta);
+  }
+
+  /**
+   * Insert style element into render tree.
+   */
+
+
+  // HTMLStyleElement needs fixing https://github.com/facebook/flow/issues/2696
+
+
+  _createClass(DomRenderer, [{
+    key: 'attach',
+    value: function attach() {
+      // In the case the element node is external and it is already in the DOM.
+      if (this.element.parentNode || !this.sheet) return;
+
+      // When rules are inserted using `insertRule` API, after `sheet.detach().attach()`
+      // browsers remove those rules.
+      // TODO figure out if its a bug and if it is known.
+      // Workaround is to redeploy the sheet before attaching as a string.
+      if (this.hasInsertedRules) {
+        this.deploy();
+        this.hasInsertedRules = false;
+      }
+
+      insertStyle(this.element, this.sheet.options);
+    }
+
+    /**
+     * Remove style element from render tree.
+     */
+
+  }, {
+    key: 'detach',
+    value: function detach() {
+      this.element.parentNode.removeChild(this.element);
+    }
+
+    /**
+     * Inject CSS string into element.
+     */
+
+  }, {
+    key: 'deploy',
+    value: function deploy() {
+      if (!this.sheet) return;
+      this.element.textContent = '\n' + this.sheet.toString() + '\n';
+    }
+
+    /**
+     * Insert a rule into element.
+     */
+
+  }, {
+    key: 'insertRule',
+    value: function insertRule(rule) {
+      var sheet = this.element.sheet;
+      var cssRules = sheet.cssRules;
+
+      var index = cssRules.length;
+      var str = rule.toString();
+
+      if (!str) return false;
+
+      try {
+        sheet.insertRule(str, index);
+      } catch (err) {
+        (0, _warning2['default'])(false, '[JSS] Can not insert an unsupported rule \n\r%s', rule);
+        return false;
+      }
+
+      this.hasInsertedRules = true;
+
+      return cssRules[index];
+    }
+
+    /**
+     * Delete a rule.
+     */
+
+  }, {
+    key: 'deleteRule',
+    value: function deleteRule(rule) {
+      var sheet = this.element.sheet;
+      var cssRules = sheet.cssRules;
+
+      for (var _index = 0; _index < cssRules.length; _index++) {
+        if (rule === cssRules[_index]) {
+          sheet.deleteRule(_index);
+          return true;
+        }
+      }
+      return false;
+    }
+
+    /**
+     * Get all rules elements.
+     */
+
+  }, {
+    key: 'getRules',
+    value: function getRules() {
+      return this.element.sheet.cssRules;
+    }
+  }]);
+
+  return DomRenderer;
+}();
+
+exports['default'] = DomRenderer;
+});
+
+var VirtualRenderer_1 = createCommonjsModule(function (module, exports) {
+'use strict';
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+
+var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
+
+function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
+
+/* eslint-disable class-methods-use-this */
+
+/**
+ * Rendering backend to do nothing in nodejs.
+ */
+var VirtualRenderer = function () {
+  function VirtualRenderer() {
+    _classCallCheck(this, VirtualRenderer);
+  }
+
+  _createClass(VirtualRenderer, [{
+    key: 'setStyle',
+    value: function setStyle() {
+      return true;
+    }
+  }, {
+    key: 'getStyle',
+    value: function getStyle() {
+      return '';
+    }
+  }, {
+    key: 'setSelector',
+    value: function setSelector() {
+      return true;
+    }
+  }, {
+    key: 'getSelector',
+    value: function getSelector() {
+      return '';
+    }
+  }, {
+    key: 'attach',
+    value: function attach() {}
+  }, {
+    key: 'detach',
+    value: function detach() {}
+  }, {
+    key: 'deploy',
+    value: function deploy() {}
+  }, {
+    key: 'insertRule',
+    value: function insertRule() {
+      return false;
+    }
+  }, {
+    key: 'deleteRule',
+    value: function deleteRule() {
+      return true;
+    }
+  }, {
+    key: 'getRules',
+    value: function getRules() {}
+  }]);
+
+  return VirtualRenderer;
+}();
+
+exports['default'] = VirtualRenderer;
+});
+
+var _isInBrowser = ( module$1 && isBrowser ) || module$1;
+
+var findRenderer_1 = createCommonjsModule(function (module, exports) {
+'use strict';
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports['default'] = findRenderer;
+
+
+
+var _isInBrowser2 = _interopRequireDefault(_isInBrowser);
+
+
+
+var _DomRenderer2 = _interopRequireDefault(DomRenderer_1);
+
+
+
+var _VirtualRenderer2 = _interopRequireDefault(VirtualRenderer_1);
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
+
+/**
+ * Find proper renderer.
+ * Option `virtual` is used to force use of VirtualRenderer even if DOM is
+ * detected, used for testing only.
+ */
+function findRenderer() {
+  var options = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {};
+
+  if (options.Renderer) return options.Renderer;
+  var useVirtual = options.virtual || !_isInBrowser2['default'];
+  return useVirtual ? _VirtualRenderer2['default'] : _DomRenderer2['default'];
+}
+});
+
+var Jss_1 = createCommonjsModule(function (module, exports) {
+'use strict';
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+
+var _typeof = typeof Symbol === "function" && typeof Symbol.iterator === "symbol" ? function (obj) { return typeof obj; } : function (obj) { return obj && typeof Symbol === "function" && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj; };
+
+var _extends = Object.assign || function (target) { for (var i = 1; i < arguments.length; i++) { var source = arguments[i]; for (var key in source) { if (Object.prototype.hasOwnProperty.call(source, key)) { target[key] = source[key]; } } } return target; };
+
+var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
+
+
+
+var _StyleSheet2 = _interopRequireDefault(StyleSheet_1);
+
+
+
+var _PluginsRegistry2 = _interopRequireDefault(PluginsRegistry_1);
+
+
+
+var _rules2 = _interopRequireDefault(rules);
+
+
+
+var _sheets2 = _interopRequireDefault(sheets);
+
+
+
+var _createGenerateClassName2 = _interopRequireDefault(createGenerateClassName);
+
+
+
+var _createRule3 = _interopRequireDefault(createRule_1);
+
+
+
+var _findRenderer2 = _interopRequireDefault(findRenderer_1);
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
+
+function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
+
+var Jss = function () {
+  function Jss(options) {
+    _classCallCheck(this, Jss);
+
+    this.version = "8.1.0";
+    this.plugins = new _PluginsRegistry2['default']();
+
+    // eslint-disable-next-line prefer-spread
+    this.use.apply(this, _rules2['default']);
+    this.setup(options);
+  }
+
+  _createClass(Jss, [{
+    key: 'setup',
+    value: function setup() {
+      var options = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {};
+
+      var createGenerateClassName$$1 = options.createGenerateClassName || _createGenerateClassName2['default'];
+      this.generateClassName = createGenerateClassName$$1();
+      this.options = _extends({}, options, {
+        createGenerateClassName: createGenerateClassName$$1,
+        Renderer: (0, _findRenderer2['default'])(options)
+        // eslint-disable-next-line prefer-spread
+      });if (options.plugins) this.use.apply(this, options.plugins);
+      return this;
+    }
+
+    /**
+     * Create a Style Sheet.
+     */
+
+  }, {
+    key: 'createStyleSheet',
+    value: function createStyleSheet(styles) {
+      var options = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : {};
+
+      var index = options.index;
+      if (typeof index !== 'number') {
+        index = _sheets2['default'].index === 0 ? 0 : _sheets2['default'].index + 1;
+      }
+      var sheet = new _StyleSheet2['default'](styles, _extends({}, options, {
+        jss: this,
+        generateClassName: options.generateClassName || this.generateClassName,
+        insertionPoint: this.options.insertionPoint,
+        Renderer: this.options.Renderer,
+        index: index
+      }));
+      this.plugins.onProcessSheet(sheet);
+      return sheet;
+    }
+
+    /**
+     * Detach the Style Sheet and remove it from the registry.
+     */
+
+  }, {
+    key: 'removeStyleSheet',
+    value: function removeStyleSheet(sheet) {
+      sheet.detach();
+      _sheets2['default'].remove(sheet);
+      return this;
+    }
+
+    /**
+     * Create a rule without a Style Sheet.
+     */
+
+  }, {
+    key: 'createRule',
+    value: function createRule(name) {
+      var style = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : {};
+      var options = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : {};
+
+      // Enable rule without name for inline styles.
+      if ((typeof name === 'undefined' ? 'undefined' : _typeof(name)) === 'object') {
+        options = style;
+        style = name;
+        name = undefined;
+      }
+
+      // Cast from RuleFactoryOptions to RuleOptions
+      // https://stackoverflow.com/questions/41328728/force-casting-in-flow
+      var ruleOptions = options;
+
+      ruleOptions.jss = this;
+      ruleOptions.Renderer = this.options.Renderer;
+      if (!ruleOptions.generateClassName) ruleOptions.generateClassName = this.generateClassName;
+      if (!ruleOptions.classes) ruleOptions.classes = {};
+      var rule = (0, _createRule3['default'])(name, style, ruleOptions);
+      this.plugins.onProcessRule(rule);
+
+      return rule;
+    }
+
+    /**
+     * Register plugin. Passed function will be invoked with a rule instance.
+     */
+
+  }, {
+    key: 'use',
+    value: function use() {
+      var _this = this;
+
+      for (var _len = arguments.length, plugins = Array(_len), _key = 0; _key < _len; _key++) {
+        plugins[_key] = arguments[_key];
+      }
+
+      plugins.forEach(function (plugin) {
+        return _this.plugins.use(plugin);
+      });
+      return this;
+    }
+  }]);
+
+  return Jss;
+}();
+
+exports['default'] = Jss;
+});
+
+var index$3 = createCommonjsModule(function (module, exports) {
+'use strict';
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.create = exports.sheets = exports.RuleList = exports.SheetsManager = exports.SheetsRegistry = exports.getDynamicStyles = undefined;
+
+
+
+Object.defineProperty(exports, 'getDynamicStyles', {
+  enumerable: true,
+  get: function get() {
+    return _interopRequireDefault(getDynamicStyles)['default'];
+  }
+});
+
+
+
+Object.defineProperty(exports, 'SheetsRegistry', {
+  enumerable: true,
+  get: function get() {
+    return _interopRequireDefault(SheetsRegistry_1)['default'];
+  }
+});
+
+
+
+Object.defineProperty(exports, 'SheetsManager', {
+  enumerable: true,
+  get: function get() {
+    return _interopRequireDefault(SheetsManager_1)['default'];
+  }
+});
+
+
+
+Object.defineProperty(exports, 'RuleList', {
+  enumerable: true,
+  get: function get() {
+    return _interopRequireDefault(RuleList_1)['default'];
+  }
+});
+
+
+
+Object.defineProperty(exports, 'sheets', {
+  enumerable: true,
+  get: function get() {
+    return _interopRequireDefault(sheets)['default'];
+  }
+});
+
+
+
+var _Jss2 = _interopRequireDefault(Jss_1);
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
+
+/**
+ * Creates a new instance of Jss.
+ */
+var create = exports.create = function create(options) {
+  return new _Jss2['default'](options);
+};
+
+/**
+ * A global Jss instance.
+ */
+exports['default'] = create();
+});
+
+var index_1 = index$3.create;
+
+var index$5 = createCommonjsModule(function (module, exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports["default"] = camelCase;
+var regExp = /([A-Z])/g;
+
+/**
+ * Replace a string passed from String#replace.
+ * @param {String} str
+ * @return {String}
+ */
+function replace(str) {
+  return "-" + str.toLowerCase();
+}
+
+/**
+ * Convert camel cased property names to dash separated.
+ *
+ * @param {Object} style
+ * @return {Object}
+ */
+function convertCase(style) {
+  var converted = {};
+
+  for (var prop in style) {
+    converted[prop.replace(regExp, replace)] = style[prop];
+  }
+
+  if (style.fallbacks) {
+    if (Array.isArray(style.fallbacks)) converted.fallbacks = style.fallbacks.map(convertCase);else converted.fallbacks = convertCase(style.fallbacks);
+  }
+
+  return converted;
+}
+
+/**
+ * Allow camel cased property names by converting them back to dasherized.
+ *
+ * @param {Rule} rule
+ */
+function camelCase() {
+  function onProcessStyle(style) {
+    if (Array.isArray(style)) {
+      // Handle rules like @font-face, which can have multiple styles in an array
+      for (var index = 0; index < style.length; index++) {
+        style[index] = convertCase(style[index]);
+      }
+      return style;
+    }
+
+    return convertCase(style);
+  }
+
+  return { onProcessStyle: onProcessStyle };
+}
+});
+
+var jssCamel = unwrapExports(index$5);
+
 function ErrorableView(_ref) {
     var error = _ref.error;
 
@@ -5036,7 +7508,11 @@ function ErrorableView(_ref) {
     );
 }
 
-var atomize = createReactWrapper(react.Component, ErrorableView);
+var jss = index_1({
+    plugins: [jssCamel()]
+});
+
+var atomize = createReactWrapper(react.Component, ErrorableView, jss);
 var lomCreateElement = createCreateElement(atomize, react.createElement);
 global$1['lom_h'] = lomCreateElement;
 
@@ -5508,9 +7984,6 @@ var ARIADOMPropertyConfig = {
 
 var ARIADOMPropertyConfig_1 = ARIADOMPropertyConfig;
 
-/**
- * Injectable ordering of event plugins.
- */
 var eventPluginOrder = null;
 
 /**
@@ -5807,14 +8280,6 @@ var ReactErrorUtils = {
 
 var ReactErrorUtils_1 = ReactErrorUtils;
 
-/**
- * Injected dependencies:
- */
-
-/**
- * - `ComponentTree`: [required] Module that can convert between React instances
- *   and actual node references.
- */
 var ComponentTree;
 var TreeTraversal;
 var injection = {
@@ -6014,19 +8479,6 @@ var EventPluginUtils = {
 
 var EventPluginUtils_1 = EventPluginUtils;
 
-/**
- * Accumulates items that must not be null or undefined into the first one. This
- * is used to conserve memory by avoiding array allocations, and thus sacrifices
- * API cleanness. Since `current` can be null before being passed in and not
- * null after this function, make sure to assign it back to `current`:
- *
- * `a = accumulateInto(a, b);`
- *
- * This API should be sparingly used. Try `accumulate` for something cleaner.
- *
- * @return {*|array<*>} An accumulation of items.
- */
-
 function accumulateInto(current, next) {
   !(next != null) ? invariant_1(false, 'accumulateInto(...): Accumulated items must not be null or undefined.') : void 0;
 
@@ -6066,14 +8518,6 @@ var accumulateInto_1 = accumulateInto;
  * 
  */
 
-/**
- * @param {array} arr an "accumulation" of items which is either an Array or
- * a single item. Useful when paired with the `accumulate` module. This is a
- * simple utility that allows us to reason about a collection of items, but
- * handling the case when there is exactly one item (and we do not need to
- * allocate an array).
- */
-
 function forEachAccumulated(arr, cb, scope) {
   if (Array.isArray(arr)) {
     arr.forEach(cb, scope);
@@ -6084,9 +8528,6 @@ function forEachAccumulated(arr, cb, scope) {
 
 var forEachAccumulated_1 = forEachAccumulated;
 
-/**
- * Internal store for event listeners
- */
 var listenerBank = {};
 
 /**
@@ -6485,13 +8926,6 @@ var ExecutionEnvironment$1 = {
 
 var ExecutionEnvironment_1 = ExecutionEnvironment$1;
 
-/**
- * Static poolers. Several custom versions for each potential number of
- * arguments. A completely generic pooler is easy to implement, but would
- * require accessing the `arguments` object. In each of these, `this` refers to
- * the Class itself, not an instance. If any others are needed, simply add them
- * here, or in their own files.
- */
 var oneArgumentPooler$1 = function (copyFieldsFrom) {
   var Klass = this;
   if (Klass.instancePool.length) {
@@ -6599,24 +9033,13 @@ function getTextContentAccessor() {
 
 var getTextContentAccessor_1 = getTextContentAccessor;
 
-/**
- * This helper class stores information about text content of a target node,
- * allowing comparison of content before and after a given event.
- *
- * Identify the node where selection currently begins, then observe
- * both its text content and its current position in the DOM. Since the
- * browser may natively replace the target node during composition, we can
- * use its position to find its replacement.
- *
- * @param {DOMEventTarget} root
- */
 function FallbackCompositionState(root) {
   this._root = root;
   this._startText = this.getText();
   this._fallbackText = null;
 }
 
-index(FallbackCompositionState.prototype, {
+index$1(FallbackCompositionState.prototype, {
   destructor: function () {
     this._root = null;
     this._startText = null;
@@ -6760,7 +9183,7 @@ function SyntheticEvent(dispatchConfig, targetInst, nativeEvent, nativeEventTarg
   return this;
 }
 
-index(SyntheticEvent.prototype, {
+index$1(SyntheticEvent.prototype, {
   preventDefault: function () {
     this.defaultPrevented = true;
     var event = this.nativeEvent;
@@ -6873,11 +9296,11 @@ SyntheticEvent.augmentClass = function (Class, Interface) {
   E.prototype = Super.prototype;
   var prototype = new E();
 
-  index(prototype, Class.prototype);
+  index$1(prototype, Class.prototype);
   Class.prototype = prototype;
   Class.prototype.constructor = Class;
 
-  Class.Interface = index({}, Super.Interface, Interface);
+  Class.Interface = index$1({}, Super.Interface, Interface);
   Class.augmentClass = Super.augmentClass;
 
   PooledClass_1$2.addPoolingTo(Class, PooledClass_1$2.fourArgumentPooler);
@@ -6921,10 +9344,6 @@ function getPooledWarningPropertyDefinition(propName, getVal) {
   }
 }
 
-/**
- * @interface Event
- * @see http://www.w3.org/TR/DOM-Level-3-Events/#events-compositionevents
- */
 var CompositionEventInterface = {
   data: null
 };
@@ -6943,11 +9362,6 @@ SyntheticEvent_1.augmentClass(SyntheticCompositionEvent, CompositionEventInterfa
 
 var SyntheticCompositionEvent_1 = SyntheticCompositionEvent;
 
-/**
- * @interface Event
- * @see http://www.w3.org/TR/2013/WD-DOM-Level-3-Events-20131105
- *      /#events-inputevents
- */
 var InputEventInterface = {
   data: null
 };
@@ -7456,11 +9870,6 @@ var ReactFeatureFlags = {
 
 var ReactFeatureFlags_1 = ReactFeatureFlags;
 
-/**
- * @param {?object} object
- * @return {boolean} True if `object` is a valid owner.
- * @final
- */
 function isValidOwner(object) {
   return !!(object && typeof object.attachRef === 'function' && typeof object.detachRef === 'function');
 }
@@ -7667,19 +10076,6 @@ if (ExecutionEnvironment_1.canUseDOM) {
 }
 
 var performance_1 = performance$2 || {};
-
-/**
- * Copyright (c) 2013-present, Facebook, Inc.
- * All rights reserved.
- *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
- *
- * @typechecks
- */
-
-
 
 var performanceNow$1;
 
@@ -8040,8 +10436,6 @@ if (/[?&]react_perf\b/.test(url)) {
 
 var ReactDebugTool_1 = ReactDebugTool$1;
 
-// Trust the developer to only use ReactInstrumentation with a __DEV__ check
-
 var debugTool = null;
 
 {
@@ -8051,10 +10445,6 @@ var debugTool = null;
 
 var ReactInstrumentation$1 = { debugTool: debugTool };
 
-/**
- * Helper to call ReactRef.attachRefs with this composite component, split out
- * to avoid allocations in the transaction mount-ready queue.
- */
 function attachRefs() {
   ReactRef_1.attachRefs(this, this._currentElement);
 }
@@ -8460,7 +10850,7 @@ function ReactUpdatesFlushTransaction() {
   /* useCreateElement */true);
 }
 
-index(ReactUpdatesFlushTransaction.prototype, Transaction, {
+index$1(ReactUpdatesFlushTransaction.prototype, Transaction, {
   getTransactionWrappers: function () {
     return TRANSACTION_WRAPPERS;
   },
@@ -8758,14 +11148,6 @@ var inputValueTracking_1 = inputValueTracking;
  *
  */
 
-/**
- * Gets the target node from a native browser event by accounting for
- * inconsistencies in browser DOM APIs.
- *
- * @param {object} nativeEvent Native browser event.
- * @return {DOMEventTarget} Target node.
- */
-
 function getEventTarget(nativeEvent) {
   var target = nativeEvent.target || nativeEvent.srcElement || window;
 
@@ -8836,10 +11218,6 @@ var isEventSupported_1 = isEventSupported;
  * of patent rights can be found in the PATENTS file in the same directory.
  *
  * 
- */
-
-/**
- * @see http://www.whatwg.org/specs/web-apps/current-work/multipage/the-input-element.html#input-type-attr-summary
  */
 
 var supportedInputTypes = {
@@ -9174,24 +11552,10 @@ var ChangeEventPlugin_1 = ChangeEventPlugin;
  *
  */
 
-/**
- * Module that is injectable into `EventPluginHub`, that specifies a
- * deterministic ordering of `EventPlugin`s. A convenient way to reason about
- * plugins, without having to package every one of them. This is better than
- * having plugins be ordered in the same order that they are injected because
- * that ordering would be influenced by the packaging order.
- * `ResponderEventPlugin` must occur before `SimpleEventPlugin` so that
- * preventing default on events is convenient in `SimpleEventPlugin` handlers.
- */
-
 var DefaultEventPluginOrder = ['ResponderEventPlugin', 'SimpleEventPlugin', 'TapEventPlugin', 'EnterLeaveEventPlugin', 'ChangeEventPlugin', 'SelectEventPlugin', 'BeforeInputEventPlugin'];
 
 var DefaultEventPluginOrder_1 = DefaultEventPluginOrder;
 
-/**
- * @interface UIEvent
- * @see http://www.w3.org/TR/DOM-Level-3-Events/
- */
 var UIEventInterface = {
   view: function (event) {
     if (event.view) {
@@ -9264,11 +11628,6 @@ var ViewportMetrics_1 = ViewportMetrics;
  *
  */
 
-/**
- * Translation from modifier key to the associated property in the event.
- * @see http://www.w3.org/TR/DOM-Level-3-Events/#keys-Modifiers
- */
-
 var modifierKeyToProp = {
   Alt: 'altKey',
   Control: 'ctrlKey',
@@ -9295,10 +11654,6 @@ function getEventModifierState(nativeEvent) {
 
 var getEventModifierState_1 = getEventModifierState;
 
-/**
- * @interface MouseEvent
- * @see http://www.w3.org/TR/DOM-Level-3-Events/
- */
 var MouseEventInterface = {
   screenX: null,
   screenY: null,
@@ -9684,10 +12039,6 @@ var DOMNamespaces_1 = DOMNamespaces;
 
 /* globals MSApp */
 
-/**
- * Create a function which has 'unsafe' privileges (required by windows8 apps)
- */
-
 var createMicrosoftUnsafeLocalFunction = function (func) {
   if (typeof MSApp !== 'undefined' && MSApp.execUnsafeLocalFunction) {
     return function (arg0, arg1, arg2, arg3) {
@@ -9820,12 +12171,6 @@ var setInnerHTML_1 = setInnerHTML;
  *
  */
 
-// code copied and modified from escape-html
-/**
- * Module variables.
- * @private
- */
-
 var matchHtmlRegExp = /["'&<>]/;
 
 /**
@@ -9905,16 +12250,6 @@ function escapeTextContentForBrowser(text) {
 
 var escapeTextContentForBrowser_1 = escapeTextContentForBrowser;
 
-/**
- * Set the textContent property of a node, ensuring that whitespace is preserved
- * even in IE8. innerText is a poor substitute for textContent and, among many
- * issues, inserts <br> instead of the literal newline chars. innerHTML behaves
- * as it should.
- *
- * @param {DOMElement} node
- * @param {string} text
- * @internal
- */
 var setTextContent = function (node, text) {
   if (text) {
     var firstChild = node.firstChild;
@@ -10041,28 +12376,6 @@ DOMLazyTree.queueText = queueText;
 
 var DOMLazyTree_1 = DOMLazyTree;
 
-/**
- * Copyright (c) 2013-present, Facebook, Inc.
- * All rights reserved.
- *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
- *
- * @typechecks
- */
-
-
-
-/**
- * Convert array-like objects to arrays.
- *
- * This API assumes the caller knows the contents of the data type. For less
- * well defined inputs use createArrayFromMixed.
- *
- * @param {object|function|filelist} obj
- * @return {array}
- */
 function toArray$2(obj) {
   var length = obj.length;
 
@@ -10166,25 +12479,6 @@ function createArrayFromMixed(obj) {
 
 var createArrayFromMixed_1 = createArrayFromMixed;
 
-/**
- * Copyright (c) 2013-present, Facebook, Inc.
- * All rights reserved.
- *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
- *
- */
-
-/*eslint-disable fb-www/unsafe-html */
-
-
-
-
-
-/**
- * Dummy container used to detect which wraps are necessary.
- */
 var dummyNode$1 = ExecutionEnvironment_1.canUseDOM ? document.createElement('div') : null;
 
 /**
@@ -10259,28 +12553,6 @@ function getMarkupWrap(nodeName) {
 
 var getMarkupWrap_1 = getMarkupWrap;
 
-/**
- * Copyright (c) 2013-present, Facebook, Inc.
- * All rights reserved.
- *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
- *
- * @typechecks
- */
-
-/*eslint-disable fb-www/unsafe-html*/
-
-
-
-
-
-
-
-/**
- * Dummy container used to render all markup.
- */
 var dummyNode = ExecutionEnvironment_1.canUseDOM ? document.createElement('div') : null;
 
 /**
@@ -10571,9 +12843,6 @@ var DOMChildrenOperations = {
 
 var DOMChildrenOperations_1 = DOMChildrenOperations;
 
-/**
- * Operations used to process updates to DOM nodes.
- */
 var ReactDOMIDOperations = {
   /**
    * Updates a component's children by processing a series of updates.
@@ -10589,11 +12858,6 @@ var ReactDOMIDOperations = {
 
 var ReactDOMIDOperations_1 = ReactDOMIDOperations;
 
-/**
- * Abstracts away all functionality of the reconciler that requires knowledge of
- * the browser context. TODO: These callers should be refactored to avoid the
- * need for this injection.
- */
 var ReactComponentBrowserEnvironment = {
   processChildrenUpdates: ReactDOMIDOperations_1.dangerouslyProcessChildrenUpdates,
 
@@ -10610,10 +12874,6 @@ var ReactComponentBrowserEnvironment_1 = ReactComponentBrowserEnvironment;
  * LICENSE file in the root directory of this source tree. An additional grant
  * of patent rights can be found in the PATENTS file in the same directory.
  *
- */
-
-/**
- * @param {DOMElement} node input/textarea to focus
  */
 
 function focusNode(node) {
@@ -10643,10 +12903,6 @@ var AutoFocusUtils_1 = AutoFocusUtils;
  * LICENSE file in the root directory of this source tree. An additional grant
  * of patent rights can be found in the PATENTS file in the same directory.
  *
- */
-
-/**
- * CSS properties which accept numbers but are not in units of "px".
  */
 
 var isUnitlessNumber = {
@@ -10787,17 +13043,6 @@ var CSSProperty = {
 
 var CSSProperty_1 = CSSProperty;
 
-/**
- * Copyright (c) 2013-present, Facebook, Inc.
- * All rights reserved.
- *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
- *
- * @typechecks
- */
-
 var _hyphenPattern = /-(.)/g;
 
 /**
@@ -10906,17 +13151,6 @@ function dangerousStyleValue(name, value, component, isCustomProperty) {
 
 var dangerousStyleValue_1 = dangerousStyleValue;
 
-/**
- * Copyright (c) 2013-present, Facebook, Inc.
- * All rights reserved.
- *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
- *
- * @typechecks
- */
-
 var _uppercasePattern = /([A-Z])/g;
 
 /**
@@ -10971,10 +13205,6 @@ var hyphenateStyleName_1 = hyphenateStyleName;
  *
  * 
  * @typechecks static-only
- */
-
-/**
- * Memoizes the return value of a function that accepts one string argument.
  */
 
 function memoizeStringOnly(callback) {
@@ -11182,12 +13412,6 @@ var CSSPropertyOperations = {
 
 var CSSPropertyOperations_1 = CSSPropertyOperations;
 
-/**
- * Escapes attribute value to prevent scripting attacks.
- *
- * @param {*} value Value to escape.
- * @return {string} An escaped string.
- */
 function quoteAttributeValueForBrowser(value) {
   return '"' + escapeTextContentForBrowser_1(value) + '"';
 }
@@ -11428,13 +13652,6 @@ var ReactEventEmitterMixin = {
 
 var ReactEventEmitterMixin_1 = ReactEventEmitterMixin;
 
-/**
- * Generate a mapping of standard vendor prefixes using the defined style property and event name.
- *
- * @param {string} styleProp
- * @param {string} eventName
- * @returns {object}
- */
 function makePrefixMap(styleProp, eventName) {
   var prefixes = {};
 
@@ -11514,61 +13731,6 @@ function getVendorPrefixedEventName(eventName) {
 }
 
 var getVendorPrefixedEventName_1 = getVendorPrefixedEventName;
-
-/**
- * Summary of `ReactBrowserEventEmitter` event handling:
- *
- *  - Top-level delegation is used to trap most native browser events. This
- *    may only occur in the main thread and is the responsibility of
- *    ReactEventListener, which is injected and can therefore support pluggable
- *    event sources. This is the only work that occurs in the main thread.
- *
- *  - We normalize and de-duplicate events to account for browser quirks. This
- *    may be done in the worker thread.
- *
- *  - Forward these native events (with the associated top-level type used to
- *    trap it) to `EventPluginHub`, which in turn will ask plugins if they want
- *    to extract any synthetic events.
- *
- *  - The `EventPluginHub` will then process each event by annotating them with
- *    "dispatches", a sequence of listeners and IDs that care about that event.
- *
- *  - The `EventPluginHub` then dispatches the events.
- *
- * Overview of React and the event system:
- *
- * +------------+    .
- * |    DOM     |    .
- * +------------+    .
- *       |           .
- *       v           .
- * +------------+    .
- * | ReactEvent |    .
- * |  Listener  |    .
- * +------------+    .                         +-----------+
- *       |           .               +--------+|SimpleEvent|
- *       |           .               |         |Plugin     |
- * +-----|------+    .               v         +-----------+
- * |     |      |    .    +--------------+                    +------------+
- * |     +-----------.--->|EventPluginHub|                    |    Event   |
- * |            |    .    |              |     +-----------+  | Propagators|
- * | ReactEvent |    .    |              |     |TapEvent   |  |------------|
- * |  Emitter   |    .    |              |<---+|Plugin     |  |other plugin|
- * |            |    .    |              |     +-----------+  |  utilities |
- * |     +-----------.--->|              |                    +------------+
- * |     |      |    .    +--------------+
- * +-----|------+    .                ^        +-----------+
- *       |           .                |        |Enter/Leave|
- *       +           .                +-------+|Plugin     |
- * +-------------+   .                         +-----------+
- * | application |   .
- * |-------------|   .
- * |             |   .
- * |             |   .
- * +-------------+   .
- *                   .
- *    React Core     .  General Purpose Event Plugin System
- */
 
 var hasEventPageXY;
 var alreadyListeningTo = {};
@@ -11670,7 +13832,7 @@ function getListeningForDocument(mountAt) {
  *
  * @internal
  */
-var ReactBrowserEventEmitter = index({}, ReactEventEmitterMixin_1, {
+var ReactBrowserEventEmitter = index$1({}, ReactEventEmitterMixin_1, {
   /**
    * Injectable event backend
    */
@@ -11993,7 +14155,7 @@ var ReactDOMInput = {
     var value = LinkedValueUtils_1.getValue(props);
     var checked = LinkedValueUtils_1.getChecked(props);
 
-    var hostProps = index({
+    var hostProps = index$1({
       // Make sure we set .type before any other properties (setting .value
       // before .type means .value is lost in IE11 and below)
       type: undefined,
@@ -12326,7 +14488,7 @@ function updateOptions(inst, multiple, propValue) {
  */
 var ReactDOMSelect = {
   getHostProps: function (inst, props) {
-    return index({}, props, {
+    return index$1({}, props, {
       onChange: inst._wrapperState.onChange,
       value: undefined
     });
@@ -12480,7 +14642,7 @@ var ReactDOMOption = {
   },
 
   getHostProps: function (inst, props) {
-    var hostProps = index({ selected: undefined, children: undefined }, props);
+    var hostProps = index$1({ selected: undefined, children: undefined }, props);
 
     // Read state only from initial mount because <select> updates value
     // manually; we need the initial state only for server rendering
@@ -12534,7 +14696,7 @@ var ReactDOMTextarea = {
     // to only set the value if/when the value differs from the node value (which would
     // completely solve this IE9 bug), but Sebastian+Ben seemed to like this solution.
     // The value can be a boolean or object so that's why it's forced to be a string.
-    var hostProps = index({}, props, {
+    var hostProps = index$1({}, props, {
       value: undefined,
       defaultValue: undefined,
       children: '' + inst._wrapperState.initialValue,
@@ -12674,15 +14836,6 @@ var ReactComponentEnvironment_1 = ReactComponentEnvironment;
  * of patent rights can be found in the PATENTS file in the same directory.
  *
  */
-
-/**
- * `ReactInstanceMap` maintains a mapping from a public facing stateful
- * instance (key) and the internal representation (value). This allows public
- * methods to accept the user facing instance as an argument and map them back
- * to internal methods.
- */
-
-// TODO: Replace this with ES6: var ReactInstanceMap = new Map();
 
 var ReactInstanceMap = {
   /**
@@ -12883,18 +15036,6 @@ var shallowEqual_1 = shallowEqual;
  * LICENSE file in the root directory of this source tree. An additional grant
  * of patent rights can be found in the PATENTS file in the same directory.
  *
- */
-
-/**
- * Given a `prevElement` and `nextElement`, determines if the existing
- * instance should be updated as opposed to being destroyed or replaced by a new
- * instance. Both arguments are elements. This ensures that this logic can
- * operate on stateless trees without any backing instance.
- *
- * @param {?object} prevElement
- * @param {?object} nextElement
- * @return {boolean} True if the existing instance should be updated.
- * @protected
  */
 
 function shouldUpdateReactComponent(prevElement, nextElement) {
@@ -13397,7 +15538,7 @@ var ReactCompositeComponent = {
       for (var name in childContext) {
         !(name in Component.childContextTypes) ? invariant_1(false, '%s.getChildContext(): key "%s" is not defined in childContextTypes.', this.getName() || 'ReactCompositeComponent', name) : void 0;
       }
-      return index({}, currentContext, childContext);
+      return index$1({}, currentContext, childContext);
     }
     return currentContext;
   },
@@ -13543,10 +15684,10 @@ var ReactCompositeComponent = {
       return queue[0];
     }
 
-    var nextState = index({}, replace ? queue[0] : inst.state);
+    var nextState = index$1({}, replace ? queue[0] : inst.state);
     for (var i = replace ? 1 : 0; i < queue.length; i++) {
       var partial = queue[i];
-      index(nextState, typeof partial === 'function' ? partial.call(inst, nextState, props, context) : partial);
+      index$1(nextState, typeof partial === 'function' ? partial.call(inst, nextState, props, context) : partial);
     }
 
     return nextState;
@@ -13866,7 +16007,6 @@ function getNextDebugID() {
 
 var getNextDebugID_1 = getNextDebugID;
 
-// To avoid a cyclic dependency, we create the final class in this module
 var ReactCompositeComponentWrapper = function (element) {
   this.construct(element);
 };
@@ -13966,7 +16106,7 @@ function instantiateReactComponent(node, shouldHaveDebugID) {
   return instance;
 }
 
-index(ReactCompositeComponentWrapper.prototype, ReactCompositeComponent_1, {
+index$1(ReactCompositeComponentWrapper.prototype, ReactCompositeComponent_1, {
   _instantiateReactComponent: instantiateReactComponent
 });
 
@@ -13981,13 +16121,6 @@ var instantiateReactComponent_1 = instantiateReactComponent;
  * of patent rights can be found in the PATENTS file in the same directory.
  *
  * 
- */
-
-/**
- * Escape and wrap key so it is safe to use as a reactid
- *
- * @param {string} key to be escaped.
- * @return {string} the escaped key.
  */
 
 function escape$1(key) {
@@ -14040,9 +16173,6 @@ var KeyEscapeUtils_1$2 = KeyEscapeUtils$2;
  * 
  */
 
-// The Symbol used to tag the ReactElement type. If there is no native Symbol
-// nor polyfill, then a plain number is used for performance.
-
 var REACT_ELEMENT_TYPE$2 = typeof Symbol === 'function' && Symbol['for'] && Symbol['for']('react.element') || 0xeac7;
 
 var ReactElementSymbol$2 = REACT_ELEMENT_TYPE$2;
@@ -14057,8 +16187,6 @@ var ReactElementSymbol$2 = REACT_ELEMENT_TYPE$2;
  *
  * 
  */
-
-/* global Symbol */
 
 var ITERATOR_SYMBOL$1 = typeof Symbol === 'function' && Symbol.iterator;
 var FAUX_ITERATOR_SYMBOL$1 = '@@iterator'; // Before Symbol spec.
@@ -14428,13 +16556,6 @@ function flattenChildren$1(children, selfDebugID) {
 
 var flattenChildren_1 = flattenChildren$1;
 
-/**
- * Make an update for markup to be rendered and inserted at a supplied index.
- *
- * @param {string} markup Markup that renders into an element.
- * @param {number} toIndex Destination index.
- * @private
- */
 function makeInsertMarkup(markup, afterNode, toIndex) {
   // NOTE: Null values reduce hidden classes.
   return {
@@ -15186,11 +17307,6 @@ var ReactServerUpdateQueue = function () {
 
 var ReactServerUpdateQueue_1 = ReactServerUpdateQueue;
 
-/**
- * Executed within the scope of the `Transaction` instance. Consider these as
- * being member methods, but with an implied ordering while being isolated from
- * each other.
- */
 var TRANSACTION_WRAPPERS$1 = [];
 
 {
@@ -15251,7 +17367,7 @@ var Mixin = {
   rollback: function () {}
 };
 
-index(ReactServerRenderingTransaction.prototype, Transaction, Mixin);
+index$1(ReactServerRenderingTransaction.prototype, Transaction, Mixin);
 
 PooledClass_1$2.addPoolingTo(ReactServerRenderingTransaction);
 
@@ -15302,7 +17418,7 @@ var validateDOMNesting = emptyFunction_1;
   };
 
   var updatedAncestorInfo = function (oldInfo, tag, instance) {
-    var ancestorInfo = index({}, oldInfo || emptyAncestorInfo);
+    var ancestorInfo = index$1({}, oldInfo || emptyAncestorInfo);
     var info = { tag: tag, instance: instance };
 
     if (inScopeTags.indexOf(tag) !== -1) {
@@ -15896,7 +18012,7 @@ var newlineEatingTags = {
 // For HTML, certain tags cannot have children. This has the same purpose as
 // `omittedCloseTags` except that `menuitem` should still have its closing tag.
 
-var voidElementTags = index({
+var voidElementTags = index$1({
   menuitem: true
 }, omittedCloseTags);
 
@@ -16165,7 +18281,7 @@ ReactDOMComponent.Mixin = {
               // See `_updateDOMProperties`. style block
               this._previousStyle = propValue;
             }
-            propValue = this._previousStyleCopy = index({}, props.style);
+            propValue = this._previousStyleCopy = index$1({}, props.style);
           }
           propValue = CSSPropertyOperations_1.createMarkupForStyles(propValue, this);
         }
@@ -16405,7 +18521,7 @@ ReactDOMComponent.Mixin = {
             checkAndWarnForMutatedStyle(this._previousStyleCopy, this._previousStyle, this);
             this._previousStyle = nextProp;
           }
-          nextProp = this._previousStyleCopy = index({}, nextProp);
+          nextProp = this._previousStyleCopy = index$1({}, nextProp);
         } else {
           this._previousStyleCopy = null;
         }
@@ -16572,7 +18688,7 @@ ReactDOMComponent.Mixin = {
   }
 };
 
-index(ReactDOMComponent.prototype, ReactDOMComponent.Mixin, ReactMultiChild_1.Mixin);
+index$1(ReactDOMComponent.prototype, ReactDOMComponent.Mixin, ReactMultiChild_1.Mixin);
 
 var ReactDOMComponent_1 = ReactDOMComponent;
 
@@ -16585,7 +18701,7 @@ var ReactDOMEmptyComponent = function (instantiate) {
   this._hostContainerInfo = null;
   this._domID = 0;
 };
-index(ReactDOMEmptyComponent.prototype, {
+index$1(ReactDOMEmptyComponent.prototype, {
   mountComponent: function (transaction, hostParent, hostContainerInfo, context) {
     var domID = hostContainerInfo._idCounter++;
     this._domID = domID;
@@ -16619,10 +18735,6 @@ index(ReactDOMEmptyComponent.prototype, {
 
 var ReactDOMEmptyComponent_1 = ReactDOMEmptyComponent;
 
-/**
- * Return the lowest common ancestor of A and B, or null if they are in
- * different trees.
- */
 function getLowestCommonAncestor(instA, instB) {
   !('_hostNode' in instA) ? invariant_1(false, 'getNodeFromInstance: Invalid argument.') : void 0;
   !('_hostNode' in instB) ? invariant_1(false, 'getNodeFromInstance: Invalid argument.') : void 0;
@@ -16739,21 +18851,6 @@ var ReactDOMTreeTraversal = {
   traverseEnterLeave: traverseEnterLeave
 };
 
-/**
- * Text nodes violate a couple assumptions that React makes about components:
- *
- *  - When mounting text into the DOM, adjacent text nodes are merged.
- *  - Text nodes cannot be assigned a React root ID.
- *
- * This component is used to wrap strings between comment nodes so that they
- * can undergo the same reconciliation that is applied to elements.
- *
- * TODO: Investigate representing React components in the DOM with text nodes.
- *
- * @class ReactDOMTextComponent
- * @extends ReactComponent
- * @internal
- */
 var ReactDOMTextComponent = function (text) {
   // TODO: This is really a ReactText (ReactNode), not a ReactElement
   this._currentElement = text;
@@ -16769,7 +18866,7 @@ var ReactDOMTextComponent = function (text) {
   this._commentNodes = null;
 };
 
-index(ReactDOMTextComponent.prototype, {
+index$1(ReactDOMTextComponent.prototype, {
   /**
    * Creates the markup for this text node. This node is not intended to have
    * any features besides containing text content.
@@ -16896,7 +18993,7 @@ function ReactDefaultBatchingStrategyTransaction() {
   this.reinitializeTransaction();
 }
 
-index(ReactDefaultBatchingStrategyTransaction.prototype, Transaction, {
+index$1(ReactDefaultBatchingStrategyTransaction.prototype, Transaction, {
   getTransactionWrappers: function () {
     return TRANSACTION_WRAPPERS$2;
   }
@@ -16927,30 +19024,6 @@ var ReactDefaultBatchingStrategy = {
 
 var ReactDefaultBatchingStrategy_1 = ReactDefaultBatchingStrategy;
 
-/**
- * Copyright (c) 2013-present, Facebook, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
- * @typechecks
- */
-
-
-
-/**
- * Upstream version of event listener. Does not take into account specific
- * nature of platform.
- */
 var EventListener = {
   /**
    * Listen to DOM events during the bubble phase.
@@ -17020,17 +19093,6 @@ var EventListener_1 = EventListener;
  * @typechecks
  */
 
-/**
- * Gets the scroll position of the supplied element or window.
- *
- * The return values are unbounded, unlike `getScrollPosition`. This means they
- * may be negative or exceed the element boundaries (which is possible using
- * inertial scrolling).
- *
- * @param {DOMWindow|DOMElement} scrollable
- * @return {object} Map with `x` and `y` keys.
- */
-
 function getUnboundedScrollPosition(scrollable) {
   if (scrollable.Window && scrollable instanceof scrollable.Window) {
     return {
@@ -17046,11 +19108,6 @@ function getUnboundedScrollPosition(scrollable) {
 
 var getUnboundedScrollPosition_1 = getUnboundedScrollPosition;
 
-/**
- * Find the deepest React component completely containing the root of the
- * passed-in instance (for use when entire React trees are nested within each
- * other). If React trees are not nested, returns null.
- */
 function findParent(inst) {
   // TODO: It may be a good idea to cache this to prevent unnecessary DOM
   // traversal, but caching is difficult to do correctly without using a
@@ -17069,7 +19126,7 @@ function TopLevelCallbackBookKeeping(topLevelType, nativeEvent) {
   this.nativeEvent = nativeEvent;
   this.ancestors = [];
 }
-index(TopLevelCallbackBookKeeping.prototype, {
+index$1(TopLevelCallbackBookKeeping.prototype, {
   destructor: function () {
     this.topLevelType = null;
     this.nativeEvent = null;
@@ -17201,13 +19258,6 @@ var ReactInjection_1 = ReactInjection;
  *
  */
 
-/**
- * Given any node return the first leaf node without children.
- *
- * @param {DOMElement|DOMTextNode} node
- * @return {DOMElement|DOMTextNode}
- */
-
 function getLeafNode(node) {
   while (node && node.firstChild) {
     node = node.firstChild;
@@ -17263,11 +19313,6 @@ function getNodeForCharacterOffset(root, offset) {
 
 var getNodeForCharacterOffset_1 = getNodeForCharacterOffset;
 
-/**
- * While `isCollapsed` is available on the Selection object and `collapsed`
- * is available on the Range object, IE11 sometimes gets them wrong.
- * If the anchor/focus nodes and offsets are the same, the range is collapsed.
- */
 function isCollapsed(anchorNode, anchorOffset, focusNode, focusOffset) {
   return anchorNode === focusNode && anchorOffset === focusOffset;
 }
@@ -17458,21 +19503,6 @@ var ReactDOMSelection = {
 
 var ReactDOMSelection_1 = ReactDOMSelection;
 
-/**
- * Copyright (c) 2013-present, Facebook, Inc.
- * All rights reserved.
- *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
- *
- * @typechecks
- */
-
-/**
- * @param {*} object The object to check.
- * @return {boolean} Whether or not the object is a DOM node.
- */
 function isNode(object) {
   var doc = object ? object.ownerDocument || object : document;
   var defaultView = doc.defaultView || window;
@@ -17481,47 +19511,12 @@ function isNode(object) {
 
 var isNode_1 = isNode;
 
-/**
- * Copyright (c) 2013-present, Facebook, Inc.
- * All rights reserved.
- *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
- *
- * @typechecks
- */
-
-
-
-/**
- * @param {*} object The object to check.
- * @return {boolean} Whether or not the object is a DOM text node.
- */
 function isTextNode(object) {
   return isNode_1(object) && object.nodeType == 3;
 }
 
 var isTextNode_1 = isTextNode;
 
-/**
- * Copyright (c) 2013-present, Facebook, Inc.
- * All rights reserved.
- *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
- *
- * 
- */
-
-
-
-/*eslint-disable no-bitwise */
-
-/**
- * Checks if a given DOM node contains or is another DOM node.
- */
 function containsNode(outerNode, innerNode) {
   if (!outerNode || !innerNode) {
     return false;
@@ -17542,29 +19537,6 @@ function containsNode(outerNode, innerNode) {
 
 var containsNode_1 = containsNode;
 
-/**
- * Copyright (c) 2013-present, Facebook, Inc.
- * All rights reserved.
- *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
- *
- * @typechecks
- */
-
-/* eslint-disable fb-www/typeof-undefined */
-
-/**
- * Same as document.activeElement but wraps in a try-catch block. In IE it is
- * not safe to call document.activeElement if there is nothing focused.
- *
- * The activeElement will be null only if the document or document body is not
- * yet defined.
- *
- * @param {?DOMDocument} doc Defaults to current document.
- * @return {?DOMElement}
- */
 function getActiveElement(doc) /*?DOMElement*/{
   doc = doc || (typeof document !== 'undefined' ? document : undefined);
   if (typeof doc === 'undefined') {
@@ -17684,10 +19656,6 @@ var ReactInputSelection = {
 
 var ReactInputSelection_1 = ReactInputSelection;
 
-/**
- * Ensures that, when possible, the selection range (currently selected text
- * input) is not disturbed by performing the transaction.
- */
 var SELECTION_RESTORATION = {
   /**
    * @return {Selection} Selection information.
@@ -17834,7 +19802,7 @@ var Mixin$1 = {
   }
 };
 
-index(ReactReconcileTransaction.prototype, Transaction, Mixin$1);
+index$1(ReactReconcileTransaction.prototype, Transaction, Mixin$1);
 
 PooledClass_1$2.addPoolingTo(ReactReconcileTransaction);
 
@@ -18306,11 +20274,6 @@ var SelectEventPlugin = {
 
 var SelectEventPlugin_1 = SelectEventPlugin;
 
-/**
- * @interface Event
- * @see http://www.w3.org/TR/css3-animations/#AnimationEvent-interface
- * @see https://developer.mozilla.org/en-US/docs/Web/API/AnimationEvent
- */
 var AnimationEventInterface = {
   animationName: null,
   elapsedTime: null,
@@ -18331,10 +20294,6 @@ SyntheticEvent_1.augmentClass(SyntheticAnimationEvent, AnimationEventInterface);
 
 var SyntheticAnimationEvent_1 = SyntheticAnimationEvent;
 
-/**
- * @interface Event
- * @see http://www.w3.org/TR/clipboard-apis/
- */
 var ClipboardEventInterface = {
   clipboardData: function (event) {
     return 'clipboardData' in event ? event.clipboardData : window.clipboardData;
@@ -18355,10 +20314,6 @@ SyntheticEvent_1.augmentClass(SyntheticClipboardEvent, ClipboardEventInterface);
 
 var SyntheticClipboardEvent_1 = SyntheticClipboardEvent;
 
-/**
- * @interface FocusEvent
- * @see http://www.w3.org/TR/DOM-Level-3-Events/
- */
 var FocusEventInterface = {
   relatedTarget: null
 };
@@ -18385,17 +20340,6 @@ var SyntheticFocusEvent_1 = SyntheticFocusEvent;
  * LICENSE file in the root directory of this source tree. An additional grant
  * of patent rights can be found in the PATENTS file in the same directory.
  *
- */
-
-/**
- * `charCode` represents the actual "character code" and is safe to use with
- * `String.fromCharCode`. As such, only keys that correspond to printable
- * characters produce a valid `charCode`, the only exception to this is Enter.
- * The Tab-key is considered non-printable and does not have a `charCode`,
- * presumably because it does not produce a tab-character in browsers.
- *
- * @param {object} nativeEvent Native browser event.
- * @return {number} Normalized `charCode` property.
  */
 
 function getEventCharCode(nativeEvent) {
@@ -18425,10 +20369,6 @@ function getEventCharCode(nativeEvent) {
 
 var getEventCharCode_1 = getEventCharCode;
 
-/**
- * Normalization of deprecated HTML5 `key` values
- * @see https://developer.mozilla.org/en-US/docs/Web/API/KeyboardEvent#Key_names
- */
 var normalizeKey = {
   Esc: 'Escape',
   Spacebar: ' ',
@@ -18523,10 +20463,6 @@ function getEventKey(nativeEvent) {
 
 var getEventKey_1 = getEventKey;
 
-/**
- * @interface KeyboardEvent
- * @see http://www.w3.org/TR/DOM-Level-3-Events/
- */
 var KeyboardEventInterface = {
   key: getEventKey_1,
   location: null,
@@ -18589,10 +20525,6 @@ SyntheticUIEvent_1.augmentClass(SyntheticKeyboardEvent, KeyboardEventInterface);
 
 var SyntheticKeyboardEvent_1 = SyntheticKeyboardEvent;
 
-/**
- * @interface DragEvent
- * @see http://www.w3.org/TR/DOM-Level-3-Events/
- */
 var DragEventInterface = {
   dataTransfer: null
 };
@@ -18611,10 +20543,6 @@ SyntheticMouseEvent_1.augmentClass(SyntheticDragEvent, DragEventInterface);
 
 var SyntheticDragEvent_1 = SyntheticDragEvent;
 
-/**
- * @interface TouchEvent
- * @see http://www.w3.org/TR/touch-events/
- */
 var TouchEventInterface = {
   touches: null,
   targetTouches: null,
@@ -18640,11 +20568,6 @@ SyntheticUIEvent_1.augmentClass(SyntheticTouchEvent, TouchEventInterface);
 
 var SyntheticTouchEvent_1 = SyntheticTouchEvent;
 
-/**
- * @interface Event
- * @see http://www.w3.org/TR/2009/WD-css3-transitions-20090320/#transition-events-
- * @see https://developer.mozilla.org/en-US/docs/Web/API/TransitionEvent
- */
 var TransitionEventInterface = {
   propertyName: null,
   elapsedTime: null,
@@ -18665,10 +20588,6 @@ SyntheticEvent_1.augmentClass(SyntheticTransitionEvent, TransitionEventInterface
 
 var SyntheticTransitionEvent_1 = SyntheticTransitionEvent;
 
-/**
- * @interface WheelEvent
- * @see http://www.w3.org/TR/DOM-Level-3-Events/
- */
 var WheelEventInterface = {
   deltaX: function (event) {
     return 'deltaX' in event ? event.deltaX : // Fallback to `wheelDeltaX` for Webkit and normalize (right is positive).
@@ -18702,24 +20621,6 @@ SyntheticMouseEvent_1.augmentClass(SyntheticWheelEvent, WheelEventInterface);
 
 var SyntheticWheelEvent_1 = SyntheticWheelEvent;
 
-/**
- * Turns
- * ['abort', ...]
- * into
- * eventTypes = {
- *   'abort': {
- *     phasedRegistrationNames: {
- *       bubbled: 'onAbort',
- *       captured: 'onAbortCapture',
- *     },
- *     dependencies: ['topAbort'],
- *   },
- *   ...
- * };
- * topLevelEventsToDispatchConfig = {
- *   'topAbort': { sameConfig }
- * };
- */
 var eventTypes$4 = {};
 var topLevelEventsToDispatchConfig = {};
 ['abort', 'animationEnd', 'animationIteration', 'animationStart', 'blur', 'canPlay', 'canPlayThrough', 'click', 'contextMenu', 'copy', 'cut', 'doubleClick', 'drag', 'dragEnd', 'dragEnter', 'dragExit', 'dragLeave', 'dragOver', 'dragStart', 'drop', 'durationChange', 'emptied', 'encrypted', 'ended', 'error', 'focus', 'input', 'invalid', 'keyDown', 'keyPress', 'keyUp', 'load', 'loadedData', 'loadedMetadata', 'loadStart', 'mouseDown', 'mouseMove', 'mouseOut', 'mouseOver', 'mouseUp', 'paste', 'pause', 'play', 'playing', 'progress', 'rateChange', 'reset', 'scroll', 'seeked', 'seeking', 'stalled', 'submit', 'suspend', 'timeUpdate', 'touchCancel', 'touchEnd', 'touchMove', 'touchStart', 'transitionEnd', 'volumeChange', 'waiting', 'wheel'].forEach(function (event) {
@@ -19591,14 +21492,6 @@ function getHostComponentFromComposite(inst) {
 
 var getHostComponentFromComposite_1 = getHostComponentFromComposite;
 
-/**
- * Returns the DOM node rendered by this element.
- *
- * See https://facebook.github.io/react/docs/top-level-api.html#reactdom.finddomnode
- *
- * @param {ReactComponent|DOMElement} componentOrElement
- * @return {?DOMElement} The root node of this element.
- */
 function findDOMNode(componentOrElement) {
   {
     var owner = ReactCurrentOwner_1.current;
@@ -19913,9 +21806,9 @@ if (typeof __REACT_DEVTOOLS_GLOBAL_HOOK__ !== 'undefined' && typeof __REACT_DEVT
 
 var ReactDOM_1 = ReactDOM$1;
 
-var index$2 = ReactDOM_1;
+var index$6 = ReactDOM_1;
 
-var _class$1;
+var _class$2;
 
 function _applyDecoratedDescriptor$3(target, property, decorators, descriptor, context) {
     var desc = {};
@@ -19946,7 +21839,7 @@ function _applyDecoratedDescriptor$3(target, property, decorators, descriptor, c
     return desc;
 }
 
-var Counter = (_class$1 = function () {
+var Counter = (_class$2 = function () {
     function Counter() {
         classCallCheck(this, Counter);
     }
@@ -19970,7 +21863,7 @@ var Counter = (_class$1 = function () {
         }
     }]);
     return Counter;
-}(), (_applyDecoratedDescriptor$3(_class$1.prototype, 'value', [mem], Object.getOwnPropertyDescriptor(_class$1.prototype, 'value'), _class$1.prototype), _applyDecoratedDescriptor$3(_class$1.prototype, 'value', [mem], Object.getOwnPropertyDescriptor(_class$1.prototype, 'value'), _class$1.prototype)), _class$1);
+}(), (_applyDecoratedDescriptor$3(_class$2.prototype, 'value', [mem], Object.getOwnPropertyDescriptor(_class$2.prototype, 'value'), _class$2.prototype), _applyDecoratedDescriptor$3(_class$2.prototype, 'value', [mem], Object.getOwnPropertyDescriptor(_class$2.prototype, 'value'), _class$2.prototype)), _class$2);
 
 function CounterView(_ref) {
     var counter = _ref.counter;
@@ -20001,7 +21894,7 @@ function CounterView(_ref) {
     );
 }
 
-var _class$3;
+var _class$4;
 var _descriptor$2;
 
 function _initDefineProp$2(target, property, descriptor, context) {
@@ -20043,7 +21936,7 @@ function _applyDecoratedDescriptor$5(target, property, decorators, descriptor, c
     return desc;
 }
 
-var Locale = (_class$3 = function () {
+var Locale = (_class$4 = function () {
     createClass(Locale, [{
         key: 'lang',
         get: function get$$1() {
@@ -20067,14 +21960,14 @@ var Locale = (_class$3 = function () {
     }
 
     return Locale;
-}(), (_descriptor$2 = _applyDecoratedDescriptor$5(_class$3.prototype, '$', [force], {
+}(), (_descriptor$2 = _applyDecoratedDescriptor$5(_class$4.prototype, '$', [force], {
     enumerable: true,
     initializer: null
-}), _applyDecoratedDescriptor$5(_class$3.prototype, 'lang', [mem], Object.getOwnPropertyDescriptor(_class$3.prototype, 'lang'), _class$3.prototype), _applyDecoratedDescriptor$5(_class$3.prototype, 'lang', [mem], Object.getOwnPropertyDescriptor(_class$3.prototype, 'lang'), _class$3.prototype)), _class$3);
+}), _applyDecoratedDescriptor$5(_class$4.prototype, 'lang', [mem], Object.getOwnPropertyDescriptor(_class$4.prototype, 'lang'), _class$4.prototype), _applyDecoratedDescriptor$5(_class$4.prototype, 'lang', [mem], Object.getOwnPropertyDescriptor(_class$4.prototype, 'lang'), _class$4.prototype)), _class$4);
 
-var _class$2;
+var _class$3;
 var _descriptor$1;
-var _class3;
+var _class3$1;
 var _descriptor2$1;
 var _class5;
 var _temp;
@@ -20118,27 +22011,27 @@ function _applyDecoratedDescriptor$4(target, property, decorators, descriptor, c
     return desc;
 }
 
-var Hello = (_class$2 = function Hello() {
+var Hello = (_class$3 = function Hello() {
     classCallCheck(this, Hello);
 
     _initDefineProp$1(this, 'name', _descriptor$1, this);
-}, (_descriptor$1 = _applyDecoratedDescriptor$4(_class$2.prototype, 'name', [mem], {
+}, (_descriptor$1 = _applyDecoratedDescriptor$4(_class$3.prototype, 'name', [mem], {
     enumerable: true,
     initializer: function initializer() {
         return 'test';
     }
-})), _class$2);
+})), _class$3);
 
-var HelloOptions = (_class3 = function HelloOptions(name) {
+var HelloOptions = (_class3$1 = function HelloOptions(name) {
     classCallCheck(this, HelloOptions);
 
     _initDefineProp$1(this, 'actionName', _descriptor2$1, this);
 
     this.actionName = name + '-hello';
-}, (_descriptor2$1 = _applyDecoratedDescriptor$4(_class3.prototype, 'actionName', [mem], {
+}, (_descriptor2$1 = _applyDecoratedDescriptor$4(_class3$1.prototype, 'actionName', [mem], {
     enumerable: true,
     initializer: null
-})), _class3);
+})), _class3$1);
 var SomeService = (_temp = _class5 = function () {
     function SomeService(opts) {
         classCallCheck(this, SomeService);
@@ -20246,7 +22139,7 @@ __$styleInject("html,\nbody {\n\tmargin: 0;\n\tpadding: 0;\n}\n\nbutton {\n\tmar
 
 __$styleInject("button {\n  color: #292b2c;\n  background-color: #fff;\n\n  display: inline-block;\n  font-weight: 400;\n  line-height: 1.25;\n  text-align: center;\n  white-space: nowrap;\n  vertical-align: middle;\n  -webkit-user-select: none;\n  -moz-user-select: none;\n  -ms-user-select: none;\n  user-select: none;\n  border: 1px solid #ccc;\n  padding: .5rem 1rem;\n  font-size: 1rem;\n  border-radius: .25rem;\n  -webkit-transition: all .2s ease-in-out;\n  -o-transition: all .2s ease-in-out;\n  transition: all .2s ease-in-out;\n}\n\n.kv {\n  display: flex;\n  padding: 0.3em 0.3em;\n}\n\n.kv-key {\n  display: inline-block;\n  width: 20%;\n}\n\n.kv-value {\n  display: inline-block;\n  width: 80%;\n}\n", undefined);
 
-var index$4 = function (glob, opts) {
+var index$8 = function (glob, opts) {
   if (typeof glob !== 'string') {
     throw new TypeError('Expected a string');
   }
@@ -20378,14 +22271,11 @@ var index$4 = function (glob, opts) {
   return new RegExp(reStr, flags);
 };
 
-var index$8 = Array.isArray || function (arr) {
+var index$12 = Array.isArray || function (arr) {
   return Object.prototype.toString.call(arr) == '[object Array]';
 };
 
-/**
- * Expose `pathToRegexp`.
- */
-var index$6 = pathToRegexp;
+var index$10 = pathToRegexp;
 var parse_1 = parse;
 var compile_1 = compile;
 var tokensToFunction_1 = tokensToFunction;
@@ -20562,7 +22452,7 @@ function tokensToFunction (tokens) {
         }
       }
 
-      if (index$8(value)) {
+      if (index$12(value)) {
         if (!token.repeat) {
           throw new TypeError('Expected "' + token.name + '" to not repeat, but received `' + JSON.stringify(value) + '`')
         }
@@ -20713,7 +22603,7 @@ function stringToRegexp (path, keys, options) {
  * @return {!RegExp}
  */
 function tokensToRegExp (tokens, keys, options) {
-  if (!index$8(keys)) {
+  if (!index$12(keys)) {
     options = /** @type {!Object} */ (keys || options);
     keys = [];
   }
@@ -20789,7 +22679,7 @@ function tokensToRegExp (tokens, keys, options) {
  * @return {!RegExp}
  */
 function pathToRegexp (path, keys, options) {
-  if (!index$8(keys)) {
+  if (!index$12(keys)) {
     options = /** @type {!Object} */ (keys || options);
     keys = [];
   }
@@ -20800,17 +22690,17 @@ function pathToRegexp (path, keys, options) {
     return regexpToRegexp(path, /** @type {!Array} */ (keys))
   }
 
-  if (index$8(path)) {
+  if (index$12(path)) {
     return arrayToRegexp(/** @type {!Array} */ (path), /** @type {!Array} */ (keys), options)
   }
 
   return stringToRegexp(/** @type {string} */ (path), /** @type {!Array} */ (keys), options)
 }
 
-index$6.parse = parse_1;
-index$6.compile = compile_1;
-index$6.tokensToFunction = tokensToFunction_1;
-index$6.tokensToRegExp = tokensToRegExp_1;
+index$10.parse = parse_1;
+index$10.compile = compile_1;
+index$10.tokensToFunction = tokensToFunction_1;
+index$10.tokensToRegExp = tokensToRegExp_1;
 
 var _extends$2 = Object.assign || function (target) { for (var i = 1; i < arguments.length; i++) { var source = arguments[i]; for (var key in source) { if (Object.prototype.hasOwnProperty.call(source, key)) { target[key] = source[key]; } } } return target; };
 
@@ -20829,13 +22719,13 @@ var stringMatchers = {
 		};
 	},
 	glob: function glob(targetString) {
-		var urlRX = index$4(targetString.replace(/^glob:/, ''));
+		var urlRX = index$8(targetString.replace(/^glob:/, ''));
 		return function (url) {
 			return urlRX.test(url);
 		};
 	},
 	express: function express(targetString) {
-		var urlRX = index$6(targetString.replace(/^express:/, ''));
+		var urlRX = index$10(targetString.replace(/^express:/, ''));
 		return function (url) {
 			return urlRX.test(url);
 		};
@@ -21007,7 +22897,7 @@ var compileRoute = function (route, Request, HeadersConstructor) {
 	return route;
 };
 
-var _typeof$1 = typeof Symbol === "function" && typeof Symbol.iterator === "symbol" ? function (obj) { return typeof obj; } : function (obj) { return obj && typeof Symbol === "function" && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj; };
+var _typeof$2 = typeof Symbol === "function" && typeof Symbol.iterator === "symbol" ? function (obj) { return typeof obj; } : function (obj) { return obj && typeof Symbol === "function" && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj; };
 
 var _extends$1 = Object.assign || function (target) { for (var i = 1; i < arguments.length; i++) { var source = arguments[i]; for (var key in source) { if (Object.prototype.hasOwnProperty.call(source, key)) { target[key] = source[key]; } } } return target; };
 
@@ -21208,7 +23098,7 @@ FetchMock.prototype.mockResponse = function (url, responseConfig, fetchOpts, res
 
 	// convert to json if we need to
 	opts.sendAsJson = responseConfig.sendAsJson === undefined ? FetchMock.config.sendAsJson : responseConfig.sendAsJson;
-	if (opts.sendAsJson && responseConfig.body != null && (typeof body === 'undefined' ? 'undefined' : _typeof$1(body)) === 'object') {
+	if (opts.sendAsJson && responseConfig.body != null && (typeof body === 'undefined' ? 'undefined' : _typeof$2(body)) === 'object') {
 		//eslint-disable-line
 		body = JSON.stringify(body);
 	}
@@ -21480,12 +23370,6 @@ fetchMock$1.setImplementations({
 
 var client = new fetchMock$1();
 
-var commonjsGlobal = typeof window !== 'undefined' ? window : typeof global !== 'undefined' ? global : typeof self !== 'undefined' ? self : {};
-
-// Unique ID creation requires a high quality random # generator.  In the
-// browser this is a little complicated due to unknown quality of Math.random()
-// and inconsistent support for the `crypto` API.  We do the best we can via
-// feature-detection
 var rng;
 
 var crypto = commonjsGlobal.crypto || commonjsGlobal.msCrypto; // for IE 11
@@ -21734,7 +23618,7 @@ createTodoEmulatedApi(localStorage).forEach(function (data) {
     client.mock(Object.assign({}, data, { response: delayed(data.response, delay) }));
 });
 
-var _class2$1;
+var _class2;
 var _descriptor$3;
 
 function _initDefineProp$3(target, property, descriptor, context) {
@@ -21822,7 +23706,7 @@ var TodoModel = function () {
     return TodoModel;
 }();
 
-var TodoStore = (_class2$1 = function () {
+var TodoStore = (_class2 = function () {
     function TodoStore() {
         classCallCheck(this, TodoStore);
 
@@ -21954,15 +23838,15 @@ var TodoStore = (_class2$1 = function () {
         }
     }]);
     return TodoStore;
-}(), (_descriptor$3 = _applyDecoratedDescriptor$6(_class2$1.prototype, 'opCount', [mem], {
+}(), (_descriptor$3 = _applyDecoratedDescriptor$6(_class2.prototype, 'opCount', [mem], {
     enumerable: true,
     initializer: function initializer() {
         return 0;
     }
-}), _applyDecoratedDescriptor$6(_class2$1.prototype, 'todos', [mem], Object.getOwnPropertyDescriptor(_class2$1.prototype, 'todos'), _class2$1.prototype), _applyDecoratedDescriptor$6(_class2$1.prototype, 'todos', [mem], Object.getOwnPropertyDescriptor(_class2$1.prototype, 'todos'), _class2$1.prototype), _applyDecoratedDescriptor$6(_class2$1.prototype, 'activeTodoCount', [mem], Object.getOwnPropertyDescriptor(_class2$1.prototype, 'activeTodoCount'), _class2$1.prototype)), _class2$1);
+}), _applyDecoratedDescriptor$6(_class2.prototype, 'todos', [mem], Object.getOwnPropertyDescriptor(_class2.prototype, 'todos'), _class2.prototype), _applyDecoratedDescriptor$6(_class2.prototype, 'todos', [mem], Object.getOwnPropertyDescriptor(_class2.prototype, 'todos'), _class2.prototype), _applyDecoratedDescriptor$6(_class2.prototype, 'activeTodoCount', [mem], Object.getOwnPropertyDescriptor(_class2.prototype, 'activeTodoCount'), _class2.prototype)), _class2);
 
-var _class$4;
-var _class2$2;
+var _class$5;
+var _class2$1;
 var _temp$1;
 
 function _applyDecoratedDescriptor$7(target, property, decorators, descriptor, context) {
@@ -22000,7 +23884,7 @@ var TODO_FILTER = {
     ACTIVE: 'active'
 };
 
-var ViewStore = (_class$4 = (_temp$1 = _class2$2 = function () {
+var ViewStore = (_class$5 = (_temp$1 = _class2$1 = function () {
     function ViewStore(todoStore) {
         classCallCheck(this, ViewStore);
 
@@ -22039,9 +23923,9 @@ var ViewStore = (_class$4 = (_temp$1 = _class2$2 = function () {
         }
     }]);
     return ViewStore;
-}(), _class2$2.deps = [TodoStore], _temp$1), (_applyDecoratedDescriptor$7(_class$4.prototype, 'filter', [mem], Object.getOwnPropertyDescriptor(_class$4.prototype, 'filter'), _class$4.prototype), _applyDecoratedDescriptor$7(_class$4.prototype, 'filter', [mem], Object.getOwnPropertyDescriptor(_class$4.prototype, 'filter'), _class$4.prototype), _applyDecoratedDescriptor$7(_class$4.prototype, 'filteredTodos', [mem], Object.getOwnPropertyDescriptor(_class$4.prototype, 'filteredTodos'), _class$4.prototype)), _class$4);
+}(), _class2$1.deps = [TodoStore], _temp$1), (_applyDecoratedDescriptor$7(_class$5.prototype, 'filter', [mem], Object.getOwnPropertyDescriptor(_class$5.prototype, 'filter'), _class$5.prototype), _applyDecoratedDescriptor$7(_class$5.prototype, 'filter', [mem], Object.getOwnPropertyDescriptor(_class$5.prototype, 'filter'), _class$5.prototype), _applyDecoratedDescriptor$7(_class$5.prototype, 'filteredTodos', [mem], Object.getOwnPropertyDescriptor(_class$5.prototype, 'filteredTodos'), _class$5.prototype)), _class$5);
 
-var _class$5;
+var _class$6;
 var _descriptor$4;
 
 function _initDefineProp$4(target, property, descriptor, context) {
@@ -22083,7 +23967,7 @@ function _applyDecoratedDescriptor$8(target, property, decorators, descriptor, c
     return desc;
 }
 
-var TodoToAdd = (_class$5 = function TodoToAdd(todoStore) {
+var TodoToAdd = (_class$6 = function TodoToAdd(todoStore) {
     var _this = this;
 
     classCallCheck(this, TodoToAdd);
@@ -22104,12 +23988,12 @@ var TodoToAdd = (_class$5 = function TodoToAdd(todoStore) {
     };
 
     this._store = todoStore;
-}, (_descriptor$4 = _applyDecoratedDescriptor$8(_class$5.prototype, 'title', [mem], {
+}, (_descriptor$4 = _applyDecoratedDescriptor$8(_class$6.prototype, 'title', [mem], {
     enumerable: true,
     initializer: function initializer() {
         return '';
     }
-})), _class$5);
+})), _class$6);
 
 
 function TodoEntry(_, _ref2) {
@@ -22134,7 +24018,7 @@ TodoEntry.provide = function (_ref3) {
     return [new TodoToAdd(todoStore)];
 };
 
-var _class$6;
+var _class$7;
 var _descriptor$5;
 var _descriptor2$2;
 
@@ -22180,7 +24064,7 @@ function _applyDecoratedDescriptor$9(target, property, decorators, descriptor, c
 var ESCAPE_KEY = 27;
 var ENTER_KEY = 13;
 
-var TodoItemStore = (_class$6 = function TodoItemStore(todo) {
+var TodoItemStore = (_class$7 = function TodoItemStore(todo) {
     var _this = this;
 
     classCallCheck(this, TodoItemStore);
@@ -22230,27 +24114,37 @@ var TodoItemStore = (_class$6 = function TodoItemStore(todo) {
     };
 
     this._todo = todo;
-}, (_descriptor$5 = _applyDecoratedDescriptor$9(_class$6.prototype, 'todoBeingEdited', [mem], {
+}, (_descriptor$5 = _applyDecoratedDescriptor$9(_class$7.prototype, 'todoBeingEdited', [mem], {
     enumerable: true,
     initializer: function initializer() {
         return null;
     }
-}), _descriptor2$2 = _applyDecoratedDescriptor$9(_class$6.prototype, 'editText', [mem], {
+}), _descriptor2$2 = _applyDecoratedDescriptor$9(_class$7.prototype, 'editText', [mem], {
     enumerable: true,
     initializer: function initializer() {
         return '';
     }
-})), _class$6);
+})), _class$7);
 
+
+function TodoItemTheme() {
+    return {
+        container: {
+            border: '1px solid green'
+        }
+    };
+}
+TodoItemTheme.theme = true;
 
 function TodoItem(_ref2, _ref3) {
     var todo = _ref2.todo;
-    var itemStore = _ref3.itemStore;
+    var itemStore = _ref3.itemStore,
+        theme = _ref3.theme;
 
     return lom_h(
         'li',
         {
-            className: '' + (todo.completed ? 'completed ' : '') + (todo === itemStore.todoBeingEdited ? 'editing' : '')
+            className: theme.container + ' ' + (todo.completed ? 'completed ' : '') + (todo === itemStore.todoBeingEdited ? 'editing' : '')
         },
         lom_h(
             'div',
@@ -22279,7 +24173,7 @@ function TodoItem(_ref2, _ref3) {
         }) : null
     );
 }
-TodoItem.deps = [{ itemStore: TodoItemStore }];
+TodoItem.deps = [{ itemStore: TodoItemStore, theme: TodoItemTheme }];
 TodoItem.provide = function (_ref4) {
     var todo = _ref4.todo;
     return [new TodoItemStore(todo)];
@@ -22391,14 +24285,24 @@ function TodoFooter(_ref) {
     );
 }
 
+var TodoAppTheme = function TodoAppTheme() {
+    return {
+        container: {
+            border: '1px solid red'
+        }
+    };
+};
+TodoAppTheme.theme = true;
+
 function TodoApp(_ref, _ref2) {
     var todoStore = _ref2.todoStore,
-        viewStore = _ref2.viewStore;
+        viewStore = _ref2.viewStore,
+        theme = _ref2.theme;
     objectDestructuringEmpty(_ref);
 
     return lom_h(
         'div',
-        null,
+        { className: theme.container },
         lom_h(
             'header',
             { className: 'header' },
@@ -22410,7 +24314,7 @@ function TodoApp(_ref, _ref2) {
     );
 }
 
-TodoApp.deps = [{ todoStore: TodoStore, viewStore: ViewStore }];
+TodoApp.deps = [{ todoStore: TodoStore, viewStore: ViewStore, theme: TodoAppTheme }];
 TodoApp.provide = function (_) {
     var todoStore = new TodoStore();
     return [todoStore, new ViewStore(todoStore)];
@@ -22560,7 +24464,7 @@ AppView.provide = function (props) {
 
 var store = new Store();
 
-index$2.render(lom_h(AppView, { store: store, lang: 'ru' }), document.getElementById('app'));
+index$6.render(lom_h(AppView, { store: store, lang: 'ru' }), document.getElementById('app'));
 
 }());
 //# sourceMappingURL=examples.js.map

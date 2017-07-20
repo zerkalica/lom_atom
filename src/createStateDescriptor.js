@@ -1,34 +1,43 @@
 // @flow
 
-import mem from './mem'
+import mem, {memkey} from './mem'
+import {ThemeProvider} from './theme'
+import type {IProcessor} from './theme'
 
 type IArg = Function | {[id: string]: Function}
 type IProvideItem = Function | [Function, Function]
 
-class Context {
+class Injector {
     map: Map<Function, *>
-    parent: Context | void
-
-    constructor(parent?: Context, items?: IProvideItem[]) {
+    parent: Injector | void
+    top: Injector
+    _processor: IProcessor | void
+    constructor(parent?: Injector, items?: IProvideItem[], processor?: IProcessor) {
         this.parent = parent
-        const map = this.map = new Map()
+        this.top = parent ? parent.top : this
+        this._processor = processor
         if (items !== undefined) {
             for (let i = 0; i < items.length; i++) {
                 const item = items[i]
                 if (item instanceof Array) {
-                    map.set(item[0], item[1])
+                    this.value(item[0], item[1], true)
                 } else if (typeof item === 'function') {
-                    map.set(item, null)
+                    this.value(item, null, true)
                 } else {
-                    map.set(item.constructor, item)
+                    this.value(item.constructor, item, true)
                 }
             }
         }
     }
 
+    @memkey
+    value<V>(key: Function, next?: V, force?: boolean): V | void {
+        return next
+    }
+
     _destroy() {
         this.parent = undefined
-        this.map = (undefined: any)
+        this._processor = undefined
     }
 
     _fastCall<V>(key: any, args: mixed[]): V {
@@ -43,43 +52,53 @@ class Context {
     }
 
     _get<V>(key: Function): V | void {
-        let ptr: Context | void = this
         let value: V | void = undefined
+        if (key.theme === true) {
+            value = this.top.value(key)
+            if (value === undefined) {
+                const processor = this._processor
+                value = processor
+                    ? ((new ThemeProvider(key, this.top.resolve(key.deps), processor)).theme(): any)
+                    : ({}: any)
+                this.top.value(key, value)
+            }
+
+            return value
+        }
+
+        let ptr: Injector | void = this
         while (ptr !== undefined) {
-            value = ptr.map.get(key)
+            value = ptr.value(key)
             if (value !== undefined) {
                 if (value === null) {
-                    value = this._fastCall(key, this.resolve(key.deps))
-                    ptr.map.set(key, value)
+                    value = this._fastCall(key, ptr.resolve(key.deps))
+                    ptr.value(key, value, true)
                 }
                 return value
             }
             ptr = ptr.parent
         }
 
-        if (key.deps) {
-            value = this._fastCall(key, this.resolve(key.deps))
-            this.map.set(key, value)
+        value = this._fastCall(key, this.resolve(key.deps))
+        this.value(key, value, true)
 
-            return value
-        }
-
-
-        throw new Error('Context: not registered for key ' + String(key))
+        return value
     }
 
-    resolve(argDeps: IArg[]): mixed[] {
+    resolve(argDeps?: IArg[]): mixed[] {
         const result = []
-        for (let i = 0, l = argDeps.length; i < l; i++) {
-            let argDep = argDeps[i]
-            if (typeof argDep === 'object') {
-                const obj = {}
-                for (let prop in argDep) { // eslint-disable-line
-                    obj[prop] = this._get(argDep[prop])
+        if (argDeps !== undefined) {
+            for (let i = 0, l = argDeps.length; i < l; i++) {
+                let argDep = argDeps[i]
+                if (typeof argDep === 'object') {
+                    const obj = {}
+                    for (let prop in argDep) { // eslint-disable-line
+                        obj[prop] = this._get(argDep[prop])
+                    }
+                    result.push(obj)
+                } else {
+                    result.push(this._get(argDep))
                 }
-                result.push(obj)
-            } else {
-                result.push(this._get(argDep))
             }
         }
 
@@ -89,7 +108,7 @@ class Context {
 
 type IPropsWithContext = {
     [id: string]: any;
-    __lom_ctx: Context;
+    __lom_ctx: Injector;
 }
 
 type IProvider<Props, State> = (props: Props, prevState?: State) => (Function | [Function, Function])[];
@@ -103,12 +122,15 @@ export class StateDescriptor<State> {
     descr: IComponentDescriptor<State>
 
     _state: State | void = undefined
-    context: Context = (undefined: any)
+    context: Injector = (undefined: any)
+    _processor: IProcessor | void
 
     constructor(
-        descr: IComponentDescriptor<State>
+        descr: IComponentDescriptor<State>,
+        processor?: IProcessor
     ) {
         this.descr = descr
+        this._processor = processor
     }
 
     _destroy() {
@@ -125,12 +147,13 @@ export class StateDescriptor<State> {
         if (props !== undefined) {
             const provide = this.descr.provide
             if (provide !== undefined) {
-                this.context = new Context(
+                this.context = new Injector(
                     props.__lom_ctx,
-                    provide(props, this._state)
+                    provide(props, this._state),
+                    this._processor
                 )
             } else {
-                this.context = props.__lom_ctx || new Context()
+                this.context = props.__lom_ctx || new Injector(undefined, undefined, this._processor)
             }
 
             return props
@@ -152,8 +175,11 @@ export class StateDescriptor<State> {
     }
 }
 
-export default function createStateDescriptor<State>(render: Function): StateDescriptor<State> | void {
+export default function createStateDescriptor<State>(
+    render: Function,
+    processor?: IProcessor
+): StateDescriptor<State> | void {
     if (render.deps !== undefined || render.provide !== undefined) {
-        return new StateDescriptor(render)
+        return new StateDescriptor(render, processor)
     }
 }

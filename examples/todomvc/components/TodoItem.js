@@ -1,7 +1,7 @@
 // @flow
 
 import {mem} from 'lom_atom'
-
+import type {ThemeValues} from 'lom_atom'
 import type {ITodo} from '../stores/TodoStore'
 
 const ESCAPE_KEY = 27
@@ -56,16 +56,26 @@ class TodoItemStore {
     }
 }
 
+function TodoItemTheme() {
+    return {
+        container: {
+            border: '1px solid green'
+        }
+    }
+}
+TodoItemTheme.theme = true
+
 export default function TodoItem(
     {todo}: {
         todo: ITodo;
     },
-    {itemStore}: {
+    {itemStore, theme}: {
+        theme: ThemeValues<typeof TodoItemTheme>;
         itemStore: TodoItemStore;
     }
 ) {
     return <li
-        className={`${todo.completed ? 'completed ': ''}${todo === itemStore.todoBeingEdited ? 'editing' : ''}`}
+        className={`${theme.container} ${todo.completed ? 'completed ': ''}${todo === itemStore.todoBeingEdited ? 'editing' : ''}`}
     >
         <div className="view">
             <input
@@ -93,7 +103,7 @@ export default function TodoItem(
         }
     </li>
 }
-TodoItem.deps = [{itemStore: TodoItemStore}]
+TodoItem.deps = [{itemStore: TodoItemStore, theme: TodoItemTheme}]
 TodoItem.provide = ({todo}: {todo: ITodo}) => ([
     new TodoItemStore(todo)
 ])

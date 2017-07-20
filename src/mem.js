@@ -1,7 +1,7 @@
 // @flow
 
 import type {IAtom, IAtomHandler, IAtomKeyHandler, IAtomHost} from './interfaces'
-import Atom, {defaultContext} from './Atom'
+import {defaultContext} from './Context'
 
 type TypedPropertyDescriptor<T> = {
     enumerable?: boolean;
@@ -11,20 +11,6 @@ type TypedPropertyDescriptor<T> = {
     initializer?: () => T;
     get?: () => T;
     set?: (value: T | Error) => void;
-}
-
-function getName(obj: Object): string {
-    return obj.constructor.displayName || obj.constructor.name
-}
-
-function getAtom<V>(t: Object, handler: IAtomHandler<V>, name: string, isComponent?: boolean): IAtom<V> {
-    const atomCacheKey = `${getName(t)}.${name}`
-    let atom: IAtom<V> | void = t[atomCacheKey]
-    if (atom === undefined) {
-        t[atomCacheKey] = atom = new Atom(atomCacheKey, handler, t, isComponent)
-    }
-
-    return atom
 }
 
 function memMethod<V, P: Object>(
@@ -43,7 +29,7 @@ function memMethod<V, P: Object>(
         enumerable: descr.enumerable,
         configurable: descr.configurable,
         value(next?: V | Error, force?: boolean) {
-            return getAtom(this, handler, name, isComponent)
+            return defaultContext.getAtom(this, handler, name, isComponent)
                 .value(next, force)
         }
     }
@@ -88,10 +74,10 @@ function memProp<V, P: Object>(
         enumerable: descr.enumerable,
         configurable: descr.configurable,
         get() {
-            return getAtom(this, handler, name).get()
+            return defaultContext.getAtom(this, handler, name).get()
         },
         set(val: V | Error) {
-            getAtom(this, handler, name).set(val)
+            defaultContext.getAtom(this, handler, name).set(val)
         }
     }
 }
@@ -125,11 +111,11 @@ export function memkey<V, K, P: Object>(
         enumerable: descr.enumerable,
         configurable: descr.configurable,
         value(rawKey: K, next?: V | Error, force?: boolean) {
-            function handlerWithKey(next?: V | Error): V {
-                return handler.call(this, rawKey, next)
-            }
-
-            return getAtom(this, handlerWithKey, `${name}(${getKey(rawKey)})`)
+            return defaultContext.getKeyAtom(
+                this,
+                handler,
+                typeof rawKey === 'function' ? rawKey : `${name}(${getKey(rawKey)})`
+            )
                 .value(next, force)
         }
     }

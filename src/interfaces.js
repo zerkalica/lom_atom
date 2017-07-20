@@ -10,6 +10,10 @@ export interface IContext {
     last: ?IAtomInt;
     force: boolean;
 
+    getKeyAtom(host: IAtomHost, handler: IAtomKeyHandler<*, *>, key: string | Function): IAtom<*>;
+    getAtom(host: IAtomHost, handler: IAtomHandler<*>, key: string | Function, isComponent?: boolean): IAtom<*>;
+    destroyHost(host: IAtomHost, field: string | Function): void;
+
     newValue<V>(t: IAtom<V>, from?: V | Error, to: V | Error): void;
     setLogger(logger: ILogger): void;
     proposeToPull(atom: IAtomInt): void;
@@ -36,7 +40,7 @@ export type IAtomStatus = $Values<typeof ATOM_STATUS>
 
 export interface IAtom<V> {
     status: IAtomStatus;
-    field: string;
+    field: string | Function;
     get(force?: boolean): V;
     set(v: V | Error, force?: boolean): V;
     value(next?: V | Error, force?: boolean): V;
@@ -55,8 +59,9 @@ export interface IAtomInt extends IAtom<*> {
 //  | Error
 export type IAtomHandler<V> = (next?: V, force?: boolean) => V
 export type IAtomKeyHandler<V, K> = (key: K, next?: V | Error, force?: boolean) => V
+export type IAtomHandlers<V, K> = IAtomHandler<V> | IAtomKeyHandler<V, K>
 
-export type IAtomHost<V> = {
-    [key: string]: IAtomHandler<V> | IAtomKeyHandler<V, *>;
+export interface IAtomHost {
+    [key: string]: IAtomHandlers<*, *>;
     _destroy?: () => void;
 }

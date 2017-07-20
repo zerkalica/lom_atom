@@ -1,8 +1,9 @@
 // @flow
 
-export {default as Atom, defaultContext} from './Atom'
+export {default as Atom} from './Atom'
 export {default as mem, force} from './mem'
 export {default as createReactWrapper, createCreateElement} from './createReactWrapper'
+export {defaultContext} from './Context'
 
 export {
     AtomWait
@@ -19,3 +20,11 @@ export type {
     IContext,
     IAtomHandler
 } from './interfaces'
+
+
+export type {
+    IProcessor,
+    ISheet,
+    ResultOf,
+    ThemeValues
+} from './theme'

@@ -3,10 +3,10 @@
 
 import assert from 'power-assert'
 import sinon from 'sinon'
-import Atom, {defaultContext} from '../src/Atom'
+import Atom from '../src/Atom'
 import mem, {memkey, force} from '../src/mem'
 import {AtomWait} from '../src/utils'
-import Context from '../src/Context'
+import {defaultContext} from '../src/Context'
 import {catchedId, ATOM_STATUS} from '../src/interfaces'
 
 describe('mem', () => {

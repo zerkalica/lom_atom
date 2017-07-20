@@ -11,10 +11,7 @@ import type {
     IAtomHost
 } from './interfaces'
 
-import Context from './Context'
 import {defaultNormalize, createMock, AtomWait} from './utils'
-
-export const defaultContext = new Context()
 
 function checkSlave(slave: IAtomInt) {
     slave.check()
@@ -36,7 +33,7 @@ function actualizeMaster(master: IAtomInt) {
 
 export default class Atom<V> implements IAtom<V>, IAtomInt {
     status: IAtomStatus = ATOM_STATUS.OBSOLETE
-    field: string
+    field: string | Function
     isComponent: boolean
     _masters: ?Set<IAtomInt> = null
     _slaves: ?Set<IAtomInt> = null
@@ -45,14 +42,14 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
     _normalize: (nv: V, old?: V) => V
 
     _handler: IAtomHandler<V>
-    _host: IAtomHost<V> | void
+    _host: IAtomHost | void
 
     constructor(
-        field: string,
+        field: string | Function,
         handler: IAtomHandler<V>,
-        host?: IAtomHost<V>,
+        host?: IAtomHost,
         isComponent?: boolean,
-        context?: IContext,
+        context: IContext,
         normalize?: (nv: V, old?: V) => V
     ) {
         this.field = field
@@ -60,8 +57,7 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         this._host = host
         this.isComponent = isComponent || false
         this._normalize = normalize || defaultNormalize
-        this._context = context || defaultContext
-        // console.log('init', this.field)
+        this._context = context
     }
 
     destroyed(isDestroyed?: boolean): boolean {
@@ -81,10 +77,7 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
                 this.status = ATOM_STATUS.DESTROYED
                 const host = this._host
                 if (host !== undefined) {
-                    if (host._destroy !== undefined) {
-                        host._destroy()
-                    }
-                    host[this.field] = (undefined: any)
+                    this._context.destroyHost(host, this.field)
                 }
             }
 
