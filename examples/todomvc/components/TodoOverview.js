@@ -19,12 +19,12 @@ function TodoOverviewTheme() {
             opacity: 0,
             position: 'absolute',
             '& + label:before': {
-                content: '❯',
+                content: '\'❯\'',
                 fontSize: '22px',
                 color: '#e6e6e6',
                 padding: '10px 27px 10px 27px'
             },
-            '& :checked + label:before': {
+            '&:checked + label:before': {
                 color: '#737373'
             },
             '& + label': {

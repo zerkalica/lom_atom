@@ -54,7 +54,7 @@ function AppView({store}: AppProps) {
                 >{link}</button>
             )}
         </div>
-        <div style={{border: '1px solid gray', padding: '0.5em', margin: '0 1em'}}>
+        <div style={{border: '1px solid gray', padding: '1em', margin: '0 1em'}}>
             <h1>{store.route}</h1>
             {page}
         </div>

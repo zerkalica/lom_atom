@@ -158,6 +158,11 @@ export default function createReactWrapper<IElement>(
         _state: State | void = undefined
         _injector: Injector = (undefined: any)
 
+        @mem
+        _getState(): State {
+            return this._state = this._injector.resolve(this._render.deps)[0]
+        }
+
         @detached
         r(next?: IElement, force?: boolean): IElement {
             if (next !== undefined) {
@@ -175,31 +180,24 @@ export default function createReactWrapper<IElement>(
                             key.provide(this.props, this._state),
                             themeFactory
                         )
-                        this._state === undefined
                     } else if (this._injector === undefined) {
                         this._injector = this.props.__lom_ctx || new Injector(undefined, undefined, themeFactory)
                     }
                 }
-                if (this._state === undefined && key.deps !== undefined) {
-                    this._state = this._injector.resolve(key.deps)[0]
-                }
                 parentContext = this._injector
-                data = key(this.props, this._state)
-                if (!this._isPropsUpdated) {
-                    // prevent recursion
-                    // can call this.render synchronously
-                    this._renderedData = data
-                    this.forceUpdate()
-                    this._renderedData = undefined
-                }
-                this._isPropsUpdated = false
+                data = key(this.props, key.deps === undefined ? undefined : this._getState())
             } catch (error) {
-                this._state === undefined
-                this._renderedData = undefined
-                this._isPropsUpdated = false
                 data = this.constructor.fromError({error})
             }
             parentContext = prevContext
+            if (!this._isPropsUpdated) {
+                // prevent recursion
+                // can call this.render synchronously
+                this._renderedData = data
+                this.forceUpdate()
+                this._renderedData = undefined
+            }
+            this._isPropsUpdated = false
 
             return data
         }

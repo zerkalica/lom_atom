@@ -1012,6 +1012,10 @@ function createReactWrapper(BaseComponent, defaultFromError, themeProcessor) {
             defaultContext.getAtom(this, this.r, 'r').destroyed(true);
         };
 
+        AtomizedComponent.prototype._getState = function _getState() {
+            return this._state = this._injector.resolve(this._render.deps)[0];
+        };
+
         AtomizedComponent.prototype.r = function r(next, force$$1) {
             if (next !== undefined) {
                 throw new Error('Can\'t set view');
@@ -1024,31 +1028,24 @@ function createReactWrapper(BaseComponent, defaultFromError, themeProcessor) {
                 if (this._isPropsUpdated === true) {
                     if (key.provide !== undefined) {
                         this._injector = new Injector(this.props.__lom_ctx, key.provide(this.props, this._state), themeFactory);
-                        this._state === undefined;
                     } else if (this._injector === undefined) {
                         this._injector = this.props.__lom_ctx || new Injector(undefined, undefined, themeFactory);
                     }
                 }
-                if (this._state === undefined && key.deps !== undefined) {
-                    this._state = this._injector.resolve(key.deps)[0];
-                }
                 parentContext = this._injector;
-                data = key(this.props, this._state);
-                if (!this._isPropsUpdated) {
-                    // prevent recursion
-                    // can call this.render synchronously
-                    this._renderedData = data;
-                    this.forceUpdate();
-                    this._renderedData = undefined;
-                }
-                this._isPropsUpdated = false;
+                data = key(this.props, key.deps === undefined ? undefined : this._getState());
             } catch (error) {
-                this._state === undefined;
-                this._renderedData = undefined;
-                this._isPropsUpdated = false;
                 data = this.constructor.fromError({ error: error });
             }
             parentContext = prevContext;
+            if (!this._isPropsUpdated) {
+                // prevent recursion
+                // can call this.render synchronously
+                this._renderedData = data;
+                this.forceUpdate();
+                this._renderedData = undefined;
+            }
+            this._isPropsUpdated = false;
 
             return data;
         };
@@ -1058,7 +1055,7 @@ function createReactWrapper(BaseComponent, defaultFromError, themeProcessor) {
         };
 
         return AtomizedComponent;
-    }(BaseComponent), (_applyDecoratedDescriptor$1(_class.prototype, 'r', [detached], Object.getOwnPropertyDescriptor(_class.prototype, 'r'), _class.prototype)), _class);
+    }(BaseComponent), (_applyDecoratedDescriptor$1(_class.prototype, '_getState', [mem], Object.getOwnPropertyDescriptor(_class.prototype, '_getState'), _class.prototype), _applyDecoratedDescriptor$1(_class.prototype, 'r', [detached], Object.getOwnPropertyDescriptor(_class.prototype, 'r'), _class.prototype)), _class);
 
 
     return function reactWrapper(render, fromError) {
@@ -24322,6 +24319,7 @@ function TodoEntryTheme() {
         }, _newTodo['border'] = 'none', _newTodo.background = 'rgba(0, 0, 0, 0.003)', _newTodo.boxShadow = 'inset 0 -2px 1px rgba(0,0,0,0.03)', _newTodo.boxSizing = 'border-box', _newTodo['-webkit-font-smoothing'] = 'antialiased', _newTodo['-moz-osx-font-smoothing'] = 'grayscale', _newTodo)
     };
 }
+TodoEntryTheme.theme = true;
 
 function TodoEntry(_, _ref2) {
     var todoToAdd = _ref2.todoToAdd,
@@ -24408,6 +24406,15 @@ var TodoItemStore = (_class$8 = function TodoItemStore(todo) {
         _this.editText = target.value;
     };
 
+    this._focused = false;
+
+    this.setEditInputRef = function (el) {
+        if (el) {
+            _this._focused = true;
+            el.focus();
+        }
+    };
+
     this.handleSubmit = function (event) {
         var val = _this.editText.trim();
         if (val) {
@@ -24430,6 +24437,7 @@ var TodoItemStore = (_class$8 = function TodoItemStore(todo) {
 
     this.toggle = function () {
         _this._todo.toggle();
+        _this.todoBeingEdited = null;
     };
 
     this.handleDestroy = function () {
@@ -24459,7 +24467,7 @@ function TodoItemTheme() {
         '&:last-child': {
             borderBottom: 'none'
         },
-        '&:hover .destroy': {
+        '&:hover $destroy': {
             display: 'block'
         }
     };
@@ -24474,9 +24482,7 @@ function TodoItemTheme() {
 
     return {
         regular: Object.assign({}, itemBase),
-        completed: Object.assign({}, itemBase, {
-            border: '1px solid green'
-        }),
+        completed: Object.assign({}, itemBase),
 
         editing: {
             borderBottom: 'none',
@@ -24487,8 +24493,15 @@ function TodoItemTheme() {
         },
 
         edit: {
+            backgroundColor: '#F2FFAB',
             display: 'block',
-            width: '506px',
+            border: 0,
+            position: 'relative',
+            fontSize: '24px',
+            fontFamily: 'inherit',
+            fontWeight: 'inherit',
+            lineHeight: '1.4em',
+            width: '406px',
             padding: '12px 16px',
             margin: '0 0 0 43px'
         },
@@ -24516,7 +24529,7 @@ function TodoItemTheme() {
                 backgroundPosition: 'center left'
             },
 
-            '& :checked + label': {
+            '&:checked + label': {
                 backgroundImage: 'url(\'data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%2240%22%20height%3D%2240%22%20viewBox%3D%22-10%20-18%20100%20135%22%3E%3Ccircle%20cx%3D%2250%22%20cy%3D%2250%22%20r%3D%2250%22%20fill%3D%22none%22%20stroke%3D%22%23bddad5%22%20stroke-width%3D%223%22/%3E%3Cpath%20fill%3D%22%235dc2af%22%20d%3D%22M72%2025L42%2071%2027%2056l-4%204%2020%2020%2034-52z%22/%3E%3C/svg%3E\')'
             }
         },
@@ -24550,7 +24563,7 @@ function TodoItemTheme() {
             },
 
             '&:after': {
-                content: '×'
+                content: '\'×\''
             }
         }
     };
@@ -24567,6 +24580,7 @@ function TodoItem(_ref2, _ref3) {
         { className: theme.editing },
         lom_h('input', {
             id: 'edit',
+            ref: itemStore.setEditInputRef,
             className: theme.edit,
             value: itemStore.editText,
             onBlur: itemStore.handleSubmit,
@@ -24613,12 +24627,12 @@ function TodoOverviewTheme() {
             opacity: 0,
             position: 'absolute',
             '& + label:before': {
-                content: '❯',
+                content: '\'❯\'',
                 fontSize: '22px',
                 color: '#e6e6e6',
                 padding: '10px 27px 10px 27px'
             },
-            '& :checked + label:before': {
+            '&:checked + label:before': {
                 color: '#737373'
             },
             '& + label': {
@@ -24835,8 +24849,8 @@ function TodoAppTheme() {
         todoapp: {
             background: '#fff',
             position: 'relative',
-            boxShadow: '0 2px 4px 0 rgba(0, 0, 0, 0.2), 0 25px 50px 0 rgba(0, 0, 0, 0.1)',
-            border: '1px solid red'
+            border: '1px solid #ededed',
+            boxShadow: '0 2px 4px 0 rgba(0, 0, 0, 0.2), 0 25px 50px 0 rgba(0, 0, 0, 0.1)'
         },
 
         '@global': {
@@ -24875,9 +24889,13 @@ function TodoApp(_ref, _ref2) {
         'div',
         { className: theme.todoapp },
         lom_h(
+            'div',
+            { style: { padding: '0.3em 0.5em' } },
+            todoStore.isOperationRunning ? 'Saving...' : 'Idle'
+        ),
+        lom_h(
             'header',
             null,
-            todoStore.isOperationRunning ? 'Saving...' : 'Idle',
             lom_h(TodoEntry, { todoStore: todoStore })
         ),
         lom_h(TodoOverview, { todoStore: todoStore, viewStore: viewStore }),
@@ -25004,7 +25022,7 @@ function AppView(_ref) {
         ),
         lom_h(
             'div',
-            { style: { border: '1px solid gray', padding: '0.5em', margin: '0 1em' } },
+            { style: { border: '1px solid gray', padding: '1em', margin: '0 1em' } },
             lom_h(
                 'h1',
                 null,

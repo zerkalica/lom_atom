@@ -54,6 +54,7 @@ function TodoEntryTheme() {
         }
     }
 }
+TodoEntryTheme.theme = true
 
 export default function TodoEntry(
     _: TodoEntryProps,

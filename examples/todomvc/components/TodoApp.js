@@ -15,8 +15,8 @@ function TodoAppTheme() {
         todoapp: {
             background: '#fff',
             position: 'relative',
-            boxShadow: '0 2px 4px 0 rgba(0, 0, 0, 0.2), 0 25px 50px 0 rgba(0, 0, 0, 0.1)',
-            border: `1px solid red`
+            border: '1px solid #ededed',
+            boxShadow: '0 2px 4px 0 rgba(0, 0, 0, 0.2), 0 25px 50px 0 rgba(0, 0, 0, 0.1)'
         },
 
         '@global': {
@@ -54,8 +54,8 @@ export default function TodoApp(
     }
 ) {
     return <div className={theme.todoapp}>
+        <div style={{padding: '0.3em 0.5em'}}>{todoStore.isOperationRunning ? 'Saving...' : 'Idle'}</div>
         <header>
-            {todoStore.isOperationRunning ? 'Saving...' : 'Idle'}
             <TodoEntry todoStore={todoStore} />
         </header>
         <TodoOverview todoStore={todoStore} viewStore={viewStore} />
