@@ -71,6 +71,6 @@ export function HelloView(
 }
 
 HelloView.deps = [{options: HelloOptions, locale: Locale, service: SomeService}]
-HelloView.provide = (props: HelloProps, prevState?: HelloState) => ([
+HelloView.provide = (props: HelloProps) => ([
     new HelloOptions(props.name)
 ])

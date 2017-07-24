@@ -5,6 +5,8 @@ import {AtomWait, createReactWrapper, createCreateElement} from 'lom_atom'
 import React from 'react'
 import {create as createJss} from 'jss'
 import jssCamel from 'jss-camel-case'
+import jssGlobal from 'jss-global'
+import jssNested from 'jss-nested'
 
 function ErrorableView({
     error
@@ -31,7 +33,9 @@ function ErrorableView({
 
 const jss = createJss({
     plugins: [
-        jssCamel()
+        jssNested(),
+        jssCamel(),
+        jssGlobal()
     ]
 })
 

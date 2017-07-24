@@ -1,6 +1,7 @@
 // @flow
 
 import {mem} from 'lom_atom'
+import type {ThemeValues} from 'lom_atom'
 
 interface IStore {
     addTodo(title: string): void;
@@ -31,24 +32,46 @@ class TodoToAdd {
     }
 }
 
+function TodoEntryTheme() {
+    return {
+        newTodo: {
+            position: 'relative',
+            margin: '0',
+            width: '100%',
+            fontSize: '24px',
+            fontFamily: 'inherit',
+            fontWeight: 'inherit',
+            lineHeight: '1.4em',
+            border: '0',
+            color: 'inherit',
+            padding: '16px 16px 16px 60px',
+            border: 'none',
+            background: 'rgba(0, 0, 0, 0.003)',
+            boxShadow: 'inset 0 -2px 1px rgba(0,0,0,0.03)',
+            boxSizing: 'border-box',
+            '-webkit-font-smoothing': 'antialiased',
+            '-moz-osx-font-smoothing': 'grayscale'
+        }
+    }
+}
+
 export default function TodoEntry(
     _: TodoEntryProps,
-    {todoToAdd}: {
+    {todoToAdd, theme}: {
+        theme: ThemeValues<typeof TodoEntryTheme>;
         todoToAdd: TodoToAdd;
     }
 ) {
-    return <div>
-        <input
-            className="new-todo"
-            placeholder="What needs to be done?"
-            onChange={todoToAdd.onChange}
-            value={todoToAdd.title}
-            onKeyDown={todoToAdd.onKeyDown}
-            autoFocus={true}
-        />
-    </div>
+    return <input
+        className={theme.newTodo}
+        placeholder="What needs to be done?"
+        onChange={todoToAdd.onChange}
+        value={todoToAdd.title}
+        onKeyDown={todoToAdd.onKeyDown}
+        autoFocus={true}
+    />
 }
-TodoEntry.deps = [{todoToAdd: TodoToAdd}]
+TodoEntry.deps = [{todoToAdd: TodoToAdd, theme: TodoEntryTheme}]
 TodoEntry.provide = ({todoStore}: TodoEntryProps) => ([
     new TodoToAdd(todoStore)
 ])

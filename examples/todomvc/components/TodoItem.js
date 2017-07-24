@@ -57,9 +57,112 @@ class TodoItemStore {
 }
 
 function TodoItemTheme() {
+    const itemBase = {
+        position: 'relative',
+        fontSize: '24px',
+        borderBottom: '1px solid #ededed',
+        '&:last-child': {
+            borderBottom: 'none'
+        },
+        '&:hover .destroy': {
+            display: 'block'
+        }
+    }
+
+    const viewLabelBase = {
+        wordBreak: 'break-all',
+        padding: '15px 15px 15px 60px',
+        display: 'block',
+        lineHeight: '1.2',
+        transition: 'color 0.4s'
+    }
+
     return {
-        container: {
+        regular: {
+            ...itemBase
+        },
+        completed: {
+            ...itemBase,
             border: '1px solid green'
+        },
+
+        editing: {
+            borderBottom: 'none',
+            padding: 0,
+            '&:last-child': {
+                marginBottom: '-1px'
+            }
+        },
+
+        edit: {
+            display: 'block',
+            width: '506px',
+            padding: '12px 16px',
+            margin: '0 0 0 43px'
+        },
+
+        toggle: {
+            textAlign: 'center',
+            width: '40px',
+            /* auto, since non-WebKit browsers doesn't support input styling */
+            height: 'auto',
+            position: 'absolute',
+            top: 0,
+            bottom: 0,
+            margin: 'auto 0',
+            border: 'none', /* Mobile Safari */
+            '-webkit-appearance': 'none',
+            appearance: 'none',
+            opacity: 0,
+            '& + label': {
+                /*
+                    Firefox requires `#` to be escaped - https://bugzilla.mozilla.org/show_bug.cgi?id=922433
+                    IE and Edge requires *everything* to be escaped to render, so we do that instead of just the `#` - https://developer.microsoft.com/en-us/microsoft-edge/platform/issues/7157459/
+                */
+                backgroundImage: `url('data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%2240%22%20height%3D%2240%22%20viewBox%3D%22-10%20-18%20100%20135%22%3E%3Ccircle%20cx%3D%2250%22%20cy%3D%2250%22%20r%3D%2250%22%20fill%3D%22none%22%20stroke%3D%22%23ededed%22%20stroke-width%3D%223%22/%3E%3C/svg%3E')`,
+                backgroundRepeat: 'no-repeat',
+                backgroundPosition: 'center left'
+            },
+
+            '& :checked + label': {
+                backgroundImage: `url('data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%2240%22%20height%3D%2240%22%20viewBox%3D%22-10%20-18%20100%20135%22%3E%3Ccircle%20cx%3D%2250%22%20cy%3D%2250%22%20r%3D%2250%22%20fill%3D%22none%22%20stroke%3D%22%23bddad5%22%20stroke-width%3D%223%22/%3E%3Cpath%20fill%3D%22%235dc2af%22%20d%3D%22M72%2025L42%2071%2027%2056l-4%204%2020%2020%2034-52z%22/%3E%3C/svg%3E')`
+            }
+        },
+
+        viewLabelRegular: {
+            ...viewLabelBase
+        },
+
+        viewLabelCompleted: {
+            ...viewLabelBase,
+            color: '#d9d9d9',
+            textDecoration: 'line-through'
+        },
+
+        destroy: {
+            padding: 0,
+            border: 0,
+            background: 'none',
+            verticalAlign: 'baseline',
+            display: 'none',
+            position: 'absolute',
+            top: 0,
+            right: '10px',
+            bottom: 0,
+            width: '40px',
+            height: '40px',
+            margin: 'auto 0',
+            fontSize: '30px',
+            color: '#cc9a9a',
+            marginBottom: '11px',
+            transition: 'color 0.2s ease-out',
+            '&:hover': {
+                color: '#af5b5e'
+            },
+
+            '&:after': {
+                content: '×'
+            }
         }
     }
 }
@@ -74,34 +177,33 @@ export default function TodoItem(
         itemStore: TodoItemStore;
     }
 ) {
-    return <li
-        className={`${theme.container} ${todo.completed ? 'completed ': ''}${todo === itemStore.todoBeingEdited ? 'editing' : ''}`}
-    >
-        <div className="view">
+    return itemStore.todoBeingEdited === todo
+        ? <li className={theme.editing}>
             <input
-                id="toggle"
-                className="toggle"
-                type="checkbox"
-                checked={todo.completed}
-                onChange={itemStore.toggle}
-            />
-            <label id="beginEdit" onDoubleClick={itemStore.beginEdit}>
-                {todo.title}
-            </label>
-            <button className="destroy" id="destroy" onClick={itemStore.handleDestroy} />
-        </div>
-        {todo === itemStore.todoBeingEdited
-            ? <input
                 id="edit"
-                className="edit"
+                className={theme.edit}
                 value={itemStore.editText}
                 onBlur={itemStore.handleSubmit}
                 onChange={itemStore.setText}
                 onKeyDown={itemStore.handleKeyDown}
             />
-            : null
-        }
-    </li>
+        </li>
+        : <li className={todo.completed ? theme.completed : theme.regular}>
+            <input
+                id="toggle"
+                className={theme.toggle}
+                type="checkbox"
+                checked={todo.completed}
+                onChange={itemStore.toggle}
+            />
+            <label
+                className={todo.completed ? theme.viewLabelCompleted : theme.viewLabelRegular}
+                id="beginEdit"
+                onDoubleClick={itemStore.beginEdit}>
+                {todo.title}
+            </label>
+            <button className={theme.destroy} id="destroy" onClick={itemStore.handleDestroy} />
+        </li>
 }
 TodoItem.deps = [{itemStore: TodoItemStore, theme: TodoItemTheme}]
 TodoItem.provide = ({todo}: {todo: ITodo}) => ([

@@ -2,25 +2,31 @@
 import {defaultContext} from './Context'
 import mem, {force, detached} from './mem'
 import {shouldUpdate} from './utils'
-import createStateDescriptor, {StateDescriptor} from './createStateDescriptor'
-import type {IProcessor} from './theme'
-type IReactComponent<IElement, Props> = {
-    constructor(props: Props, context?: Object): IReactComponent<IElement, Props>;
+import Injector from './Injector'
+import type {IProvider, IArg, IPropsWithContext} from './Injector'
+import ThemeFactory from './ThemeFactory'
+import type {IProcessor} from './ThemeFactory'
+
+type IReactComponent<IElement> = {
+    constructor(props: IPropsWithContext, context?: Object): IReactComponent<IElement>;
     render(): IElement;
     forceUpdate(): void;
 }
 
-interface IRenderFn<IElement, Props, State> {
+interface IRenderFn<IElement, State> {
+    (props: IPropsWithContext, state?: State): IElement;
+
     displayName?: string;
-    (props: Props, state?: State): IElement;
+    deps?: IArg[];
+    provide?: IProvider<State>;
 }
 
 type IFromError<IElement> = (props: {error: Error}) => IElement
 
-type IAtomize<IElement, Props, State> = (
-    render: IRenderFn<IElement, Props, State>,
+type IAtomize<IElement, State> = (
+    render: IRenderFn<IElement, State>,
     fromError?: IFromError<IElement>
-) => Class<IReactComponent<IElement, Props>>
+) => Class<IReactComponent<IElement>>
 
 function createEventFix(origin: (e: Event) => void): (e: Event) => void {
     return function fixEvent(e: Event) {
@@ -29,8 +35,8 @@ function createEventFix(origin: (e: Event) => void): (e: Event) => void {
     }
 }
 
-export function createCreateElement<IElement, Props, State>(
-    atomize: IAtomize<IElement, Props, State>,
+export function createCreateElement<IElement, State>(
+    atomize: IAtomize<IElement, State>,
     createElement: Function
 ) {
     return function lomCreateElement() {
@@ -109,98 +115,107 @@ export default function createReactWrapper<IElement>(
     BaseComponent: Class<*>,
     defaultFromError: IFromError<IElement>,
     themeProcessor?: IProcessor
-): IAtomize<IElement, *, *> {
-    class AtomizedComponent<Props: Object, State> extends BaseComponent {
-        _render: IRenderFn<IElement, Props, State>
-        _renderedData: IElement | void = undefined
-        _force: boolean = true
-        _stateDescriptor: StateDescriptor<State> | void
+): IAtomize<IElement, *> {
+    const themeFactory = new ThemeFactory(themeProcessor)
 
-        props: Props
+    class AtomizedComponent<State> extends BaseComponent {
+        _render: IRenderFn<IElement, State>
+        _renderedData: IElement | void = undefined
+        _isPropsUpdated: boolean = true
+
+        props: IPropsWithContext
 
         static fromError: IFromError<IElement>
 
         constructor(
-            props: Props,
+            props: IPropsWithContext,
             reactContext?: Object,
-            render: IRenderFn<IElement, Props, State>
+            render: IRenderFn<IElement, State>
         ) {
             super(props, reactContext)
             this._render = render
-            this._stateDescriptor = createStateDescriptor(render, themeProcessor)
         }
 
-        shouldComponentUpdate(props: Props) {
+        shouldComponentUpdate(props: IPropsWithContext) {
             const isUpdated = shouldUpdate(this.props, props)
             if (isUpdated) {
-                this._force = true
+                this._isPropsUpdated = true
             }
 
             return isUpdated
         }
 
         componentWillUnmount() {
-            this._renderedData = undefined
+            this._state = undefined
             this.props = (undefined: any)
+            this._renderedData = undefined
             this._render = (undefined: any)
             this._fromError = (undefined: any)
-            this._stateDescriptor = undefined
+            this._injector = (undefined: any)
             defaultContext.getAtom(this, this.r, 'r').destroyed(true)
         }
+
+        _state: State | void = undefined
+        _injector: Injector = (undefined: any)
 
         @detached
         r(next?: IElement, force?: boolean): IElement {
             if (next !== undefined) {
                 throw new Error('Can\'t set view' )
             }
-
             let data: IElement
-            const props = this.props
-            const prevContext = parentContext
 
+            const prevContext = parentContext
             try {
-                const sd = this._stateDescriptor
-                if (sd === undefined) {
-                    parentContext = props.__lom_ctx
-                    data = this._render(props)
-                } else {
-                    sd.props(props)
-                    parentContext = sd.context
-                    data = this._render(
-                        props,
-                        sd.descr.deps === undefined ? undefined : sd.state()
-                    )
+                const key = this._render
+                if (this._isPropsUpdated === true) {
+                    if (key.provide !== undefined) {
+                        this._injector = new Injector(
+                            this.props.__lom_ctx,
+                            key.provide(this.props, this._state),
+                            themeFactory
+                        )
+                        this._state === undefined
+                    } else if (this._injector === undefined) {
+                        this._injector = this.props.__lom_ctx || new Injector(undefined, undefined, themeFactory)
+                    }
                 }
+                if (this._state === undefined && key.deps !== undefined) {
+                    this._state = this._injector.resolve(key.deps)[0]
+                }
+                parentContext = this._injector
+                data = key(this.props, this._state)
+                if (!this._isPropsUpdated) {
+                    // prevent recursion
+                    // can call this.render synchronously
+                    this._renderedData = data
+                    this.forceUpdate()
+                    this._renderedData = undefined
+                }
+                this._isPropsUpdated = false
             } catch (error) {
+                this._state === undefined
+                this._renderedData = undefined
+                this._isPropsUpdated = false
                 data = this.constructor.fromError({error})
             }
-
             parentContext = prevContext
-
-            if (this._force === false) {
-                // prevent recursion
-                // can call this.render synchronously
-                this._renderedData = data
-                this.forceUpdate()
-                this._renderedData = undefined
-            }
-            this._force = false
 
             return data
         }
 
         render(): IElement {
             return this._renderedData === undefined
-                ? this.r(undefined, this._force)
+                ? this.r(undefined, this._isPropsUpdated)
                 : this._renderedData
         }
     }
 
-    return function reactWrapper<Props, State>(
-        render: IRenderFn<IElement, Props, State>,
+    return function reactWrapper<State>(
+        render: IRenderFn<IElement, State>,
         fromError?: IFromError<IElement>
-    ): Class<IReactComponent<IElement, Props>> {
-        function WrappedComponent(props: Props, context?: Object) {
+    ): Class<IReactComponent<IElement>> {
+        function WrappedComponent(props: IPropsWithContext, context?: Object) {
             AtomizedComponent.call(this, props, context, render)
         }
         WrappedComponent.fromError = fromError || defaultFromError

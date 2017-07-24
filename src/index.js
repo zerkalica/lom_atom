@@ -27,4 +27,4 @@ export type {
     ISheet,
     ResultOf,
     ThemeValues
-} from './theme'
+} from './ThemeFactory'

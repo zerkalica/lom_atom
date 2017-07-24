@@ -642,20 +642,51 @@ function detached(proto, name, descr) {
     return memMethod(proto, name, descr, true);
 }
 
-var ThemeProvider = function () {
-    function ThemeProvider(getStyles, deps, processor) {
+var _class$2;
+
+function _applyDecoratedDescriptor$3(target, property, decorators, descriptor, context) {
+    var desc = {};
+    Object['ke' + 'ys'](descriptor).forEach(function (key) {
+        desc[key] = descriptor[key];
+    });
+    desc.enumerable = !!desc.enumerable;
+    desc.configurable = !!desc.configurable;
+
+    if ('value' in desc || desc.initializer) {
+        desc.writable = true;
+    }
+
+    desc = decorators.slice().reverse().reduce(function (desc, decorator) {
+        return decorator(target, property, desc) || desc;
+    }, desc);
+
+    if (context && desc.initializer !== void 0) {
+        desc.value = desc.initializer ? desc.initializer.call(context) : void 0;
+        desc.initializer = undefined;
+    }
+
+    if (desc.initializer === void 0) {
+        Object['define' + 'Property'](target, property, desc);
+        desc = null;
+    }
+
+    return desc;
+}
+
+var ThemeProvider = (_class$2 = function () {
+    function ThemeProvider(themeFn, resolver, processor) {
         classCallCheck(this, ThemeProvider);
 
-        this._getStyles = getStyles;
+        this._themeFn = themeFn;
         this._processor = processor;
-        this._deps = deps;
+        this._resolver = resolver;
     }
 
     ThemeProvider.prototype.theme = function theme() {
         if (this._sheet) {
             this._sheet.detach();
         }
-        var sheet = this._sheet = this._processor.createStyleSheet(this._getStyles.apply(null, this._deps));
+        var sheet = this._sheet = this._processor.createStyleSheet(this._resolver.instance(this._themeFn));
         sheet.attach();
 
         return sheet.classes;
@@ -665,17 +696,39 @@ var ThemeProvider = function () {
         if (this._sheet) {
             this._sheet.detach();
         }
-        this._getStyles = undefined;
+        this._themeFn = undefined;
         this._processor = undefined;
-        this._deps = undefined;
+        this._resolver = undefined;
         this._sheet = undefined;
     };
 
     return ThemeProvider;
+}(), (_applyDecoratedDescriptor$3(_class$2.prototype, 'theme', [mem], Object.getOwnPropertyDescriptor(_class$2.prototype, 'theme'), _class$2.prototype)), _class$2);
+
+var ThemeFactory = function () {
+    function ThemeFactory(processor) {
+        classCallCheck(this, ThemeFactory);
+
+        this._processor = processor;
+    }
+
+    ThemeFactory.prototype.createTheme = function createTheme(themeFn, resolver) {
+        if (this._processor === undefined) {
+            return {};
+        }
+        var theme = new ThemeProvider(themeFn, resolver, this._processor);
+
+        return new Proxy(theme, {
+            get: function get$$1(t, prop) {
+                return t.theme()[prop];
+            }
+        });
+    };
+
+    return ThemeFactory;
 }();
 
 var _class$1;
-var _class3;
 
 function _applyDecoratedDescriptor$2(target, property, decorators, descriptor, context) {
     var desc = {};
@@ -707,12 +760,12 @@ function _applyDecoratedDescriptor$2(target, property, decorators, descriptor, c
 }
 
 var Injector = (_class$1 = function () {
-    function Injector(parent, items, processor) {
+    function Injector(parent, items, themeFactory) {
         classCallCheck(this, Injector);
 
         this.parent = parent;
         this.top = parent ? parent.top : this;
-        this._processor = processor;
+        this._themeFactory = themeFactory;
         if (items !== undefined) {
             for (var i = 0; i < items.length; i++) {
                 var item = items[i];
@@ -731,10 +784,10 @@ var Injector = (_class$1 = function () {
         return next;
     };
 
-    Injector.prototype._destroy = function _destroy() {
-        this.parent = undefined;
-        this._processor = undefined;
-    };
+    // _destroy() {
+    //     this.parent = undefined
+    //     this._themeFactory = undefined
+    // }
 
     Injector.prototype._fastCall = function _fastCall(key, args) {
         switch (args.length) {
@@ -753,14 +806,17 @@ var Injector = (_class$1 = function () {
         }
     };
 
+    Injector.prototype.instance = function instance(key) {
+        return this._fastCall(key, this.resolve(key.deps));
+    };
+
     Injector.prototype._get = function _get(key) {
         var value = undefined;
         if (key.theme === true) {
             value = this.top.value(key);
             if (value === undefined) {
-                var processor = this._processor;
-                value = processor ? new ThemeProvider(key, this.top.resolve(key.deps), processor).theme() : {};
-                this.top.value(key, value);
+                value = this._themeFactory.createTheme(key, this);
+                this.top.value(key, value, true);
             }
 
             return value;
@@ -808,71 +864,6 @@ var Injector = (_class$1 = function () {
 
     return Injector;
 }(), (_applyDecoratedDescriptor$2(_class$1.prototype, 'value', [memkey], Object.getOwnPropertyDescriptor(_class$1.prototype, 'value'), _class$1.prototype)), _class$1);
-
-
-var StateDescriptor = (_class3 = function () {
-    function StateDescriptor(descr, processor) {
-        classCallCheck(this, StateDescriptor);
-        this._state = undefined;
-        this.context = undefined;
-
-        this.descr = descr;
-        this._processor = processor;
-    }
-
-    StateDescriptor.prototype._destroy = function _destroy() {
-        if (this.context) {
-            this.context._destroy();
-        }
-        this._state = undefined;
-        this.descr = undefined;
-        this.context = undefined;
-    };
-
-    StateDescriptor.prototype.props = function (_props) {
-        function props(_x, _x2) {
-            return _props.apply(this, arguments);
-        }
-
-        props.toString = function () {
-            return _props.toString();
-        };
-
-        return props;
-    }(function (props, force$$1) {
-        if (props !== undefined) {
-            var _provide = this.descr.provide;
-            if (_provide !== undefined) {
-                this.context = new Injector(props.__lom_ctx, _provide(props, this._state), this._processor);
-            } else {
-                this.context = props.__lom_ctx || new Injector(undefined, undefined, this._processor);
-            }
-
-            return props;
-        }
-
-        throw new Error('Can\'t get props from StateDescriptor.props');
-    });
-
-    StateDescriptor.prototype.state = function state() {
-        var deps = this.descr.deps;
-        if (deps === undefined) {
-            throw new Error('No state defined');
-        }
-        this.props();
-        this._state = this.context.resolve(deps)[0];
-
-        return this._state;
-    };
-
-    return StateDescriptor;
-}(), (_applyDecoratedDescriptor$2(_class3.prototype, 'props', [mem], Object.getOwnPropertyDescriptor(_class3.prototype, 'props'), _class3.prototype), _applyDecoratedDescriptor$2(_class3.prototype, 'state', [mem], Object.getOwnPropertyDescriptor(_class3.prototype, 'state'), _class3.prototype)), _class3);
-
-function createStateDescriptor(render, processor) {
-    if (render.deps !== undefined || render.provide !== undefined) {
-        return new StateDescriptor(render, processor);
-    }
-}
 
 function _applyDecoratedDescriptor$1(target, property, decorators, descriptor, context) {
     var desc = {};
@@ -983,6 +974,8 @@ var parentContext = undefined;
 function createReactWrapper(BaseComponent, defaultFromError, themeProcessor) {
     var _desc, _value, _class;
 
+    var themeFactory = new ThemeFactory(themeProcessor);
+
     var AtomizedComponent = (_class = function (_BaseComponent) {
         inherits(AtomizedComponent, _BaseComponent);
 
@@ -992,28 +985,30 @@ function createReactWrapper(BaseComponent, defaultFromError, themeProcessor) {
             var _this = possibleConstructorReturn(this, _BaseComponent.call(this, props, reactContext));
 
             _this._renderedData = undefined;
-            _this._force = true;
+            _this._isPropsUpdated = true;
+            _this._state = undefined;
+            _this._injector = undefined;
 
             _this._render = render;
-            _this._stateDescriptor = createStateDescriptor(render, themeProcessor);
             return _this;
         }
 
         AtomizedComponent.prototype.shouldComponentUpdate = function shouldComponentUpdate(props) {
             var isUpdated = shouldUpdate(this.props, props);
             if (isUpdated) {
-                this._force = true;
+                this._isPropsUpdated = true;
             }
 
             return isUpdated;
         };
 
         AtomizedComponent.prototype.componentWillUnmount = function componentWillUnmount() {
-            this._renderedData = undefined;
+            this._state = undefined;
             this.props = undefined;
+            this._renderedData = undefined;
             this._render = undefined;
             this._fromError = undefined;
-            this._stateDescriptor = undefined;
+            this._injector = undefined;
             defaultContext.getAtom(this, this.r, 'r').destroyed(true);
         };
 
@@ -1021,41 +1016,45 @@ function createReactWrapper(BaseComponent, defaultFromError, themeProcessor) {
             if (next !== undefined) {
                 throw new Error('Can\'t set view');
             }
-
             var data = void 0;
-            var props = this.props;
-            var prevContext = parentContext;
 
+            var prevContext = parentContext;
             try {
-                var sd = this._stateDescriptor;
-                if (sd === undefined) {
-                    parentContext = props.__lom_ctx;
-                    data = this._render(props);
-                } else {
-                    sd.props(props);
-                    parentContext = sd.context;
-                    data = this._render(props, sd.descr.deps === undefined ? undefined : sd.state());
+                var key = this._render;
+                if (this._isPropsUpdated === true) {
+                    if (key.provide !== undefined) {
+                        this._injector = new Injector(this.props.__lom_ctx, key.provide(this.props, this._state), themeFactory);
+                        this._state === undefined;
+                    } else if (this._injector === undefined) {
+                        this._injector = this.props.__lom_ctx || new Injector(undefined, undefined, themeFactory);
+                    }
                 }
+                if (this._state === undefined && key.deps !== undefined) {
+                    this._state = this._injector.resolve(key.deps)[0];
+                }
+                parentContext = this._injector;
+                data = key(this.props, this._state);
+                if (!this._isPropsUpdated) {
+                    // prevent recursion
+                    // can call this.render synchronously
+                    this._renderedData = data;
+                    this.forceUpdate();
+                    this._renderedData = undefined;
+                }
+                this._isPropsUpdated = false;
             } catch (error) {
+                this._state === undefined;
+                this._renderedData = undefined;
+                this._isPropsUpdated = false;
                 data = this.constructor.fromError({ error: error });
             }
-
             parentContext = prevContext;
-
-            if (this._force === false) {
-                // prevent recursion
-                // can call this.render synchronously
-                this._renderedData = data;
-                this.forceUpdate();
-                this._renderedData = undefined;
-            }
-            this._force = false;
 
             return data;
         };
 
         AtomizedComponent.prototype.render = function render() {
-            return this._renderedData === undefined ? this.r(undefined, this._force) : this._renderedData;
+            return this._renderedData === undefined ? this.r(undefined, this._isPropsUpdated) : this._renderedData;
         };
 
         return AtomizedComponent;
@@ -7476,6 +7475,319 @@ function camelCase() {
 
 var jssCamel = unwrapExports(index$5);
 
+var index$6 = createCommonjsModule(function (module, exports) {
+'use strict';
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+
+var _extends = Object.assign || function (target) { for (var i = 1; i < arguments.length; i++) { var source = arguments[i]; for (var key in source) { if (Object.prototype.hasOwnProperty.call(source, key)) { target[key] = source[key]; } } } return target; };
+
+var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
+
+exports['default'] = jssGlobal;
+
+
+
+function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
+
+var propKey = '@global';
+var prefixKey = '@global ';
+
+var GlobalContainerRule = function () {
+  function GlobalContainerRule(key, styles, options) {
+    _classCallCheck(this, GlobalContainerRule);
+
+    this.type = 'global';
+
+    this.key = key;
+    this.options = options;
+    this.rules = new index$3.RuleList(_extends({}, options, {
+      parent: this
+    }));
+
+    for (var selector in styles) {
+      this.rules.add(selector, styles[selector], { selector: selector });
+    }
+
+    this.rules.process();
+  }
+
+  /**
+   * Get a rule.
+   */
+
+
+  _createClass(GlobalContainerRule, [{
+    key: 'getRule',
+    value: function getRule(name) {
+      return this.rules.get(name);
+    }
+
+    /**
+     * Create and register rule, run plugins.
+     */
+
+  }, {
+    key: 'addRule',
+    value: function addRule(name, style, options) {
+      var rule = this.rules.add(name, style, options);
+      this.options.jss.plugins.onProcessRule(rule);
+      return rule;
+    }
+
+    /**
+     * Get index of a rule.
+     */
+
+  }, {
+    key: 'indexOf',
+    value: function indexOf(rule) {
+      return this.rules.indexOf(rule);
+    }
+
+    /**
+     * Generates a CSS string.
+     */
+
+  }, {
+    key: 'toString',
+    value: function toString() {
+      return this.rules.toString();
+    }
+  }]);
+
+  return GlobalContainerRule;
+}();
+
+var GlobalPrefixedRule = function () {
+  function GlobalPrefixedRule(name, style, options) {
+    _classCallCheck(this, GlobalPrefixedRule);
+
+    this.name = name;
+    this.options = options;
+    var selector = name.substr(prefixKey.length);
+    this.rule = options.jss.createRule(selector, style, _extends({}, options, {
+      parent: this,
+      selector: selector
+    }));
+  }
+
+  _createClass(GlobalPrefixedRule, [{
+    key: 'toString',
+    value: function toString(options) {
+      return this.rule.toString(options);
+    }
+  }]);
+
+  return GlobalPrefixedRule;
+}();
+
+var separatorRegExp = /\s*,\s*/g;
+
+function addScope(selector, scope) {
+  var parts = selector.split(separatorRegExp);
+  var scoped = '';
+  for (var i = 0; i < parts.length; i++) {
+    scoped += scope + ' ' + parts[i].trim();
+    if (parts[i + 1]) scoped += ', ';
+  }
+  return scoped;
+}
+
+function handleNestedGlobalContainerRule(rule) {
+  var options = rule.options,
+      style = rule.style;
+
+  var rules = style[propKey];
+
+  if (!rules) return;
+
+  for (var name in rules) {
+    options.sheet.addRule(name, rules[name], _extends({}, options, {
+      selector: addScope(name, rule.selector)
+    }));
+  }
+
+  delete style[propKey];
+}
+
+function handlePrefixedGlobalRule(rule) {
+  var options = rule.options,
+      style = rule.style;
+
+  for (var prop in style) {
+    if (prop.substr(0, propKey.length) !== propKey) continue;
+
+    var selector = addScope(prop.substr(propKey.length), rule.selector);
+    options.sheet.addRule(selector, style[prop], _extends({}, options, {
+      selector: selector
+    }));
+    delete style[prop];
+  }
+}
+
+/**
+ * Convert nested rules to separate, remove them from original styles.
+ *
+ * @param {Rule} rule
+ * @api public
+ */
+function jssGlobal() {
+  function onCreateRule(name, styles, options) {
+    if (name === propKey) {
+      return new GlobalContainerRule(name, styles, options);
+    }
+
+    if (name[0] === '@' && name.substr(0, prefixKey.length) === prefixKey) {
+      return new GlobalPrefixedRule(name, styles, options);
+    }
+
+    var parent = options.parent;
+
+
+    if (parent) {
+      if (parent.type === 'global' || parent.options.parent.type === 'global') {
+        options.global = true;
+      }
+    }
+
+    if (options.global) options.selector = name;
+
+    return null;
+  }
+
+  function onProcessRule(rule) {
+    if (rule.type !== 'style') return;
+
+    handleNestedGlobalContainerRule(rule);
+    handlePrefixedGlobalRule(rule);
+  }
+
+  return { onCreateRule: onCreateRule, onProcessRule: onProcessRule };
+}
+});
+
+var jssGlobal = unwrapExports(index$6);
+
+var index$7 = createCommonjsModule(function (module, exports) {
+'use strict';
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+
+var _extends = Object.assign || function (target) { for (var i = 1; i < arguments.length; i++) { var source = arguments[i]; for (var key in source) { if (Object.prototype.hasOwnProperty.call(source, key)) { target[key] = source[key]; } } } return target; };
+
+exports.default = jssNested;
+
+
+
+var _warning2 = _interopRequireDefault(browser$1);
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+function _defineProperty(obj, key, value) { if (key in obj) { Object.defineProperty(obj, key, { value: value, enumerable: true, configurable: true, writable: true }); } else { obj[key] = value; } return obj; }
+
+var separatorRegExp = /\s*,\s*/g;
+var parentRegExp = /&/g;
+var refRegExp = /\$([\w-]+)/g;
+
+/**
+ * Convert nested rules to separate, remove them from original styles.
+ *
+ * @param {Rule} rule
+ * @api public
+ */
+function jssNested() {
+  // Get a function to be used for $ref replacement.
+  function getReplaceRef(container) {
+    return function (match, key) {
+      var rule = container.getRule(key);
+      if (rule) return rule.selector;
+      (0, _warning2.default)(false, '[JSS] Could not find the referenced rule %s in %s.', key, container.options.meta || container);
+      return key;
+    };
+  }
+
+  var hasAnd = function hasAnd(str) {
+    return str.indexOf('&') !== -1;
+  };
+
+  function replaceParentRefs(nestedProp, parentProp) {
+    var parentSelectors = parentProp.split(separatorRegExp);
+    var nestedSelectors = nestedProp.split(separatorRegExp);
+
+    var result = '';
+
+    for (var i = 0; i < parentSelectors.length; i++) {
+      var parent = parentSelectors[i];
+
+      for (var j = 0; j < nestedSelectors.length; j++) {
+        var nested = nestedSelectors[j];
+        if (result) result += ', ';
+        // Replace all & by the parent or prefix & with the parent.
+        result += hasAnd(nested) ? nested.replace(parentRegExp, parent) : parent + ' ' + nested;
+      }
+    }
+
+    return result;
+  }
+
+  function getOptions(rule, container, options) {
+    // Options has been already created, now we only increase index.
+    if (options) return _extends({}, options, { index: options.index + 1 });
+
+    var nestingLevel = rule.options.nestingLevel;
+
+    nestingLevel = nestingLevel === undefined ? 1 : nestingLevel + 1;
+
+    return _extends({}, rule.options, {
+      nestingLevel: nestingLevel,
+      index: container.indexOf(rule) + 1
+    });
+  }
+
+  function onProcessStyle(style, rule) {
+    if (rule.type !== 'style') return style;
+    var container = rule.options.parent;
+    var options = void 0;
+    var replaceRef = void 0;
+    for (var prop in style) {
+      var isNested = hasAnd(prop);
+      var isNestedConditional = prop[0] === '@';
+
+      if (!isNested && !isNestedConditional) continue;
+
+      options = getOptions(rule, container, options);
+
+      if (isNested) {
+        var selector = replaceParentRefs(prop, rule.selector
+        // Lazily create the ref replacer function just once for
+        // all nested rules within the sheet.
+        );if (!replaceRef) replaceRef = getReplaceRef(container
+        // Replace all $refs.
+        );selector = selector.replace(refRegExp, replaceRef);
+
+        container.addRule(selector, style[prop], _extends({}, options, { selector: selector }));
+      } else if (isNestedConditional) {
+        // Place conditional right after the parent rule to ensure right ordering.
+        container.addRule(prop, _defineProperty({}, rule.key, style[prop]), options);
+      }
+
+      delete style[prop];
+    }
+
+    return style;
+  }
+
+  return { onProcessStyle: onProcessStyle };
+}
+});
+
+var jssNested = unwrapExports(index$7);
+
 function ErrorableView(_ref) {
     var error = _ref.error;
 
@@ -7509,7 +7821,7 @@ function ErrorableView(_ref) {
 }
 
 var jss = index_1({
-    plugins: [jssCamel()]
+    plugins: [jssNested(), jssCamel(), jssGlobal()]
 });
 
 var atomize = createReactWrapper(react.Component, ErrorableView, jss);
@@ -21806,11 +22118,11 @@ if (typeof __REACT_DEVTOOLS_GLOBAL_HOOK__ !== 'undefined' && typeof __REACT_DEVT
 
 var ReactDOM_1 = ReactDOM$1;
 
-var index$6 = ReactDOM_1;
+var index$8 = ReactDOM_1;
 
-var _class$2;
+var _class$3;
 
-function _applyDecoratedDescriptor$3(target, property, decorators, descriptor, context) {
+function _applyDecoratedDescriptor$4(target, property, decorators, descriptor, context) {
     var desc = {};
     Object['ke' + 'ys'](descriptor).forEach(function (key) {
         desc[key] = descriptor[key];
@@ -21839,7 +22151,7 @@ function _applyDecoratedDescriptor$3(target, property, decorators, descriptor, c
     return desc;
 }
 
-var Counter = (_class$2 = function () {
+var Counter = (_class$3 = function () {
     function Counter() {
         classCallCheck(this, Counter);
     }
@@ -21863,7 +22175,7 @@ var Counter = (_class$2 = function () {
         }
     }]);
     return Counter;
-}(), (_applyDecoratedDescriptor$3(_class$2.prototype, 'value', [mem], Object.getOwnPropertyDescriptor(_class$2.prototype, 'value'), _class$2.prototype), _applyDecoratedDescriptor$3(_class$2.prototype, 'value', [mem], Object.getOwnPropertyDescriptor(_class$2.prototype, 'value'), _class$2.prototype)), _class$2);
+}(), (_applyDecoratedDescriptor$4(_class$3.prototype, 'value', [mem], Object.getOwnPropertyDescriptor(_class$3.prototype, 'value'), _class$3.prototype), _applyDecoratedDescriptor$4(_class$3.prototype, 'value', [mem], Object.getOwnPropertyDescriptor(_class$3.prototype, 'value'), _class$3.prototype)), _class$3);
 
 function CounterView(_ref) {
     var counter = _ref.counter;
@@ -21894,10 +22206,85 @@ function CounterView(_ref) {
     );
 }
 
-var _class$4;
+var _class$5;
 var _descriptor$2;
 
 function _initDefineProp$2(target, property, descriptor, context) {
+    if (!descriptor) return;
+    Object.defineProperty(target, property, {
+        enumerable: descriptor.enumerable,
+        configurable: descriptor.configurable,
+        writable: descriptor.writable,
+        value: descriptor.initializer ? descriptor.initializer.call(context) : void 0
+    });
+}
+
+function _applyDecoratedDescriptor$6(target, property, decorators, descriptor, context) {
+    var desc = {};
+    Object['ke' + 'ys'](descriptor).forEach(function (key) {
+        desc[key] = descriptor[key];
+    });
+    desc.enumerable = !!desc.enumerable;
+    desc.configurable = !!desc.configurable;
+
+    if ('value' in desc || desc.initializer) {
+        desc.writable = true;
+    }
+
+    desc = decorators.slice().reverse().reduce(function (desc, decorator) {
+        return decorator(target, property, desc) || desc;
+    }, desc);
+
+    if (context && desc.initializer !== void 0) {
+        desc.value = desc.initializer ? desc.initializer.call(context) : void 0;
+        desc.initializer = undefined;
+    }
+
+    if (desc.initializer === void 0) {
+        Object['define' + 'Property'](target, property, desc);
+        desc = null;
+    }
+
+    return desc;
+}
+
+var Locale = (_class$5 = function () {
+    createClass(Locale, [{
+        key: 'lang',
+        get: function get$$1() {
+            var _this = this;
+
+            setTimeout(function () {
+                _this.$.lang = 'gb';
+            }, 400);
+
+            return this._defaultLang;
+        },
+        set: function set$$1(lang) {}
+    }]);
+
+    function Locale(lang) {
+        classCallCheck(this, Locale);
+
+        _initDefineProp$2(this, '$', _descriptor$2, this);
+
+        this._defaultLang = lang;
+    }
+
+    return Locale;
+}(), (_descriptor$2 = _applyDecoratedDescriptor$6(_class$5.prototype, '$', [force], {
+    enumerable: true,
+    initializer: null
+}), _applyDecoratedDescriptor$6(_class$5.prototype, 'lang', [mem], Object.getOwnPropertyDescriptor(_class$5.prototype, 'lang'), _class$5.prototype), _applyDecoratedDescriptor$6(_class$5.prototype, 'lang', [mem], Object.getOwnPropertyDescriptor(_class$5.prototype, 'lang'), _class$5.prototype)), _class$5);
+
+var _class$4;
+var _descriptor$1;
+var _class3;
+var _descriptor2$1;
+var _class5;
+var _temp;
+
+function _initDefineProp$1(target, property, descriptor, context) {
     if (!descriptor) return;
     Object.defineProperty(target, property, {
         enumerable: descriptor.enumerable,
@@ -21936,102 +22323,27 @@ function _applyDecoratedDescriptor$5(target, property, decorators, descriptor, c
     return desc;
 }
 
-var Locale = (_class$4 = function () {
-    createClass(Locale, [{
-        key: 'lang',
-        get: function get$$1() {
-            var _this = this;
-
-            setTimeout(function () {
-                _this.$.lang = 'gb';
-            }, 400);
-
-            return this._defaultLang;
-        },
-        set: function set$$1(lang) {}
-    }]);
-
-    function Locale(lang) {
-        classCallCheck(this, Locale);
-
-        _initDefineProp$2(this, '$', _descriptor$2, this);
-
-        this._defaultLang = lang;
-    }
-
-    return Locale;
-}(), (_descriptor$2 = _applyDecoratedDescriptor$5(_class$4.prototype, '$', [force], {
-    enumerable: true,
-    initializer: null
-}), _applyDecoratedDescriptor$5(_class$4.prototype, 'lang', [mem], Object.getOwnPropertyDescriptor(_class$4.prototype, 'lang'), _class$4.prototype), _applyDecoratedDescriptor$5(_class$4.prototype, 'lang', [mem], Object.getOwnPropertyDescriptor(_class$4.prototype, 'lang'), _class$4.prototype)), _class$4);
-
-var _class$3;
-var _descriptor$1;
-var _class3$1;
-var _descriptor2$1;
-var _class5;
-var _temp;
-
-function _initDefineProp$1(target, property, descriptor, context) {
-    if (!descriptor) return;
-    Object.defineProperty(target, property, {
-        enumerable: descriptor.enumerable,
-        configurable: descriptor.configurable,
-        writable: descriptor.writable,
-        value: descriptor.initializer ? descriptor.initializer.call(context) : void 0
-    });
-}
-
-function _applyDecoratedDescriptor$4(target, property, decorators, descriptor, context) {
-    var desc = {};
-    Object['ke' + 'ys'](descriptor).forEach(function (key) {
-        desc[key] = descriptor[key];
-    });
-    desc.enumerable = !!desc.enumerable;
-    desc.configurable = !!desc.configurable;
-
-    if ('value' in desc || desc.initializer) {
-        desc.writable = true;
-    }
-
-    desc = decorators.slice().reverse().reduce(function (desc, decorator) {
-        return decorator(target, property, desc) || desc;
-    }, desc);
-
-    if (context && desc.initializer !== void 0) {
-        desc.value = desc.initializer ? desc.initializer.call(context) : void 0;
-        desc.initializer = undefined;
-    }
-
-    if (desc.initializer === void 0) {
-        Object['define' + 'Property'](target, property, desc);
-        desc = null;
-    }
-
-    return desc;
-}
-
-var Hello = (_class$3 = function Hello() {
+var Hello = (_class$4 = function Hello() {
     classCallCheck(this, Hello);
 
     _initDefineProp$1(this, 'name', _descriptor$1, this);
-}, (_descriptor$1 = _applyDecoratedDescriptor$4(_class$3.prototype, 'name', [mem], {
+}, (_descriptor$1 = _applyDecoratedDescriptor$5(_class$4.prototype, 'name', [mem], {
     enumerable: true,
     initializer: function initializer() {
         return 'test';
     }
-})), _class$3);
+})), _class$4);
 
-var HelloOptions = (_class3$1 = function HelloOptions(name) {
+var HelloOptions = (_class3 = function HelloOptions(name) {
     classCallCheck(this, HelloOptions);
 
     _initDefineProp$1(this, 'actionName', _descriptor2$1, this);
 
     this.actionName = name + '-hello';
-}, (_descriptor2$1 = _applyDecoratedDescriptor$4(_class3$1.prototype, 'actionName', [mem], {
+}, (_descriptor2$1 = _applyDecoratedDescriptor$5(_class3.prototype, 'actionName', [mem], {
     enumerable: true,
     initializer: null
-})), _class3$1);
+})), _class3);
 var SomeService = (_temp = _class5 = function () {
     function SomeService(opts) {
         classCallCheck(this, SomeService);
@@ -22131,15 +22443,11 @@ function HelloView(_ref, _ref2) {
 }
 
 HelloView.deps = [{ options: HelloOptions, locale: Locale, service: SomeService }];
-HelloView.provide = function (props, prevState) {
+HelloView.provide = function (props) {
     return [new HelloOptions(props.name)];
 };
 
-__$styleInject("html,\nbody {\n\tmargin: 0;\n\tpadding: 0;\n}\n\nbutton {\n\tmargin: 0;\n\tpadding: 0;\n\tborder: 0;\n\tbackground: none;\n\tfont-size: 100%;\n\tvertical-align: baseline;\n\tfont-family: inherit;\n\tfont-weight: inherit;\n\tcolor: inherit;\n\t-webkit-appearance: none;\n\tappearance: none;\n\t-webkit-font-smoothing: antialiased;\n\t-moz-osx-font-smoothing: grayscale;\n}\n\nbody {\n\tfont: 14px 'Helvetica Neue', Helvetica, Arial, sans-serif;\n\tline-height: 1.4em;\n\tbackground: #f5f5f5;\n\tcolor: #4d4d4d;\n\tmin-width: 230px;\n\tmax-width: 550px;\n\tmargin: 0 auto;\n\t-webkit-font-smoothing: antialiased;\n\t-moz-osx-font-smoothing: grayscale;\n\tfont-weight: 300;\n}\n\n:focus {\n\toutline: 0;\n}\n\n.hidden {\n\tdisplay: none;\n}\n\n.todoapp {\n\tbackground: #fff;\n\tmargin: 130px 0 40px 0;\n\tposition: relative;\n\tbox-shadow: 0 2px 4px 0 rgba(0, 0, 0, 0.2),\n\t            0 25px 50px 0 rgba(0, 0, 0, 0.1);\n}\n\n.todoapp input::-webkit-input-placeholder {\n\tfont-style: italic;\n\tfont-weight: 300;\n\tcolor: #e6e6e6;\n}\n\n.todoapp input::-moz-placeholder {\n\tfont-style: italic;\n\tfont-weight: 300;\n\tcolor: #e6e6e6;\n}\n\n.todoapp input::input-placeholder {\n\tfont-style: italic;\n\tfont-weight: 300;\n\tcolor: #e6e6e6;\n}\n\n.todoapp h1 {\n\tposition: absolute;\n\ttop: -155px;\n\twidth: 100%;\n\tfont-size: 100px;\n\tfont-weight: 100;\n\ttext-align: center;\n\tcolor: rgba(175, 47, 47, 0.15);\n\t-webkit-text-rendering: optimizeLegibility;\n\t-moz-text-rendering: optimizeLegibility;\n\ttext-rendering: optimizeLegibility;\n}\n\n.new-todo,\n.edit {\n\tposition: relative;\n\tmargin: 0;\n\twidth: 100%;\n\tfont-size: 24px;\n\tfont-family: inherit;\n\tfont-weight: inherit;\n\tline-height: 1.4em;\n\tborder: 0;\n\tcolor: inherit;\n\tpadding: 6px;\n\tborder: 1px solid #999;\n\tbox-shadow: inset 0 -1px 5px 0 rgba(0, 0, 0, 0.2);\n\tbox-sizing: border-box;\n\t-webkit-font-smoothing: antialiased;\n\t-moz-osx-font-smoothing: grayscale;\n}\n\n.new-todo {\n\tpadding: 16px 16px 16px 60px;\n\tborder: none;\n\tbackground: rgba(0, 0, 0, 0.003);\n\tbox-shadow: inset 0 -2px 1px rgba(0,0,0,0.03);\n}\n\n.main {\n\tposition: relative;\n\tz-index: 2;\n\tborder-top: 1px solid #e6e6e6;\n}\n\n.toggle-all {\n\ttext-align: center;\n\tborder: none; /* Mobile Safari */\n\topacity: 0;\n\tposition: absolute;\n}\n\n.toggle-all + label {\n\twidth: 60px;\n\theight: 34px;\n\tfont-size: 0;\n\tposition: absolute;\n\ttop: -52px;\n\tleft: -13px;\n\t-webkit-transform: rotate(90deg);\n\ttransform: rotate(90deg);\n}\n\n.toggle-all + label:before {\n\tcontent: '❯';\n\tfont-size: 22px;\n\tcolor: #e6e6e6;\n\tpadding: 10px 27px 10px 27px;\n}\n\n.toggle-all:checked + label:before {\n\tcolor: #737373;\n}\n\n.todo-list {\n\tmargin: 0;\n\tpadding: 0;\n\tlist-style: none;\n}\n\n.todo-list li {\n\tposition: relative;\n\tfont-size: 24px;\n\tborder-bottom: 1px solid #ededed;\n}\n\n.todo-list li:last-child {\n\tborder-bottom: none;\n}\n\n.todo-list li.editing {\n\tborder-bottom: none;\n\tpadding: 0;\n}\n\n.todo-list li.editing .edit {\n\tdisplay: block;\n\twidth: 506px;\n\tpadding: 12px 16px;\n\tmargin: 0 0 0 43px;\n}\n\n.todo-list li.editing .view {\n\tdisplay: none;\n}\n\n.todo-list li .toggle {\n\ttext-align: center;\n\twidth: 40px;\n\t/* auto, since non-WebKit browsers doesn't support input styling */\n\theight: auto;\n\tposition: absolute;\n\ttop: 0;\n\tbottom: 0;\n\tmargin: auto 0;\n\tborder: none; /* Mobile Safari */\n\t-webkit-appearance: none;\n\tappearance: none;\n}\n\n.todo-list li .toggle {\n\topacity: 0;\n}\n\n.todo-list li .toggle + label {\n\t/*\n\t\tFirefox requires `#` to be escaped - https://bugzilla.mozilla.org/show_bug.cgi?id=922433\n\t\tIE and Edge requires *everything* to be escaped to render, so we do that instead of just the `#` - https://developer.microsoft.com/en-us/microsoft-edge/platform/issues/7157459/\n\t*/\n\tbackground-image: url('data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%2240%22%20height%3D%2240%22%20viewBox%3D%22-10%20-18%20100%20135%22%3E%3Ccircle%20cx%3D%2250%22%20cy%3D%2250%22%20r%3D%2250%22%20fill%3D%22none%22%20stroke%3D%22%23ededed%22%20stroke-width%3D%223%22/%3E%3C/svg%3E');\n\tbackground-repeat: no-repeat;\n\tbackground-position: center left;\n}\n\n.todo-list li .toggle:checked + label {\n\tbackground-image: url('data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%2240%22%20height%3D%2240%22%20viewBox%3D%22-10%20-18%20100%20135%22%3E%3Ccircle%20cx%3D%2250%22%20cy%3D%2250%22%20r%3D%2250%22%20fill%3D%22none%22%20stroke%3D%22%23bddad5%22%20stroke-width%3D%223%22/%3E%3Cpath%20fill%3D%22%235dc2af%22%20d%3D%22M72%2025L42%2071%2027%2056l-4%204%2020%2020%2034-52z%22/%3E%3C/svg%3E');\n}\n\n.todo-list li label {\n\tword-break: break-all;\n\tpadding: 15px 15px 15px 60px;\n\tdisplay: block;\n\tline-height: 1.2;\n\ttransition: color 0.4s;\n}\n\n.todo-list li.completed label {\n\tcolor: #d9d9d9;\n\ttext-decoration: line-through;\n}\n\n.todo-list li .destroy {\n\tdisplay: none;\n\tposition: absolute;\n\ttop: 0;\n\tright: 10px;\n\tbottom: 0;\n\twidth: 40px;\n\theight: 40px;\n\tmargin: auto 0;\n\tfont-size: 30px;\n\tcolor: #cc9a9a;\n\tmargin-bottom: 11px;\n\ttransition: color 0.2s ease-out;\n}\n\n.todo-list li .destroy:hover {\n\tcolor: #af5b5e;\n}\n\n.todo-list li .destroy:after {\n\tcontent: '×';\n}\n\n.todo-list li:hover .destroy {\n\tdisplay: block;\n}\n\n.todo-list li .edit {\n\tdisplay: none;\n}\n\n.todo-list li.editing:last-child {\n\tmargin-bottom: -1px;\n}\n\n.footer {\n\tcolor: #777;\n\tpadding: 10px 15px;\n\theight: 20px;\n\ttext-align: center;\n\tborder-top: 1px solid #e6e6e6;\n}\n\n.footer:before {\n\tcontent: '';\n\tposition: absolute;\n\tright: 0;\n\tbottom: 0;\n\tleft: 0;\n\theight: 50px;\n\toverflow: hidden;\n\tbox-shadow: 0 1px 1px rgba(0, 0, 0, 0.2),\n\t            0 8px 0 -3px #f6f6f6,\n\t            0 9px 1px -3px rgba(0, 0, 0, 0.2),\n\t            0 16px 0 -6px #f6f6f6,\n\t            0 17px 2px -6px rgba(0, 0, 0, 0.2);\n}\n\n.todo-count {\n\tfloat: left;\n\ttext-align: left;\n}\n\n.todo-count strong {\n\tfont-weight: 300;\n}\n\n.filters {\n\tmargin: 0;\n\tpadding: 0;\n\tlist-style: none;\n\tposition: absolute;\n\tright: 0;\n\tleft: 0;\n}\n\n.filters li {\n\tdisplay: inline;\n}\n\n.filters li a {\n\tcolor: inherit;\n\tmargin: 3px;\n\tpadding: 3px 7px;\n\ttext-decoration: none;\n\tborder: 1px solid transparent;\n\tborder-radius: 3px;\n}\n\n.filters li a:hover {\n\tborder-color: rgba(175, 47, 47, 0.1);\n}\n\n.filters li a.selected {\n\tborder-color: rgba(175, 47, 47, 0.2);\n}\n\n.clear-completed,\nhtml .clear-completed:active {\n\tfloat: right;\n\tposition: relative;\n\tline-height: 20px;\n\ttext-decoration: none;\n\tcursor: pointer;\n}\n\n.clear-completed:hover {\n\ttext-decoration: underline;\n}\n\n.info {\n\tmargin: 65px auto 0;\n\tcolor: #bfbfbf;\n\tfont-size: 10px;\n\ttext-shadow: 0 1px 0 rgba(255, 255, 255, 0.5);\n\ttext-align: center;\n}\n\n.info p {\n\tline-height: 1;\n}\n\n.info a {\n\tcolor: inherit;\n\ttext-decoration: none;\n\tfont-weight: 400;\n}\n\n.info a:hover {\n\ttext-decoration: underline;\n}\n\n/*\n\tHack to remove background from Mobile Safari.\n\tCan't use it globally since it destroys checkboxes in Firefox\n*/\n@media screen and (-webkit-min-device-pixel-ratio:0) {\n\t.toggle-all,\n\t.todo-list li .toggle {\n\t\tbackground: none;\n\t}\n\n\t.todo-list li .toggle {\n\t\theight: 40px;\n\t}\n}\n\n@media (max-width: 430px) {\n\t.footer {\n\t\theight: 50px;\n\t}\n\n\t.filters {\n\t\tbottom: 10px;\n\t}\n}\n",undefined);
-
-__$styleInject("button {\n  color: #292b2c;\n  background-color: #fff;\n\n  display: inline-block;\n  font-weight: 400;\n  line-height: 1.25;\n  text-align: center;\n  white-space: nowrap;\n  vertical-align: middle;\n  -webkit-user-select: none;\n  -moz-user-select: none;\n  -ms-user-select: none;\n  user-select: none;\n  border: 1px solid #ccc;\n  padding: .5rem 1rem;\n  font-size: 1rem;\n  border-radius: .25rem;\n  -webkit-transition: all .2s ease-in-out;\n  -o-transition: all .2s ease-in-out;\n  transition: all .2s ease-in-out;\n}\n\n.kv {\n  display: flex;\n  padding: 0.3em 0.3em;\n}\n\n.kv-key {\n  display: inline-block;\n  width: 20%;\n}\n\n.kv-value {\n  display: inline-block;\n  width: 80%;\n}\n", undefined);
-
-var index$8 = function (glob, opts) {
+var index$9 = function (glob, opts) {
   if (typeof glob !== 'string') {
     throw new TypeError('Expected a string');
   }
@@ -22271,11 +22579,11 @@ var index$8 = function (glob, opts) {
   return new RegExp(reStr, flags);
 };
 
-var index$12 = Array.isArray || function (arr) {
+var index$13 = Array.isArray || function (arr) {
   return Object.prototype.toString.call(arr) == '[object Array]';
 };
 
-var index$10 = pathToRegexp;
+var index$11 = pathToRegexp;
 var parse_1 = parse;
 var compile_1 = compile;
 var tokensToFunction_1 = tokensToFunction;
@@ -22452,7 +22760,7 @@ function tokensToFunction (tokens) {
         }
       }
 
-      if (index$12(value)) {
+      if (index$13(value)) {
         if (!token.repeat) {
           throw new TypeError('Expected "' + token.name + '" to not repeat, but received `' + JSON.stringify(value) + '`')
         }
@@ -22603,7 +22911,7 @@ function stringToRegexp (path, keys, options) {
  * @return {!RegExp}
  */
 function tokensToRegExp (tokens, keys, options) {
-  if (!index$12(keys)) {
+  if (!index$13(keys)) {
     options = /** @type {!Object} */ (keys || options);
     keys = [];
   }
@@ -22679,7 +22987,7 @@ function tokensToRegExp (tokens, keys, options) {
  * @return {!RegExp}
  */
 function pathToRegexp (path, keys, options) {
-  if (!index$12(keys)) {
+  if (!index$13(keys)) {
     options = /** @type {!Object} */ (keys || options);
     keys = [];
   }
@@ -22690,17 +22998,17 @@ function pathToRegexp (path, keys, options) {
     return regexpToRegexp(path, /** @type {!Array} */ (keys))
   }
 
-  if (index$12(path)) {
+  if (index$13(path)) {
     return arrayToRegexp(/** @type {!Array} */ (path), /** @type {!Array} */ (keys), options)
   }
 
   return stringToRegexp(/** @type {string} */ (path), /** @type {!Array} */ (keys), options)
 }
 
-index$10.parse = parse_1;
-index$10.compile = compile_1;
-index$10.tokensToFunction = tokensToFunction_1;
-index$10.tokensToRegExp = tokensToRegExp_1;
+index$11.parse = parse_1;
+index$11.compile = compile_1;
+index$11.tokensToFunction = tokensToFunction_1;
+index$11.tokensToRegExp = tokensToRegExp_1;
 
 var _extends$2 = Object.assign || function (target) { for (var i = 1; i < arguments.length; i++) { var source = arguments[i]; for (var key in source) { if (Object.prototype.hasOwnProperty.call(source, key)) { target[key] = source[key]; } } } return target; };
 
@@ -22719,13 +23027,13 @@ var stringMatchers = {
 		};
 	},
 	glob: function glob(targetString) {
-		var urlRX = index$8(targetString.replace(/^glob:/, ''));
+		var urlRX = index$9(targetString.replace(/^glob:/, ''));
 		return function (url) {
 			return urlRX.test(url);
 		};
 	},
 	express: function express(targetString) {
-		var urlRX = index$10(targetString.replace(/^express:/, ''));
+		var urlRX = index$11(targetString.replace(/^express:/, ''));
 		return function (url) {
 			return urlRX.test(url);
 		};
@@ -23631,7 +23939,7 @@ function _initDefineProp$3(target, property, descriptor, context) {
     });
 }
 
-function _applyDecoratedDescriptor$6(target, property, decorators, descriptor, context) {
+function _applyDecoratedDescriptor$7(target, property, decorators, descriptor, context) {
     var desc = {};
     Object['ke' + 'ys'](descriptor).forEach(function (key) {
         desc[key] = descriptor[key];
@@ -23838,18 +24146,18 @@ var TodoStore = (_class2 = function () {
         }
     }]);
     return TodoStore;
-}(), (_descriptor$3 = _applyDecoratedDescriptor$6(_class2.prototype, 'opCount', [mem], {
+}(), (_descriptor$3 = _applyDecoratedDescriptor$7(_class2.prototype, 'opCount', [mem], {
     enumerable: true,
     initializer: function initializer() {
         return 0;
     }
-}), _applyDecoratedDescriptor$6(_class2.prototype, 'todos', [mem], Object.getOwnPropertyDescriptor(_class2.prototype, 'todos'), _class2.prototype), _applyDecoratedDescriptor$6(_class2.prototype, 'todos', [mem], Object.getOwnPropertyDescriptor(_class2.prototype, 'todos'), _class2.prototype), _applyDecoratedDescriptor$6(_class2.prototype, 'activeTodoCount', [mem], Object.getOwnPropertyDescriptor(_class2.prototype, 'activeTodoCount'), _class2.prototype)), _class2);
+}), _applyDecoratedDescriptor$7(_class2.prototype, 'todos', [mem], Object.getOwnPropertyDescriptor(_class2.prototype, 'todos'), _class2.prototype), _applyDecoratedDescriptor$7(_class2.prototype, 'todos', [mem], Object.getOwnPropertyDescriptor(_class2.prototype, 'todos'), _class2.prototype), _applyDecoratedDescriptor$7(_class2.prototype, 'activeTodoCount', [mem], Object.getOwnPropertyDescriptor(_class2.prototype, 'activeTodoCount'), _class2.prototype)), _class2);
 
-var _class$5;
+var _class$6;
 var _class2$1;
 var _temp$1;
 
-function _applyDecoratedDescriptor$7(target, property, decorators, descriptor, context) {
+function _applyDecoratedDescriptor$8(target, property, decorators, descriptor, context) {
     var desc = {};
     Object['ke' + 'ys'](descriptor).forEach(function (key) {
         desc[key] = descriptor[key];
@@ -23884,7 +24192,7 @@ var TODO_FILTER = {
     ACTIVE: 'active'
 };
 
-var ViewStore = (_class$5 = (_temp$1 = _class2$1 = function () {
+var ViewStore = (_class$6 = (_temp$1 = _class2$1 = function () {
     function ViewStore(todoStore) {
         classCallCheck(this, ViewStore);
 
@@ -23923,106 +24231,12 @@ var ViewStore = (_class$5 = (_temp$1 = _class2$1 = function () {
         }
     }]);
     return ViewStore;
-}(), _class2$1.deps = [TodoStore], _temp$1), (_applyDecoratedDescriptor$7(_class$5.prototype, 'filter', [mem], Object.getOwnPropertyDescriptor(_class$5.prototype, 'filter'), _class$5.prototype), _applyDecoratedDescriptor$7(_class$5.prototype, 'filter', [mem], Object.getOwnPropertyDescriptor(_class$5.prototype, 'filter'), _class$5.prototype), _applyDecoratedDescriptor$7(_class$5.prototype, 'filteredTodos', [mem], Object.getOwnPropertyDescriptor(_class$5.prototype, 'filteredTodos'), _class$5.prototype)), _class$5);
+}(), _class2$1.deps = [TodoStore], _temp$1), (_applyDecoratedDescriptor$8(_class$6.prototype, 'filter', [mem], Object.getOwnPropertyDescriptor(_class$6.prototype, 'filter'), _class$6.prototype), _applyDecoratedDescriptor$8(_class$6.prototype, 'filter', [mem], Object.getOwnPropertyDescriptor(_class$6.prototype, 'filter'), _class$6.prototype), _applyDecoratedDescriptor$8(_class$6.prototype, 'filteredTodos', [mem], Object.getOwnPropertyDescriptor(_class$6.prototype, 'filteredTodos'), _class$6.prototype)), _class$6);
 
-var _class$6;
+var _class$7;
 var _descriptor$4;
 
 function _initDefineProp$4(target, property, descriptor, context) {
-    if (!descriptor) return;
-    Object.defineProperty(target, property, {
-        enumerable: descriptor.enumerable,
-        configurable: descriptor.configurable,
-        writable: descriptor.writable,
-        value: descriptor.initializer ? descriptor.initializer.call(context) : void 0
-    });
-}
-
-function _applyDecoratedDescriptor$8(target, property, decorators, descriptor, context) {
-    var desc = {};
-    Object['ke' + 'ys'](descriptor).forEach(function (key) {
-        desc[key] = descriptor[key];
-    });
-    desc.enumerable = !!desc.enumerable;
-    desc.configurable = !!desc.configurable;
-
-    if ('value' in desc || desc.initializer) {
-        desc.writable = true;
-    }
-
-    desc = decorators.slice().reverse().reduce(function (desc, decorator) {
-        return decorator(target, property, desc) || desc;
-    }, desc);
-
-    if (context && desc.initializer !== void 0) {
-        desc.value = desc.initializer ? desc.initializer.call(context) : void 0;
-        desc.initializer = undefined;
-    }
-
-    if (desc.initializer === void 0) {
-        Object['define' + 'Property'](target, property, desc);
-        desc = null;
-    }
-
-    return desc;
-}
-
-var TodoToAdd = (_class$6 = function TodoToAdd(todoStore) {
-    var _this = this;
-
-    classCallCheck(this, TodoToAdd);
-
-    _initDefineProp$4(this, 'title', _descriptor$4, this);
-
-    this.onChange = function (_ref) {
-        var target = _ref.target;
-
-        _this.title = target.value;
-    };
-
-    this.onKeyDown = function (e) {
-        if (e.keyCode === 13 && _this.title) {
-            _this._store.addTodo(_this.title);
-            _this.title = '';
-        }
-    };
-
-    this._store = todoStore;
-}, (_descriptor$4 = _applyDecoratedDescriptor$8(_class$6.prototype, 'title', [mem], {
-    enumerable: true,
-    initializer: function initializer() {
-        return '';
-    }
-})), _class$6);
-
-
-function TodoEntry(_, _ref2) {
-    var todoToAdd = _ref2.todoToAdd;
-
-    return lom_h(
-        'div',
-        null,
-        lom_h('input', {
-            className: 'new-todo',
-            placeholder: 'What needs to be done?',
-            onChange: todoToAdd.onChange,
-            value: todoToAdd.title,
-            onKeyDown: todoToAdd.onKeyDown,
-            autoFocus: true
-        })
-    );
-}
-TodoEntry.deps = [{ todoToAdd: TodoToAdd }];
-TodoEntry.provide = function (_ref3) {
-    var todoStore = _ref3.todoStore;
-    return [new TodoToAdd(todoStore)];
-};
-
-var _class$7;
-var _descriptor$5;
-var _descriptor2$2;
-
-function _initDefineProp$5(target, property, descriptor, context) {
     if (!descriptor) return;
     Object.defineProperty(target, property, {
         enumerable: descriptor.enumerable,
@@ -24061,10 +24275,120 @@ function _applyDecoratedDescriptor$9(target, property, decorators, descriptor, c
     return desc;
 }
 
+var TodoToAdd = (_class$7 = function TodoToAdd(todoStore) {
+    var _this = this;
+
+    classCallCheck(this, TodoToAdd);
+
+    _initDefineProp$4(this, 'title', _descriptor$4, this);
+
+    this.onChange = function (_ref) {
+        var target = _ref.target;
+
+        _this.title = target.value;
+    };
+
+    this.onKeyDown = function (e) {
+        if (e.keyCode === 13 && _this.title) {
+            _this._store.addTodo(_this.title);
+            _this.title = '';
+        }
+    };
+
+    this._store = todoStore;
+}, (_descriptor$4 = _applyDecoratedDescriptor$9(_class$7.prototype, 'title', [mem], {
+    enumerable: true,
+    initializer: function initializer() {
+        return '';
+    }
+})), _class$7);
+
+
+function TodoEntryTheme() {
+    var _newTodo;
+
+    return {
+        newTodo: (_newTodo = {
+            position: 'relative',
+            margin: '0',
+            width: '100%',
+            fontSize: '24px',
+            fontFamily: 'inherit',
+            fontWeight: 'inherit',
+            lineHeight: '1.4em',
+            border: '0',
+            color: 'inherit',
+            padding: '16px 16px 16px 60px'
+        }, _newTodo['border'] = 'none', _newTodo.background = 'rgba(0, 0, 0, 0.003)', _newTodo.boxShadow = 'inset 0 -2px 1px rgba(0,0,0,0.03)', _newTodo.boxSizing = 'border-box', _newTodo['-webkit-font-smoothing'] = 'antialiased', _newTodo['-moz-osx-font-smoothing'] = 'grayscale', _newTodo)
+    };
+}
+
+function TodoEntry(_, _ref2) {
+    var todoToAdd = _ref2.todoToAdd,
+        theme = _ref2.theme;
+
+    return lom_h('input', {
+        className: theme.newTodo,
+        placeholder: 'What needs to be done?',
+        onChange: todoToAdd.onChange,
+        value: todoToAdd.title,
+        onKeyDown: todoToAdd.onKeyDown,
+        autoFocus: true
+    });
+}
+TodoEntry.deps = [{ todoToAdd: TodoToAdd, theme: TodoEntryTheme }];
+TodoEntry.provide = function (_ref3) {
+    var todoStore = _ref3.todoStore;
+    return [new TodoToAdd(todoStore)];
+};
+
+var _class$8;
+var _descriptor$5;
+var _descriptor2$2;
+
+function _initDefineProp$5(target, property, descriptor, context) {
+    if (!descriptor) return;
+    Object.defineProperty(target, property, {
+        enumerable: descriptor.enumerable,
+        configurable: descriptor.configurable,
+        writable: descriptor.writable,
+        value: descriptor.initializer ? descriptor.initializer.call(context) : void 0
+    });
+}
+
+function _applyDecoratedDescriptor$10(target, property, decorators, descriptor, context) {
+    var desc = {};
+    Object['ke' + 'ys'](descriptor).forEach(function (key) {
+        desc[key] = descriptor[key];
+    });
+    desc.enumerable = !!desc.enumerable;
+    desc.configurable = !!desc.configurable;
+
+    if ('value' in desc || desc.initializer) {
+        desc.writable = true;
+    }
+
+    desc = decorators.slice().reverse().reduce(function (desc, decorator) {
+        return decorator(target, property, desc) || desc;
+    }, desc);
+
+    if (context && desc.initializer !== void 0) {
+        desc.value = desc.initializer ? desc.initializer.call(context) : void 0;
+        desc.initializer = undefined;
+    }
+
+    if (desc.initializer === void 0) {
+        Object['define' + 'Property'](target, property, desc);
+        desc = null;
+    }
+
+    return desc;
+}
+
 var ESCAPE_KEY = 27;
 var ENTER_KEY = 13;
 
-var TodoItemStore = (_class$7 = function TodoItemStore(todo) {
+var TodoItemStore = (_class$8 = function TodoItemStore(todo) {
     var _this = this;
 
     classCallCheck(this, TodoItemStore);
@@ -24114,23 +24438,120 @@ var TodoItemStore = (_class$7 = function TodoItemStore(todo) {
     };
 
     this._todo = todo;
-}, (_descriptor$5 = _applyDecoratedDescriptor$9(_class$7.prototype, 'todoBeingEdited', [mem], {
+}, (_descriptor$5 = _applyDecoratedDescriptor$10(_class$8.prototype, 'todoBeingEdited', [mem], {
     enumerable: true,
     initializer: function initializer() {
         return null;
     }
-}), _descriptor2$2 = _applyDecoratedDescriptor$9(_class$7.prototype, 'editText', [mem], {
+}), _descriptor2$2 = _applyDecoratedDescriptor$10(_class$8.prototype, 'editText', [mem], {
     enumerable: true,
     initializer: function initializer() {
         return '';
     }
-})), _class$7);
+})), _class$8);
 
 
 function TodoItemTheme() {
+    var itemBase = {
+        position: 'relative',
+        fontSize: '24px',
+        borderBottom: '1px solid #ededed',
+        '&:last-child': {
+            borderBottom: 'none'
+        },
+        '&:hover .destroy': {
+            display: 'block'
+        }
+    };
+
+    var viewLabelBase = {
+        wordBreak: 'break-all',
+        padding: '15px 15px 15px 60px',
+        display: 'block',
+        lineHeight: '1.2',
+        transition: 'color 0.4s'
+    };
+
     return {
-        container: {
+        regular: Object.assign({}, itemBase),
+        completed: Object.assign({}, itemBase, {
             border: '1px solid green'
+        }),
+
+        editing: {
+            borderBottom: 'none',
+            padding: 0,
+            '&:last-child': {
+                marginBottom: '-1px'
+            }
+        },
+
+        edit: {
+            display: 'block',
+            width: '506px',
+            padding: '12px 16px',
+            margin: '0 0 0 43px'
+        },
+
+        toggle: {
+            textAlign: 'center',
+            width: '40px',
+            /* auto, since non-WebKit browsers doesn't support input styling */
+            height: 'auto',
+            position: 'absolute',
+            top: 0,
+            bottom: 0,
+            margin: 'auto 0',
+            border: 'none', /* Mobile Safari */
+            '-webkit-appearance': 'none',
+            appearance: 'none',
+            opacity: 0,
+            '& + label': {
+                /*
+                    Firefox requires `#` to be escaped - https://bugzilla.mozilla.org/show_bug.cgi?id=922433
+                    IE and Edge requires *everything* to be escaped to render, so we do that instead of just the `#` - https://developer.microsoft.com/en-us/microsoft-edge/platform/issues/7157459/
+                */
+                backgroundImage: 'url(\'data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%2240%22%20height%3D%2240%22%20viewBox%3D%22-10%20-18%20100%20135%22%3E%3Ccircle%20cx%3D%2250%22%20cy%3D%2250%22%20r%3D%2250%22%20fill%3D%22none%22%20stroke%3D%22%23ededed%22%20stroke-width%3D%223%22/%3E%3C/svg%3E\')',
+                backgroundRepeat: 'no-repeat',
+                backgroundPosition: 'center left'
+            },
+
+            '& :checked + label': {
+                backgroundImage: 'url(\'data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%2240%22%20height%3D%2240%22%20viewBox%3D%22-10%20-18%20100%20135%22%3E%3Ccircle%20cx%3D%2250%22%20cy%3D%2250%22%20r%3D%2250%22%20fill%3D%22none%22%20stroke%3D%22%23bddad5%22%20stroke-width%3D%223%22/%3E%3Cpath%20fill%3D%22%235dc2af%22%20d%3D%22M72%2025L42%2071%2027%2056l-4%204%2020%2020%2034-52z%22/%3E%3C/svg%3E\')'
+            }
+        },
+
+        viewLabelRegular: Object.assign({}, viewLabelBase),
+
+        viewLabelCompleted: Object.assign({}, viewLabelBase, {
+            color: '#d9d9d9',
+            textDecoration: 'line-through'
+        }),
+
+        destroy: {
+            padding: 0,
+            border: 0,
+            background: 'none',
+            verticalAlign: 'baseline',
+            display: 'none',
+            position: 'absolute',
+            top: 0,
+            right: '10px',
+            bottom: 0,
+            width: '40px',
+            height: '40px',
+            margin: 'auto 0',
+            fontSize: '30px',
+            color: '#cc9a9a',
+            marginBottom: '11px',
+            transition: 'color 0.2s ease-out',
+            '&:hover': {
+                color: '#af5b5e'
+            },
+
+            '&:after': {
+                content: '×'
+            }
         }
     };
 }
@@ -24141,36 +24562,36 @@ function TodoItem(_ref2, _ref3) {
     var itemStore = _ref3.itemStore,
         theme = _ref3.theme;
 
-    return lom_h(
+    return itemStore.todoBeingEdited === todo ? lom_h(
         'li',
-        {
-            className: theme.container + ' ' + (todo.completed ? 'completed ' : '') + (todo === itemStore.todoBeingEdited ? 'editing' : '')
-        },
-        lom_h(
-            'div',
-            { className: 'view' },
-            lom_h('input', {
-                id: 'toggle',
-                className: 'toggle',
-                type: 'checkbox',
-                checked: todo.completed,
-                onChange: itemStore.toggle
-            }),
-            lom_h(
-                'label',
-                { id: 'beginEdit', onDoubleClick: itemStore.beginEdit },
-                todo.title
-            ),
-            lom_h('button', { className: 'destroy', id: 'destroy', onClick: itemStore.handleDestroy })
-        ),
-        todo === itemStore.todoBeingEdited ? lom_h('input', {
+        { className: theme.editing },
+        lom_h('input', {
             id: 'edit',
-            className: 'edit',
+            className: theme.edit,
             value: itemStore.editText,
             onBlur: itemStore.handleSubmit,
             onChange: itemStore.setText,
             onKeyDown: itemStore.handleKeyDown
-        }) : null
+        })
+    ) : lom_h(
+        'li',
+        { className: todo.completed ? theme.completed : theme.regular },
+        lom_h('input', {
+            id: 'toggle',
+            className: theme.toggle,
+            type: 'checkbox',
+            checked: todo.completed,
+            onChange: itemStore.toggle
+        }),
+        lom_h(
+            'label',
+            {
+                className: todo.completed ? theme.viewLabelCompleted : theme.viewLabelRegular,
+                id: 'beginEdit',
+                onDoubleClick: itemStore.beginEdit },
+            todo.title
+        ),
+        lom_h('button', { className: theme.destroy, id: 'destroy', onClick: itemStore.handleDestroy })
     );
 }
 TodoItem.deps = [{ itemStore: TodoItemStore, theme: TodoItemTheme }];
@@ -24179,9 +24600,51 @@ TodoItem.provide = function (_ref4) {
     return [new TodoItemStore(todo)];
 };
 
-function TodoOverview(_ref) {
+function TodoOverviewTheme() {
+    return {
+        main: {
+            position: 'relative',
+            zIndex: 2,
+            borderTop: '1px solid #e6e6e6'
+        },
+        toggleAll: {
+            textAlign: 'center',
+            border: 'none',
+            opacity: 0,
+            position: 'absolute',
+            '& + label:before': {
+                content: '❯',
+                fontSize: '22px',
+                color: '#e6e6e6',
+                padding: '10px 27px 10px 27px'
+            },
+            '& :checked + label:before': {
+                color: '#737373'
+            },
+            '& + label': {
+                width: '60px',
+                height: '34px',
+                fontSize: 0,
+                position: 'absolute',
+                top: '-52px',
+                left: '-13px',
+                '-webkit-transform': 'rotate(90deg)',
+                transform: 'rotate(90deg)'
+            }
+        },
+        todoList: {
+            margin: 0,
+            padding: 0,
+            listStyle: 'none'
+        }
+    };
+}
+TodoOverviewTheme.theme = true;
+
+function TodoOverview(_ref, _ref2) {
     var todoStore = _ref.todoStore,
         viewStore = _ref.viewStore;
+    var theme = _ref2.theme;
 
     if (!todoStore.todos.length) {
         return null;
@@ -24189,19 +24652,19 @@ function TodoOverview(_ref) {
 
     return lom_h(
         'section',
-        { className: 'main' },
+        { className: theme.main },
         lom_h('input', {
-            className: 'toggle-all',
+            className: theme.toggleAll,
             type: 'checkbox',
-            onChange: function onChange(_ref2) {
-                var target = _ref2.target;
+            onChange: function onChange(_ref3) {
+                var target = _ref3.target;
                 return todoStore.toggleAll(target.checked);
             },
             checked: todoStore.activeTodoCount === 0
         }),
         lom_h(
             'ul',
-            { className: 'todo-list' },
+            { className: theme.todoList },
             viewStore.filteredTodos.map(function (todo) {
                 return lom_h(TodoItem, {
                     key: todo.id,
@@ -24212,6 +24675,7 @@ function TodoOverview(_ref) {
         )
     );
 }
+TodoOverview.deps = [{ theme: TodoOverviewTheme }];
 
 var links = [{
     id: TODO_FILTER.ALL,
@@ -24231,9 +24695,89 @@ function createHandler(viewStore, id) {
     };
 }
 
-function TodoFooter(_ref) {
+function TodoFooterTheme() {
+    var linkBase = {
+        color: 'inherit',
+        margin: '3px',
+        padding: '3px 7px',
+        textDecoration: 'none',
+        border: '1px solid transparent',
+        borderRadius: '3px',
+        '& :hover': {
+            borderColor: 'rgba(175, 47, 47, 0.1)'
+        }
+    };
+
+    return {
+        footer: {
+            color: '#777',
+            padding: '10px 15px',
+            height: '20px',
+            textAlign: 'center',
+            borderTop: '1px solid #e6e6e6',
+            '&:before': {
+                content: '\'\'',
+                position: 'absolute',
+                right: '0',
+                bottom: '0',
+                left: '0',
+                height: '50px',
+                overflow: 'hidden',
+                boxShadow: '0 1px 1px rgba(0, 0, 0, 0.2),\n                    0 8px 0 -3px #f6f6f6,\n                    0 9px 1px -3px rgba(0, 0, 0, 0.2),\n                    0 16px 0 -6px #f6f6f6,\n                    0 17px 2px -6px rgba(0, 0, 0, 0.2)'
+            }
+        },
+
+        todoCount: {
+            float: 'left',
+            textAlign: 'left'
+        },
+
+        filters: {
+            margin: 0,
+            padding: 0,
+            listStyle: 'none',
+            position: 'absolute',
+            right: 0,
+            left: 0
+        },
+
+        filterItem: {
+            display: 'inline'
+        },
+
+        linkRegular: Object.assign({}, linkBase),
+
+        linkSelected: Object.assign({}, linkBase, {
+            borderColor: 'rgba(175, 47, 47, 0.2)'
+        }),
+
+        clearCompleted: {
+            margin: 0,
+            padding: 0,
+            border: 0,
+            background: 'none',
+            fontSize: '100%',
+            verticalAlign: 'baseline',
+            appearance: 'none',
+
+            float: 'right',
+            position: 'relative',
+            lineHeight: '20px',
+            textDecoration: 'none',
+            cursor: 'pointer',
+
+            '&:hover': {
+                textDecoration: 'underline'
+            }
+        }
+    };
+}
+TodoFooterTheme.theme = true;
+
+function TodoFooter(_ref, _ref2) {
     var todoStore = _ref.todoStore,
         viewStore = _ref.viewStore;
+    var theme = _ref2.theme;
 
     if (!todoStore.activeTodoCount && !todoStore.completedCount) {
         return null;
@@ -24242,10 +24786,10 @@ function TodoFooter(_ref) {
 
     return lom_h(
         'footer',
-        { className: 'footer' },
+        { className: theme.footer },
         lom_h(
             'span',
-            { className: 'todo-count' },
+            { className: theme.todoCount },
             lom_h(
                 'strong',
                 null,
@@ -24255,16 +24799,16 @@ function TodoFooter(_ref) {
         ),
         lom_h(
             'ul',
-            { className: 'filters' },
+            { className: theme.filters },
             links.map(function (link) {
                 return lom_h(
                     'li',
-                    { key: link.id },
+                    { key: link.id, className: theme.filterItem },
                     lom_h(
                         'a',
                         {
                             id: 'todo-filter-' + link.id,
-                            className: filter === link.id ? 'selected' : '',
+                            className: filter === link.id ? theme.linkSelected : theme.linkRegular,
                             href: '?todo_filter=' + link.id,
                             onClick: createHandler(viewStore, link.id)
                         },
@@ -24276,7 +24820,7 @@ function TodoFooter(_ref) {
         todoStore.completedCount === 0 ? null : lom_h(
             'button',
             {
-                className: 'clear-completed',
+                className: theme.clearCompleted,
                 onClick: function onClick() {
                     return todoStore.clearCompleted();
                 } },
@@ -24284,14 +24828,41 @@ function TodoFooter(_ref) {
         )
     );
 }
+TodoFooter.deps = [{ theme: TodoFooterTheme }];
 
-var TodoAppTheme = function TodoAppTheme() {
+function TodoAppTheme() {
     return {
-        container: {
+        todoapp: {
+            background: '#fff',
+            position: 'relative',
+            boxShadow: '0 2px 4px 0 rgba(0, 0, 0, 0.2), 0 25px 50px 0 rgba(0, 0, 0, 0.1)',
             border: '1px solid red'
+        },
+
+        '@global': {
+            ':focus': {
+                outline: 0
+            },
+            html: {
+                margin: 0,
+                padding: 0
+            },
+            body: {
+                font: '14px "Helvetica Neue", Helvetica, Arial, sans-serif',
+                lineHeight: '1.4em',
+                background: '#f5f5f5',
+                color: '#4d4d4d',
+                minWidth: '230px',
+                maxWidth: '550px',
+                margin: '0 auto',
+                padding: 0,
+                '-webkit-font-smoothing': 'antialiased',
+                '-moz-osx-font-smoothing': 'grayscale',
+                fontWeight: '300'
+            }
         }
     };
-};
+}
 TodoAppTheme.theme = true;
 
 function TodoApp(_ref, _ref2) {
@@ -24302,10 +24873,10 @@ function TodoApp(_ref, _ref2) {
 
     return lom_h(
         'div',
-        { className: theme.container },
+        { className: theme.todoapp },
         lom_h(
             'header',
-            { className: 'header' },
+            null,
             todoStore.isOperationRunning ? 'Saving...' : 'Idle',
             lom_h(TodoEntry, { todoStore: todoStore })
         ),
@@ -24315,10 +24886,13 @@ function TodoApp(_ref, _ref2) {
 }
 
 TodoApp.deps = [{ todoStore: TodoStore, viewStore: ViewStore, theme: TodoAppTheme }];
-TodoApp.provide = function (_) {
-    var todoStore = new TodoStore();
-    return [todoStore, new ViewStore(todoStore)];
-};
+// TodoApp.provide = (_: TodoAppProps) => {
+//     const todoStore = new TodoStore()
+//     return [
+//         todoStore,
+//         new ViewStore(todoStore)
+//     ]
+// }
 
 var _class;
 var _descriptor;
@@ -24464,7 +25038,7 @@ AppView.provide = function (props) {
 
 var store = new Store();
 
-index$6.render(lom_h(AppView, { store: store, lang: 'ru' }), document.getElementById('app'));
+index$8.render(lom_h(AppView, { store: store, lang: 'ru' }), document.getElementById('app'));
 
 }());
 //# sourceMappingURL=examples.js.map
