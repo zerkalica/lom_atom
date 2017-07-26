@@ -984,74 +984,79 @@ function createReactWrapper(BaseComponent, defaultFromError, themeProcessor) {
 
             var _this = possibleConstructorReturn(this, _BaseComponent.call(this, props, reactContext));
 
-            _this._renderedData = undefined;
-            _this._isPropsUpdated = true;
-            _this._state = undefined;
-            _this._injector = undefined;
+            _this._el = undefined;
 
             _this._render = render;
+            _this._onUpdate();
             return _this;
         }
 
-        AtomizedComponent.prototype.shouldComponentUpdate = function shouldComponentUpdate(props) {
-            var isUpdated = shouldUpdate(this.props, props);
-            if (isUpdated) {
-                this._isPropsUpdated = true;
+        AtomizedComponent.prototype._onUpdate = function _onUpdate() {
+            var render = this._render;
+            if (render.provide !== undefined || render.deps !== undefined) {
+                this._injector = undefined;
+                this._state = undefined;
             }
+            this._propsChanged = true;
+        };
 
-            return isUpdated;
+        AtomizedComponent.prototype.shouldComponentUpdate = function shouldComponentUpdate(props) {
+            if (shouldUpdate(this.props, props)) {
+                this._onUpdate();
+                return true;
+            }
+            return false;
         };
 
         AtomizedComponent.prototype.componentWillUnmount = function componentWillUnmount() {
             this._state = undefined;
+            this._el = undefined;
             this.props = undefined;
-            this._renderedData = undefined;
             this._render = undefined;
             this._fromError = undefined;
             this._injector = undefined;
             defaultContext.getAtom(this, this.r, 'r').destroyed(true);
         };
 
-        AtomizedComponent.prototype._getState = function _getState() {
-            return this._state = this._injector.resolve(this._render.deps)[0];
+        AtomizedComponent.prototype._getState = function _getState(next, force$$1) {
+            var render = this._render;
+            if (this._injector === undefined) {
+                this._injector = render.provide === undefined ? this.props.__lom_ctx || new Injector(undefined, undefined, themeFactory) : new Injector(this.props.__lom_ctx, render.provide === true || render.provide === false ? undefined : render.provide(this.props, this._state), themeFactory);
+            }
+            if (render.deps !== undefined) {
+                this._state = this._injector.resolve(render.deps)[0];
+            }
+
+            return this._state;
         };
 
-        AtomizedComponent.prototype.r = function r(next, force$$1) {
-            if (next !== undefined) {
-                throw new Error('Can\'t set view');
-            }
+        AtomizedComponent.prototype.r = function r(element, force$$1) {
             var data = void 0;
 
+            var render = this._render;
+            var state = render.deps !== undefined || render.provide !== undefined ? this._getState(undefined, force$$1) : undefined;
+
             var prevContext = parentContext;
+            parentContext = this._injector;
             try {
-                var key = this._render;
-                if (this._isPropsUpdated === true) {
-                    if (key.provide !== undefined) {
-                        this._injector = new Injector(this.props.__lom_ctx, key.provide(this.props, this._state), themeFactory);
-                    } else if (this._injector === undefined) {
-                        this._injector = this.props.__lom_ctx || new Injector(undefined, undefined, themeFactory);
-                    }
-                }
-                parentContext = this._injector;
-                data = key(this.props, key.deps === undefined ? undefined : this._getState());
+                data = render(this.props, state);
             } catch (error) {
                 data = this.constructor.fromError({ error: error });
             }
             parentContext = prevContext;
-            if (!this._isPropsUpdated) {
-                // prevent recursion
-                // can call this.render synchronously
-                this._renderedData = data;
+
+            if (!force$$1) {
+                this._el = data;
                 this.forceUpdate();
-                this._renderedData = undefined;
+                this._el = undefined;
             }
-            this._isPropsUpdated = false;
+            this._propsChanged = false;
 
             return data;
         };
 
         AtomizedComponent.prototype.render = function render() {
-            return this._renderedData === undefined ? this.r(undefined, this._isPropsUpdated) : this._renderedData;
+            return this._el === undefined ? this.r(undefined, this._propsChanged) : this._el;
         };
 
         return AtomizedComponent;
@@ -22355,6 +22360,9 @@ var SomeService = (_temp = _class5 = function () {
     return SomeService;
 }(), _class5.deps = [HelloOptions], _temp);
 
+var HelloProps = function HelloProps() {
+    classCallCheck(this, HelloProps);
+};
 
 function HelloView(_ref, _ref2) {
     var hello = _ref.hello;
@@ -22440,6 +22448,7 @@ function HelloView(_ref, _ref2) {
 }
 
 HelloView.deps = [{ options: HelloOptions, locale: Locale, service: SomeService }];
+HelloView.props = HelloProps;
 HelloView.provide = function (props) {
     return [new HelloOptions(props.name)];
 };
@@ -24548,13 +24557,13 @@ function TodoItemTheme() {
             verticalAlign: 'baseline',
             display: 'none',
             position: 'absolute',
-            top: 0,
             right: '10px',
+            top: 0,
             bottom: 0,
             width: '40px',
             height: '40px',
-            margin: 'auto 0',
             fontSize: '30px',
+            margin: 'auto 0',
             color: '#cc9a9a',
             marginBottom: '11px',
             transition: 'color 0.2s ease-out',

@@ -28,7 +28,7 @@ class SomeService {
 }
 
 
-type HelloProps = {
+interface IHelloProps {
     hello: Hello;
     name: string;
 }
@@ -39,8 +39,13 @@ type HelloState = {
     service: SomeService;
 }
 
+class HelloProps implements IHelloProps {
+    hello: Hello
+    name: string
+}
+
 export function HelloView(
-    {hello}: HelloProps,
+    {hello}: IHelloProps,
     {options, locale, service}: HelloState
 ) {
     return <div>
@@ -71,6 +76,7 @@ export function HelloView(
 }
 
 HelloView.deps = [{options: HelloOptions, locale: Locale, service: SomeService}]
-HelloView.provide = (props: HelloProps) => ([
+HelloView.props = HelloProps
+HelloView.provide = (props: IHelloProps) => ([
     new HelloOptions(props.name)
 ])

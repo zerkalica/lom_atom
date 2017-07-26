@@ -18,7 +18,7 @@ interface IRenderFn<IElement, State> {
 
     displayName?: string;
     deps?: IArg[];
-    provide?: IProvider<State>;
+    provide?: IProvider<State> | boolean;
 }
 
 type IFromError<IElement> = (props: {error: Error}) => IElement
@@ -120,12 +120,14 @@ export default function createReactWrapper<IElement>(
 
     class AtomizedComponent<State> extends BaseComponent {
         _render: IRenderFn<IElement, State>
-        _renderedData: IElement | void = undefined
-        _isPropsUpdated: boolean = true
 
         props: IPropsWithContext
 
         static fromError: IFromError<IElement>
+
+        _propsChanged: boolean
+        _state: State | void
+        _injector: Injector | void
 
         constructor(
             props: IPropsWithContext,
@@ -134,78 +136,92 @@ export default function createReactWrapper<IElement>(
         ) {
             super(props, reactContext)
             this._render = render
+            this._onUpdate()
+        }
+
+        _onUpdate() {
+            const render = this._render
+            if (render.provide !== undefined || render.deps !== undefined) {
+                this._injector = undefined
+                this._state = undefined
+            }
+            this._propsChanged = true
         }
 
         shouldComponentUpdate(props: IPropsWithContext) {
-            const isUpdated = shouldUpdate(this.props, props)
-            if (isUpdated) {
-                this._isPropsUpdated = true
+            if (shouldUpdate(this.props, props)) {
+                this._onUpdate()
+                return true
             }
-
-            return isUpdated
+            return false
         }
 
         componentWillUnmount() {
             this._state = undefined
+            this._el = undefined
             this.props = (undefined: any)
-            this._renderedData = undefined
             this._render = (undefined: any)
             this._fromError = (undefined: any)
-            this._injector = (undefined: any)
+            this._injector = undefined
             defaultContext.getAtom(this, this.r, 'r').destroyed(true)
         }
 
-        _state: State | void = undefined
-        _injector: Injector = (undefined: any)
-
         @mem
-        _getState(): State {
-            return this._state = this._injector.resolve(this._render.deps)[0]
+        _getState(next?: State, force?: boolean): State | void {
+            const render = this._render
+            if (this._injector === undefined) {
+                this._injector = render.provide === undefined
+                    ? (this.props.__lom_ctx || new Injector(undefined, undefined, themeFactory))
+                    : new Injector(
+                        this.props.__lom_ctx,
+                        render.provide === true || render.provide === false
+                            ? undefined
+                            : render.provide(this.props, this._state),
+                        themeFactory
+                    )
+            }
+            if (render.deps !== undefined) {
+                this._state = this._injector.resolve(render.deps)[0]
+            }
+
+            return this._state
         }
 
+        _el: IElement | void = undefined
+
         @detached
-        r(next?: IElement, force?: boolean): IElement {
-            if (next !== undefined) {
-                throw new Error('Can\'t set view' )
-            }
+        r(element?: IElement, force?: boolean): IElement {
             let data: IElement
 
+            const render = this._render
+            const state = render.deps !== undefined || render.provide !== undefined
+                ? this._getState(undefined, force)
+                : undefined
+
+
             const prevContext = parentContext
+            parentContext = this._injector
             try {
-                const key = this._render
-                if (this._isPropsUpdated === true) {
-                    if (key.provide !== undefined) {
-                        this._injector = new Injector(
-                            this.props.__lom_ctx,
-                            key.provide(this.props, this._state),
-                            themeFactory
-                        )
-                    } else if (this._injector === undefined) {
-                        this._injector = this.props.__lom_ctx || new Injector(undefined, undefined, themeFactory)
-                    }
-                }
-                parentContext = this._injector
-                data = key(this.props, key.deps === undefined ? undefined : this._getState())
+                data = render(this.props, state)
             } catch (error) {
                 data = this.constructor.fromError({error})
             }
             parentContext = prevContext
-            if (!this._isPropsUpdated) {
-                // prevent recursion
-                // can call this.render synchronously
-                this._renderedData = data
+
+            if (!force) {
+                this._el = data
                 this.forceUpdate()
-                this._renderedData = undefined
+                this._el = undefined
             }
-            this._isPropsUpdated = false
+            this._propsChanged = false
 
             return data
         }
 
-        render(): IElement {
-            return this._renderedData === undefined
-                ? this.r(undefined, this._isPropsUpdated)
-                : this._renderedData
+        render() {
+            return this._el === undefined
+                ? this.r(undefined, this._propsChanged)
+                : this._el
         }
     }
 
