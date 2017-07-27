@@ -13,6 +13,8 @@ export type IPropsWithContext = {
 
 export type IProvider<State> = (props: IPropsWithContext, prevState?: State) => IProvideItem[];
 
+let chainCount = 0
+
 export default class Injector {
     map: Map<Function, *>
     parent: Injector | void
@@ -41,36 +43,32 @@ export default class Injector {
     value<V>(key: Function, next?: V, force?: boolean): V | void {
         if (next !== undefined) return next
 
-        if (this.parent !== undefined) {
-            return this.parent.value(key)
-        }
-    }
-
-    _get<V>(key: Function): V {
-        let value
         if (key.theme === true) {
-            value = this.top.value(key)
-            if (value === undefined) {
-                value = (this._themeFactory.createTheme(key, this): any)
-                this.top.value(key, value, true)
+            if (this.top === this) {
+                return (this._themeFactory.createTheme(key, this): any)
             }
-
-            return value
+            return this.top.value(key)
         }
 
-        value = this.value(key)
-        if (value === undefined) {
-            value = this._fastCall(key, this.resolve(key.deps))
-            this.value(key, value, true)
+        if (this.parent !== undefined) {
+            chainCount++
+            const value: V | void = this.parent.value(key)
+            chainCount--
+            if (value !== undefined) {
+                return value
+            }
         }
-
-        return value
+        if (chainCount === 0) {
+            return this.instance(key)
+        }
     }
 
-    // _destroy() {
-    //     this.parent = undefined
-    //     this._themeFactory = undefined
-    // }
+    _destroy() {
+        this.parent = undefined
+        this.map = (undefined: any)
+        this.top = (undefined: any)
+        this._themeFactory = (undefined: any)
+    }
 
     _fastCall<V>(key: any, args: mixed[]): V {
         switch (args.length) {
@@ -83,40 +81,9 @@ export default class Injector {
         }
     }
 
-    instance(key: Function): any {
+    instance<V>(key: Function): V {
         return this._fastCall(key, this.resolve(key.deps))
     }
-
-    // _get<V>(key: Function): V | void {
-    //     let value: V | void = undefined
-    //     if (key.theme === true) {
-    //         value = this.top.value(key)
-    //         if (value === undefined) {
-    //             value = (this._themeFactory.createTheme(key, this): any)
-    //             this.top.value(key, value, true)
-    //         }
-    //
-    //         return value
-    //     }
-    //
-    //     let ptr: Injector | void = this
-    //     while (ptr !== undefined) {
-    //         value = ptr.value(key)
-    //         if (value !== undefined) {
-    //             if (value === null) {
-    //                 value = this._fastCall(key, ptr.resolve(key.deps))
-    //                 // ptr.value(key, value, true)
-    //             }
-    //             return value
-    //         }
-    //         ptr = ptr.parent
-    //     }
-    //
-    //     value = this._fastCall(key, this.resolve(key.deps))
-    //     // this.value(key, value, true)
-    //
-    //     return value
-    // }
 
     resolve(argDeps?: IArg[]): any[] {
         const result = []
@@ -126,11 +93,11 @@ export default class Injector {
                 if (typeof argDep === 'object') {
                     const obj = {}
                     for (let prop in argDep) { // eslint-disable-line
-                        obj[prop] = this._get(argDep[prop])
+                        obj[prop] = this.value(argDep[prop])
                     }
                     result.push(obj)
                 } else {
-                    result.push(this._get(argDep))
+                    result.push(this.value(argDep))
                 }
             }
         }

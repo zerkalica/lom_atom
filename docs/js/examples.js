@@ -760,6 +760,8 @@ function _applyDecoratedDescriptor$2(target, property, decorators, descriptor, c
     return desc;
 }
 
+var chainCount = 0;
+
 var Injector = (_class$1 = function () {
     function Injector(parent, items, themeFactory) {
         classCallCheck(this, Injector);
@@ -784,36 +786,32 @@ var Injector = (_class$1 = function () {
     Injector.prototype.value = function value(key, next, force$$1) {
         if (next !== undefined) return next;
 
-        if (this.parent !== undefined) {
-            return this.parent.value(key);
-        }
-    };
-
-    Injector.prototype._get = function _get(key) {
-        var value = void 0;
         if (key.theme === true) {
-            value = this.top.value(key);
-            if (value === undefined) {
-                value = this._themeFactory.createTheme(key, this);
-                this.top.value(key, value, true);
+            if (this.top === this) {
+                return this._themeFactory.createTheme(key, this);
             }
-
-            return value;
+            return this.top.value(key);
         }
 
-        value = this.value(key);
-        if (value === undefined) {
-            value = this._fastCall(key, this.resolve(key.deps));
-            this.value(key, value, true);
+        if (this.parent !== undefined) {
+            chainCount++;
+            var value = this.parent.value(key);
+            chainCount--;
+            if (value !== undefined) {
+                return value;
+            }
         }
-
-        return value;
+        if (chainCount === 0) {
+            return this.instance(key);
+        }
     };
 
-    // _destroy() {
-    //     this.parent = undefined
-    //     this._themeFactory = undefined
-    // }
+    Injector.prototype._destroy = function _destroy() {
+        this.parent = undefined;
+        this.map = undefined;
+        this.top = undefined;
+        this._themeFactory = undefined;
+    };
 
     Injector.prototype._fastCall = function _fastCall(key, args) {
         switch (args.length) {
@@ -836,37 +834,6 @@ var Injector = (_class$1 = function () {
         return this._fastCall(key, this.resolve(key.deps));
     };
 
-    // _get<V>(key: Function): V | void {
-    //     let value: V | void = undefined
-    //     if (key.theme === true) {
-    //         value = this.top.value(key)
-    //         if (value === undefined) {
-    //             value = (this._themeFactory.createTheme(key, this): any)
-    //             this.top.value(key, value, true)
-    //         }
-    //
-    //         return value
-    //     }
-    //
-    //     let ptr: Injector | void = this
-    //     while (ptr !== undefined) {
-    //         value = ptr.value(key)
-    //         if (value !== undefined) {
-    //             if (value === null) {
-    //                 value = this._fastCall(key, ptr.resolve(key.deps))
-    //                 // ptr.value(key, value, true)
-    //             }
-    //             return value
-    //         }
-    //         ptr = ptr.parent
-    //     }
-    //
-    //     value = this._fastCall(key, this.resolve(key.deps))
-    //     // this.value(key, value, true)
-    //
-    //     return value
-    // }
-
     Injector.prototype.resolve = function resolve(argDeps) {
         var result = [];
         if (argDeps !== undefined) {
@@ -876,11 +843,11 @@ var Injector = (_class$1 = function () {
                     var obj = {};
                     for (var prop in argDep) {
                         // eslint-disable-line
-                        obj[prop] = this._get(argDep[prop]);
+                        obj[prop] = this.value(argDep[prop]);
                     }
                     result.push(obj);
                 } else {
-                    result.push(this._get(argDep));
+                    result.push(this.value(argDep));
                 }
             }
         }
@@ -24376,11 +24343,12 @@ function TodoEntry(_, _ref3) {
     });
 }
 TodoEntry.deps = [{ todoToAdd: TodoToAdd, theme: TodoEntryTheme }];
+TodoEntry.props = TodoEntryProps;
 
-var _class$7;
+var _class2$3;
 var _descriptor$5;
 var _descriptor2$2;
-var _class2$3;
+var _class3$1;
 var _temp$3;
 
 function _initDefineProp$5(target, property, descriptor, context) {
@@ -24425,15 +24393,11 @@ function _applyDecoratedDescriptor$10(target, property, decorators, descriptor, 
 var ESCAPE_KEY = 27;
 var ENTER_KEY = 13;
 
-// class TodoProps implements ITodoProps {
-//     todo: ITodo;
-// }
+var TodoProps = function TodoProps() {
+    classCallCheck(this, TodoProps);
+};
 
-function TodoProps(props) {
-    return props;
-}
-
-var TodoItemStore = (_class$7 = (_temp$3 = _class2$3 = function TodoItemStore(_ref) {
+var TodoItemStore = (_class2$3 = (_temp$3 = _class3$1 = function TodoItemStore(_ref) {
     var _this = this;
 
     var todo = _ref.todo;
@@ -24493,18 +24457,19 @@ var TodoItemStore = (_class$7 = (_temp$3 = _class2$3 = function TodoItemStore(_r
         _this.todoBeingEdited = null;
     };
 
+    debugger;
     this._todo = todo;
-}, _class2$3.deps = [TodoProps], _temp$3), (_descriptor$5 = _applyDecoratedDescriptor$10(_class$7.prototype, 'todoBeingEdited', [mem], {
+}, _class3$1.deps = [TodoProps], _temp$3), (_descriptor$5 = _applyDecoratedDescriptor$10(_class2$3.prototype, 'todoBeingEdited', [mem], {
     enumerable: true,
     initializer: function initializer() {
         return null;
     }
-}), _descriptor2$2 = _applyDecoratedDescriptor$10(_class$7.prototype, 'editText', [mem], {
+}), _descriptor2$2 = _applyDecoratedDescriptor$10(_class2$3.prototype, 'editText', [mem], {
     enumerable: true,
     initializer: function initializer() {
         return '';
     }
-})), _class$7);
+})), _class2$3);
 
 
 function TodoItemTheme() {
@@ -24658,7 +24623,6 @@ function TodoItem(_ref3, _ref4) {
 }
 TodoItem.deps = [{ itemStore: TodoItemStore, theme: TodoItemTheme }];
 TodoItem.props = TodoProps;
-
 TodoItem.separateState = true;
 
 function TodoOverviewTheme() {

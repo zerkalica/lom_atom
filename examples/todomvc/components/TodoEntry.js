@@ -79,3 +79,4 @@ export default function TodoEntry(
     />
 }
 TodoEntry.deps = [{todoToAdd: TodoToAdd, theme: TodoEntryTheme}]
+TodoEntry.props = TodoEntryProps

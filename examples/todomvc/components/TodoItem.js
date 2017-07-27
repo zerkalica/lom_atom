@@ -24,6 +24,7 @@ class TodoItemStore {
     static deps = [TodoProps]
 
     constructor({todo}: TodoProps) {
+        debugger
         this._todo = todo
     }
 
