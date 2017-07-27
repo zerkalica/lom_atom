@@ -7,9 +7,21 @@ export class Hello {
     @mem name = 'test'
 }
 
+interface IHelloProps {
+    hello: Hello;
+    name: string;
+}
+
+class HelloProps implements IHelloProps {
+    hello: Hello
+    name: string
+}
+
 class HelloOptions {
     @mem actionName: string
-    constructor(name: string) {
+    static deps = [HelloProps]
+
+    constructor({name}: IHelloProps) {
         this.actionName = name + '-hello'
     }
 }
@@ -27,21 +39,10 @@ class SomeService {
     }
 }
 
-
-interface IHelloProps {
-    hello: Hello;
-    name: string;
-}
-
 type HelloState = {
     locale: Locale;
     options: HelloOptions;
     service: SomeService;
-}
-
-class HelloProps implements IHelloProps {
-    hello: Hello
-    name: string
 }
 
 export function HelloView(
@@ -77,6 +78,3 @@ export function HelloView(
 
 HelloView.deps = [{options: HelloOptions, locale: Locale, service: SomeService}]
 HelloView.props = HelloProps
-HelloView.provide = (props: IHelloProps) => ([
-    new HelloOptions(props.name)
-])

@@ -30,7 +30,8 @@ var ATOM_STATUS = {
     CHECKING: 2,
     PULLING: 3,
     ACTUAL: 4
-};
+}; // eslint-disable-line
+
 
 var catchedId = Symbol('lom_atom_catched');
 //  | Error
@@ -781,7 +782,32 @@ var Injector = (_class$1 = function () {
     }
 
     Injector.prototype.value = function value(key, next, force$$1) {
-        return next;
+        if (next !== undefined) return next;
+
+        if (this.parent !== undefined) {
+            return this.parent.value(key);
+        }
+    };
+
+    Injector.prototype._get = function _get(key) {
+        var value = void 0;
+        if (key.theme === true) {
+            value = this.top.value(key);
+            if (value === undefined) {
+                value = this._themeFactory.createTheme(key, this);
+                this.top.value(key, value, true);
+            }
+
+            return value;
+        }
+
+        value = this.value(key);
+        if (value === undefined) {
+            value = this._fastCall(key, this.resolve(key.deps));
+            this.value(key, value, true);
+        }
+
+        return value;
     };
 
     // _destroy() {
@@ -810,36 +836,36 @@ var Injector = (_class$1 = function () {
         return this._fastCall(key, this.resolve(key.deps));
     };
 
-    Injector.prototype._get = function _get(key) {
-        var value = undefined;
-        if (key.theme === true) {
-            value = this.top.value(key);
-            if (value === undefined) {
-                value = this._themeFactory.createTheme(key, this);
-                this.top.value(key, value, true);
-            }
-
-            return value;
-        }
-
-        var ptr = this;
-        while (ptr !== undefined) {
-            value = ptr.value(key);
-            if (value !== undefined) {
-                if (value === null) {
-                    value = this._fastCall(key, ptr.resolve(key.deps));
-                    ptr.value(key, value, true);
-                }
-                return value;
-            }
-            ptr = ptr.parent;
-        }
-
-        value = this._fastCall(key, this.resolve(key.deps));
-        this.value(key, value, true);
-
-        return value;
-    };
+    // _get<V>(key: Function): V | void {
+    //     let value: V | void = undefined
+    //     if (key.theme === true) {
+    //         value = this.top.value(key)
+    //         if (value === undefined) {
+    //             value = (this._themeFactory.createTheme(key, this): any)
+    //             this.top.value(key, value, true)
+    //         }
+    //
+    //         return value
+    //     }
+    //
+    //     let ptr: Injector | void = this
+    //     while (ptr !== undefined) {
+    //         value = ptr.value(key)
+    //         if (value !== undefined) {
+    //             if (value === null) {
+    //                 value = this._fastCall(key, ptr.resolve(key.deps))
+    //                 // ptr.value(key, value, true)
+    //             }
+    //             return value
+    //         }
+    //         ptr = ptr.parent
+    //     }
+    //
+    //     value = this._fastCall(key, this.resolve(key.deps))
+    //     // this.value(key, value, true)
+    //
+    //     return value
+    // }
 
     Injector.prototype.resolve = function resolve(argDeps) {
         var result = [];
@@ -984,60 +1010,58 @@ function createReactWrapper(BaseComponent, defaultFromError, themeProcessor) {
 
             var _this = possibleConstructorReturn(this, _BaseComponent.call(this, props, reactContext));
 
+            _this._propsChanged = true;
             _this._el = undefined;
 
             _this._render = render;
-            _this._onUpdate();
+
+            if (render.separateState === undefined) {
+                _this._injector = render.deps === undefined ? undefined : _this.props.__lom_ctx || new Injector(undefined, undefined, themeFactory);
+            } else {
+                _this._injector = new Injector(_this.props.__lom_ctx, undefined, themeFactory);
+            }
+            if (_this._injector && render.props) {
+                _this._injector.value(render.props, props);
+            }
             return _this;
         }
 
-        AtomizedComponent.prototype._onUpdate = function _onUpdate() {
-            var render = this._render;
-            if (render.provide !== undefined || render.deps !== undefined) {
-                this._injector = undefined;
-                this._state = undefined;
-            }
-            this._propsChanged = true;
-        };
-
         AtomizedComponent.prototype.shouldComponentUpdate = function shouldComponentUpdate(props) {
             if (shouldUpdate(this.props, props)) {
-                this._onUpdate();
+                if (this._injector !== undefined && this._render.props !== undefined) {
+                    this._injector.value(this._render.props, props);
+                }
+                this._propsChanged = true;
                 return true;
             }
             return false;
         };
 
         AtomizedComponent.prototype.componentWillUnmount = function componentWillUnmount() {
-            this._state = undefined;
             this._el = undefined;
             this.props = undefined;
             this._render = undefined;
-            this._fromError = undefined;
             this._injector = undefined;
             defaultContext.getAtom(this, this.r, 'r').destroyed(true);
         };
 
         AtomizedComponent.prototype._getState = function _getState(next, force$$1) {
-            var render = this._render;
-            if (this._injector === undefined) {
-                this._injector = render.provide === undefined ? this.props.__lom_ctx || new Injector(undefined, undefined, themeFactory) : new Injector(this.props.__lom_ctx, render.provide === true || render.provide === false ? undefined : render.provide(this.props, this._state), themeFactory);
-            }
-            if (render.deps !== undefined) {
-                this._state = this._injector.resolve(render.deps)[0];
+            if (this._injector === undefined || this._render.deps === undefined) {
+                throw new Error('Injector not defined');
             }
 
-            return this._state;
+            return this._injector.resolve(this._render.deps)[0];
         };
 
         AtomizedComponent.prototype.r = function r(element, force$$1) {
             var data = void 0;
 
             var render = this._render;
-            var state = render.deps !== undefined || render.provide !== undefined ? this._getState(undefined, force$$1) : undefined;
-
             var prevContext = parentContext;
             parentContext = this._injector;
+
+            var state = render.deps !== undefined ? this._getState(undefined, force$$1) : undefined;
+
             try {
                 data = render(this.props, state);
             } catch (error) {
@@ -22281,10 +22305,12 @@ var Locale = (_class$5 = function () {
 
 var _class$4;
 var _descriptor$1;
-var _class3;
+var _class4;
 var _descriptor2$1;
 var _class5;
 var _temp;
+var _class6;
+var _temp2;
 
 function _initDefineProp$1(target, property, descriptor, context) {
     if (!descriptor) return;
@@ -22336,17 +22362,22 @@ var Hello = (_class$4 = function Hello() {
     }
 })), _class$4);
 
-var HelloOptions = (_class3 = function HelloOptions(name) {
+var HelloProps = function HelloProps() {
+    classCallCheck(this, HelloProps);
+};
+
+var HelloOptions = (_class4 = (_temp = _class5 = function HelloOptions(_ref) {
+    var name = _ref.name;
     classCallCheck(this, HelloOptions);
 
     _initDefineProp$1(this, 'actionName', _descriptor2$1, this);
 
     this.actionName = name + '-hello';
-}, (_descriptor2$1 = _applyDecoratedDescriptor$5(_class3.prototype, 'actionName', [mem], {
+}, _class5.deps = [HelloProps], _temp), (_descriptor2$1 = _applyDecoratedDescriptor$5(_class4.prototype, 'actionName', [mem], {
     enumerable: true,
     initializer: null
-})), _class3);
-var SomeService = (_temp = _class5 = function () {
+})), _class4);
+var SomeService = (_temp2 = _class6 = function () {
     function SomeService(opts) {
         classCallCheck(this, SomeService);
 
@@ -22358,17 +22389,14 @@ var SomeService = (_temp = _class5 = function () {
     };
 
     return SomeService;
-}(), _class5.deps = [HelloOptions], _temp);
+}(), _class6.deps = [HelloOptions], _temp2);
 
-var HelloProps = function HelloProps() {
-    classCallCheck(this, HelloProps);
-};
 
-function HelloView(_ref, _ref2) {
-    var hello = _ref.hello;
-    var options = _ref2.options,
-        locale = _ref2.locale,
-        service = _ref2.service;
+function HelloView(_ref2, _ref3) {
+    var hello = _ref2.hello;
+    var options = _ref3.options,
+        locale = _ref3.locale,
+        service = _ref3.service;
 
     return lom_h(
         'div',
@@ -22419,8 +22447,8 @@ function HelloView(_ref, _ref2) {
             lom_h(
                 'div',
                 { className: 'kv-key' },
-                lom_h('input', { value: hello.name, onInput: function onInput(_ref3) {
-                        var target = _ref3.target;
+                lom_h('input', { value: hello.name, onInput: function onInput(_ref4) {
+                        var target = _ref4.target;
 
                         hello.name = target.value;
                     } })
@@ -22437,8 +22465,8 @@ function HelloView(_ref, _ref2) {
             lom_h(
                 'div',
                 { className: 'kv-value' },
-                lom_h('input', { value: options.actionName, onInput: function onInput(_ref4) {
-                        var target = _ref4.target;
+                lom_h('input', { value: options.actionName, onInput: function onInput(_ref5) {
+                        var target = _ref5.target;
 
                         options.actionName = target.value;
                     } })
@@ -22449,9 +22477,6 @@ function HelloView(_ref, _ref2) {
 
 HelloView.deps = [{ options: HelloOptions, locale: Locale, service: SomeService }];
 HelloView.props = HelloProps;
-HelloView.provide = function (props) {
-    return [new HelloOptions(props.name)];
-};
 
 var index$9 = function (glob, opts) {
   if (typeof glob !== 'string') {
@@ -24239,8 +24264,10 @@ var ViewStore = (_class$6 = (_temp$1 = _class2$1 = function () {
     return ViewStore;
 }(), _class2$1.deps = [TodoStore], _temp$1), (_applyDecoratedDescriptor$8(_class$6.prototype, 'filter', [mem], Object.getOwnPropertyDescriptor(_class$6.prototype, 'filter'), _class$6.prototype), _applyDecoratedDescriptor$8(_class$6.prototype, 'filter', [mem], Object.getOwnPropertyDescriptor(_class$6.prototype, 'filter'), _class$6.prototype), _applyDecoratedDescriptor$8(_class$6.prototype, 'filteredTodos', [mem], Object.getOwnPropertyDescriptor(_class$6.prototype, 'filteredTodos'), _class$6.prototype)), _class$6);
 
-var _class$7;
+var _class2$2;
 var _descriptor$4;
+var _class3;
+var _temp$2;
 
 function _initDefineProp$4(target, property, descriptor, context) {
     if (!descriptor) return;
@@ -24281,15 +24308,20 @@ function _applyDecoratedDescriptor$9(target, property, decorators, descriptor, c
     return desc;
 }
 
-var TodoToAdd = (_class$7 = function TodoToAdd(todoStore) {
+var TodoEntryProps = function TodoEntryProps() {
+    classCallCheck(this, TodoEntryProps);
+};
+
+var TodoToAdd = (_class2$2 = (_temp$2 = _class3 = function TodoToAdd(_ref) {
     var _this = this;
 
+    var todoStore = _ref.todoStore;
     classCallCheck(this, TodoToAdd);
 
     _initDefineProp$4(this, 'title', _descriptor$4, this);
 
-    this.onChange = function (_ref) {
-        var target = _ref.target;
+    this.onChange = function (_ref2) {
+        var target = _ref2.target;
 
         _this.title = target.value;
     };
@@ -24302,12 +24334,12 @@ var TodoToAdd = (_class$7 = function TodoToAdd(todoStore) {
     };
 
     this._store = todoStore;
-}, (_descriptor$4 = _applyDecoratedDescriptor$9(_class$7.prototype, 'title', [mem], {
+}, _class3.deps = [TodoEntryProps], _temp$2), (_descriptor$4 = _applyDecoratedDescriptor$9(_class2$2.prototype, 'title', [mem], {
     enumerable: true,
     initializer: function initializer() {
         return '';
     }
-})), _class$7);
+})), _class2$2);
 
 
 function TodoEntryTheme() {
@@ -24330,9 +24362,9 @@ function TodoEntryTheme() {
 }
 TodoEntryTheme.theme = true;
 
-function TodoEntry(_, _ref2) {
-    var todoToAdd = _ref2.todoToAdd,
-        theme = _ref2.theme;
+function TodoEntry(_, _ref3) {
+    var todoToAdd = _ref3.todoToAdd,
+        theme = _ref3.theme;
 
     return lom_h('input', {
         className: theme.newTodo,
@@ -24344,14 +24376,12 @@ function TodoEntry(_, _ref2) {
     });
 }
 TodoEntry.deps = [{ todoToAdd: TodoToAdd, theme: TodoEntryTheme }];
-TodoEntry.provide = function (_ref3) {
-    var todoStore = _ref3.todoStore;
-    return [new TodoToAdd(todoStore)];
-};
 
-var _class$8;
+var _class$7;
 var _descriptor$5;
 var _descriptor2$2;
+var _class2$3;
+var _temp$3;
 
 function _initDefineProp$5(target, property, descriptor, context) {
     if (!descriptor) return;
@@ -24395,9 +24425,18 @@ function _applyDecoratedDescriptor$10(target, property, decorators, descriptor, 
 var ESCAPE_KEY = 27;
 var ENTER_KEY = 13;
 
-var TodoItemStore = (_class$8 = function TodoItemStore(todo) {
+// class TodoProps implements ITodoProps {
+//     todo: ITodo;
+// }
+
+function TodoProps(props) {
+    return props;
+}
+
+var TodoItemStore = (_class$7 = (_temp$3 = _class2$3 = function TodoItemStore(_ref) {
     var _this = this;
 
+    var todo = _ref.todo;
     classCallCheck(this, TodoItemStore);
 
     _initDefineProp$5(this, 'todoBeingEdited', _descriptor$5, this);
@@ -24409,8 +24448,8 @@ var TodoItemStore = (_class$8 = function TodoItemStore(todo) {
         _this.editText = _this._todo.title;
     };
 
-    this.setText = function (_ref) {
-        var target = _ref.target;
+    this.setText = function (_ref2) {
+        var target = _ref2.target;
 
         _this.editText = target.value;
     };
@@ -24455,17 +24494,17 @@ var TodoItemStore = (_class$8 = function TodoItemStore(todo) {
     };
 
     this._todo = todo;
-}, (_descriptor$5 = _applyDecoratedDescriptor$10(_class$8.prototype, 'todoBeingEdited', [mem], {
+}, _class2$3.deps = [TodoProps], _temp$3), (_descriptor$5 = _applyDecoratedDescriptor$10(_class$7.prototype, 'todoBeingEdited', [mem], {
     enumerable: true,
     initializer: function initializer() {
         return null;
     }
-}), _descriptor2$2 = _applyDecoratedDescriptor$10(_class$8.prototype, 'editText', [mem], {
+}), _descriptor2$2 = _applyDecoratedDescriptor$10(_class$7.prototype, 'editText', [mem], {
     enumerable: true,
     initializer: function initializer() {
         return '';
     }
-})), _class$8);
+})), _class$7);
 
 
 function TodoItemTheme() {
@@ -24579,10 +24618,10 @@ function TodoItemTheme() {
 }
 TodoItemTheme.theme = true;
 
-function TodoItem(_ref2, _ref3) {
-    var todo = _ref2.todo;
-    var itemStore = _ref3.itemStore,
-        theme = _ref3.theme;
+function TodoItem(_ref3, _ref4) {
+    var todo = _ref3.todo;
+    var itemStore = _ref4.itemStore,
+        theme = _ref4.theme;
 
     return itemStore.todoBeingEdited === todo ? lom_h(
         'li',
@@ -24618,10 +24657,9 @@ function TodoItem(_ref2, _ref3) {
     );
 }
 TodoItem.deps = [{ itemStore: TodoItemStore, theme: TodoItemTheme }];
-TodoItem.provide = function (_ref4) {
-    var todo = _ref4.todo;
-    return [new TodoItemStore(todo)];
-};
+TodoItem.props = TodoProps;
+
+TodoItem.separateState = true;
 
 function TodoOverviewTheme() {
     return {
@@ -24913,13 +24951,6 @@ function TodoApp(_ref, _ref2) {
 }
 
 TodoApp.deps = [{ todoStore: TodoStore, viewStore: ViewStore, theme: TodoAppTheme }];
-// TodoApp.provide = (_: TodoAppProps) => {
-//     const todoStore = new TodoStore()
-//     return [
-//         todoStore,
-//         new ViewStore(todoStore)
-//     ]
-// }
 
 var _class;
 var _descriptor;

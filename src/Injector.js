@@ -39,7 +39,32 @@ export default class Injector {
 
     @memkey
     value<V>(key: Function, next?: V, force?: boolean): V | void {
-        return next
+        if (next !== undefined) return next
+
+        if (this.parent !== undefined) {
+            return this.parent.value(key)
+        }
+    }
+
+    _get<V>(key: Function): V {
+        let value
+        if (key.theme === true) {
+            value = this.top.value(key)
+            if (value === undefined) {
+                value = (this._themeFactory.createTheme(key, this): any)
+                this.top.value(key, value, true)
+            }
+
+            return value
+        }
+
+        value = this.value(key)
+        if (value === undefined) {
+            value = this._fastCall(key, this.resolve(key.deps))
+            this.value(key, value, true)
+        }
+
+        return value
     }
 
     // _destroy() {
@@ -62,36 +87,37 @@ export default class Injector {
         return this._fastCall(key, this.resolve(key.deps))
     }
 
-    _get<V>(key: Function): V | void {
-        let value: V | void = undefined
-        if (key.theme === true) {
-            value = this.top.value(key)
-            if (value === undefined) {
-                value = (this._themeFactory.createTheme(key, this): any)
-                this.top.value(key, value, true)
-            }
+    // _get<V>(key: Function): V | void {
+    //     let value: V | void = undefined
+    //     if (key.theme === true) {
+    //         value = this.top.value(key)
+    //         if (value === undefined) {
+    //             value = (this._themeFactory.createTheme(key, this): any)
+    //             this.top.value(key, value, true)
+    //         }
+    //
+    //         return value
+    //     }
+    //
+    //     let ptr: Injector | void = this
+    //     while (ptr !== undefined) {
+    //         value = ptr.value(key)
+    //         if (value !== undefined) {
+    //             if (value === null) {
+    //                 value = this._fastCall(key, ptr.resolve(key.deps))
+    //                 // ptr.value(key, value, true)
+    //             }
+    //             return value
+    //         }
+    //         ptr = ptr.parent
+    //     }
+    //
+    //     value = this._fastCall(key, this.resolve(key.deps))
+    //     // this.value(key, value, true)
+    //
+    //     return value
+    // }
 
-            return value
-        }
-
-        let ptr: Injector | void = this
-        while (ptr !== undefined) {
-            value = ptr.value(key)
-            if (value !== undefined) {
-                if (value === null) {
-                    value = this._fastCall(key, ptr.resolve(key.deps))
-                    ptr.value(key, value, true)
-                }
-                return value
-            }
-            ptr = ptr.parent
-        }
-
-        value = this._fastCall(key, this.resolve(key.deps))
-        this.value(key, value, true)
-
-        return value
-    }
     resolve(argDeps?: IArg[]): any[] {
         const result = []
         if (argDeps !== undefined) {

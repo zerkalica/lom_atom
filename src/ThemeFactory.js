@@ -1,9 +1,7 @@
 // @flow
 
 import mem from './mem'
-
-type _ResultOf<V, F: (...x: any[]) => V> = V // eslint-disable-line
-export type ResultOf<F> = _ResultOf<*, F>
+import type {ResultOf} from './interfaces'
 export type ThemeValues<F> = {+[id: $Keys<ResultOf<F>>]: string}
 
 export interface ISheet<V: Object> {

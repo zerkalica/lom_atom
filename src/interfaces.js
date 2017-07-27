@@ -1,5 +1,8 @@
 // @flow
 
+type _ResultOf<V, F: (...x: any[]) => V> = V // eslint-disable-line
+export type ResultOf<F> = _ResultOf<*, F>
+
 export interface ILogger {
     pulling(atom: IAtom<*>): void;
     error<V>(atom: IAtom<V>, err: Error): void;

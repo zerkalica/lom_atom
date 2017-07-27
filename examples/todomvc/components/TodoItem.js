@@ -1,11 +1,19 @@
 // @flow
 
 import {mem} from 'lom_atom'
-import type {ThemeValues} from 'lom_atom'
+import type {ResultOf, ThemeValues} from 'lom_atom'
 import type {ITodo} from '../stores/TodoStore'
 
 const ESCAPE_KEY = 27
 const ENTER_KEY = 13
+
+interface ITodoProps {
+    +todo: ITodo;
+}
+
+class TodoProps implements ITodoProps {
+    +todo: ITodo
+}
 
 class TodoItemStore {
     @mem todoBeingEdited: ?ITodo = null
@@ -13,7 +21,9 @@ class TodoItemStore {
 
     _todo: ITodo
 
-    constructor(todo: ITodo) {
+    static deps = [TodoProps]
+
+    constructor({todo}: TodoProps) {
         this._todo = todo
     }
 
@@ -184,9 +194,7 @@ function TodoItemTheme() {
 TodoItemTheme.theme = true
 
 export default function TodoItem(
-    {todo}: {
-        todo: ITodo;
-    },
+    {todo}: ITodoProps,
     {itemStore, theme}: {
         theme: ThemeValues<typeof TodoItemTheme>;
         itemStore: TodoItemStore;
@@ -222,6 +230,5 @@ export default function TodoItem(
         </li>
 }
 TodoItem.deps = [{itemStore: TodoItemStore, theme: TodoItemTheme}]
-TodoItem.provide = ({todo}: {todo: ITodo}) => ([
-    new TodoItemStore(todo)
-])
+TodoItem.props = TodoProps
+TodoItem.separateState = true

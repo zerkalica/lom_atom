@@ -18,7 +18,8 @@ interface IRenderFn<IElement, State> {
 
     displayName?: string;
     deps?: IArg[];
-    provide?: IProvider<State> | boolean;
+    separateState?: boolean;
+    props?: Function;
 }
 
 type IFromError<IElement> = (props: {error: Error}) => IElement
@@ -125,8 +126,7 @@ export default function createReactWrapper<IElement>(
 
         static fromError: IFromError<IElement>
 
-        _propsChanged: boolean
-        _state: State | void
+        _propsChanged: boolean = true
         _injector: Injector | void
 
         constructor(
@@ -136,55 +136,49 @@ export default function createReactWrapper<IElement>(
         ) {
             super(props, reactContext)
             this._render = render
-            this._onUpdate()
-        }
 
-        _onUpdate() {
-            const render = this._render
-            if (render.provide !== undefined || render.deps !== undefined) {
-                this._injector = undefined
-                this._state = undefined
+            if (render.separateState === undefined) {
+                this._injector = render.deps === undefined
+                    ? undefined
+                    : (this.props.__lom_ctx || new Injector(undefined, undefined, themeFactory))
+            } else {
+                this._injector = new Injector(
+                    this.props.__lom_ctx,
+                    undefined,
+                    themeFactory
+                )
             }
-            this._propsChanged = true
+            if (this._injector && render.props) {
+                this._injector.value(render.props, props)
+            }
         }
 
         shouldComponentUpdate(props: IPropsWithContext) {
             if (shouldUpdate(this.props, props)) {
-                this._onUpdate()
+                if (this._injector !== undefined && this._render.props !== undefined) {
+                    this._injector.value(this._render.props, props)
+                }
+                this._propsChanged = true
                 return true
             }
             return false
         }
 
         componentWillUnmount() {
-            this._state = undefined
             this._el = undefined
             this.props = (undefined: any)
             this._render = (undefined: any)
-            this._fromError = (undefined: any)
             this._injector = undefined
             defaultContext.getAtom(this, this.r, 'r').destroyed(true)
         }
 
         @mem
-        _getState(next?: State, force?: boolean): State | void {
-            const render = this._render
-            if (this._injector === undefined) {
-                this._injector = render.provide === undefined
-                    ? (this.props.__lom_ctx || new Injector(undefined, undefined, themeFactory))
-                    : new Injector(
-                        this.props.__lom_ctx,
-                        render.provide === true || render.provide === false
-                            ? undefined
-                            : render.provide(this.props, this._state),
-                        themeFactory
-                    )
-            }
-            if (render.deps !== undefined) {
-                this._state = this._injector.resolve(render.deps)[0]
+        _getState(next?: State, force?: boolean): State {
+            if (this._injector === undefined || this._render.deps === undefined) {
+                throw new Error('Injector not defined')
             }
 
-            return this._state
+            return this._injector.resolve(this._render.deps)[0]
         }
 
         _el: IElement | void = undefined
@@ -194,15 +188,18 @@ export default function createReactWrapper<IElement>(
             let data: IElement
 
             const render = this._render
-            const state = render.deps !== undefined || render.provide !== undefined
+            const prevContext = parentContext
+            parentContext = this._injector
+
+            const state = render.deps !== undefined
                 ? this._getState(undefined, force)
                 : undefined
 
-
-            const prevContext = parentContext
-            parentContext = this._injector
             try {
-                data = render(this.props, state)
+                data = render(
+                    this.props,
+                    state
+                )
             } catch (error) {
                 data = this.constructor.fromError({error})
             }

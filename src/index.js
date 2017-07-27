@@ -15,6 +15,7 @@ export {
 } from './interfaces'
 
 export type {
+    ResultOf,
     IAtom,
     IAtomStatus,
     IContext,
@@ -25,6 +26,5 @@ export type {
 export type {
     IProcessor,
     ISheet,
-    ResultOf,
     ThemeValues
 } from './ThemeFactory'

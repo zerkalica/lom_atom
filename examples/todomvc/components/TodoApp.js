@@ -64,10 +64,3 @@ export default function TodoApp(
 }
 
 TodoApp.deps = [{todoStore: TodoStore, viewStore: ViewStore, theme: TodoAppTheme}]
-// TodoApp.provide = (_: TodoAppProps) => {
-//     const todoStore = new TodoStore()
-//     return [
-//         todoStore,
-//         new ViewStore(todoStore)
-//     ]
-// }

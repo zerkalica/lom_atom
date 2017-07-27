@@ -7,7 +7,11 @@ interface IStore {
     addTodo(title: string): void;
 }
 
-interface TodoEntryProps {
+interface ITodoEntryProps {
+    todoStore: IStore
+}
+
+class TodoEntryProps implements ITodoEntryProps {
     todoStore: IStore
 }
 
@@ -16,7 +20,9 @@ class TodoToAdd {
     @mem title: string = ''
     _store: IStore
 
-    constructor(todoStore: IStore) {
+    static deps = [TodoEntryProps]
+
+    constructor({todoStore}: ITodoEntryProps) {
         this._store = todoStore
     }
 
@@ -57,7 +63,7 @@ function TodoEntryTheme() {
 TodoEntryTheme.theme = true
 
 export default function TodoEntry(
-    _: TodoEntryProps,
+    _: ITodoEntryProps,
     {todoToAdd, theme}: {
         theme: ThemeValues<typeof TodoEntryTheme>;
         todoToAdd: TodoToAdd;
@@ -73,6 +79,3 @@ export default function TodoEntry(
     />
 }
 TodoEntry.deps = [{todoToAdd: TodoToAdd, theme: TodoEntryTheme}]
-TodoEntry.provide = ({todoStore}: TodoEntryProps) => ([
-    new TodoToAdd(todoStore)
-])
