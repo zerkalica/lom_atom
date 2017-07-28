@@ -162,26 +162,19 @@ export default function createReactWrapper<IElement>(
             defaultContext.getAtom(this, this.r, 'r').destroyed(true)
         }
 
-        _getInjector(): Injector | void {
-            if (this._injector === undefined) {
-                const parentInjector: Injector = this.props.__lom_ctx || rootInjector
-                // Autodetect separate state per component instance
-                if (this.constructor.instances > 0 || this._render.localState !== undefined) {
-                    this._injector = parentInjector.copy()
-                } else if (this._render.deps !== undefined) {
-                    this._injector = parentInjector
-                }
-            }
+        _getInjector(): Injector {
+            const parentInjector: Injector = this.props.__lom_ctx || rootInjector
+            // Autodetect separate state per component instance
+            this._injector = this.constructor.instances > 0 || this._render.localState !== undefined
+                ? parentInjector.copy()
+                : parentInjector
 
             return this._injector
         }
 
         @mem
         _state(next?: State, force?: boolean): State {
-            const injector = this._getInjector()
-            if (injector === undefined || this._render.deps === undefined) {
-                throw new Error('Injector not defined')
-            }
+            const injector = this._injector || this._getInjector()
             if (this._render.props && force) {
                 injector.value(this._render.props, this.props, true)
             }
@@ -202,7 +195,7 @@ export default function createReactWrapper<IElement>(
                 : undefined
 
             const prevContext = parentContext
-            parentContext = this._getInjector()
+            parentContext = this._injector || this._getInjector()
 
             try {
                 data = render(
