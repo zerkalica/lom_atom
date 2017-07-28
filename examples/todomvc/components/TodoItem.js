@@ -231,4 +231,3 @@ export default function TodoItem(
 }
 TodoItem.deps = [{itemStore: TodoItemStore, theme: TodoItemTheme}]
 TodoItem.props = TodoProps
-TodoItem.separateState = true

@@ -892,10 +892,13 @@ function _applyDecoratedDescriptor$1(target, property, decorators, descriptor, c
 }
 
 function createEventFix(origin) {
-    return function fixEvent(e) {
+    function fixEvent(e) {
         origin(e);
         defaultContext.run();
-    };
+    }
+    fixEvent.displayName = origin.displayName || origin.name;
+
+    return fixEvent;
 }
 
 function createCreateElement(atomize, createElement) {
@@ -982,56 +985,68 @@ function createReactWrapper(BaseComponent, defaultFromError, themeProcessor, roo
             var _this = possibleConstructorReturn(this, _BaseComponent.call(this, props, reactContext));
 
             _this._propsChanged = true;
+            _this._injector = undefined;
             _this._el = undefined;
 
             _this._render = render;
-
-            if (render.separateState === undefined) {
-                _this._injector = render.deps === undefined ? undefined : _this.props.__lom_ctx || rootInjector;
-            } else {
-                _this._injector = _this.props.__lom_ctx === undefined ? rootInjector : _this.props.__lom_ctx.copy();
-            }
-            if (_this._injector && render.props) {
-                _this._injector.value(render.props, props);
+            if (render.deps !== undefined || render.props !== undefined) {
+                _this.constructor.instances++;
             }
             return _this;
         }
 
         AtomizedComponent.prototype.shouldComponentUpdate = function shouldComponentUpdate(props) {
-            if (shouldUpdate(this.props, props)) {
-                if (this._injector !== undefined && this._render.props !== undefined) {
-                    this._injector.value(this._render.props, props);
-                }
-                this._propsChanged = true;
-                return true;
-            }
-            return false;
+            this._propsChanged = shouldUpdate(this.props, props);
+            return this._propsChanged;
         };
 
         AtomizedComponent.prototype.componentWillUnmount = function componentWillUnmount() {
             this._el = undefined;
             this.props = undefined;
-            this._render = undefined;
             this._injector = undefined;
+            var render = this._render;
+            if (render.deps !== undefined || render.props !== undefined) {
+                this.constructor.instances--;
+            }
+            this._render = undefined;
             defaultContext.getAtom(this, this.r, 'r').destroyed(true);
         };
 
-        AtomizedComponent.prototype._state = function _state(next, force$$1) {
-            if (this._injector === undefined || this._render.deps === undefined) {
-                throw new Error('Injector not defined');
+        AtomizedComponent.prototype._getInjector = function _getInjector() {
+            if (this._injector === undefined) {
+                var parentInjector = this.props.__lom_ctx || rootInjector;
+                // Autodetect separate state per component instance
+                if (this.constructor.instances > 0 || this._render.localState !== undefined) {
+                    this._injector = parentInjector.copy();
+                } else if (this._render.deps !== undefined) {
+                    this._injector = parentInjector;
+                }
             }
 
-            return this._injector.resolve(this._render.deps)[0];
+            return this._injector;
+        };
+
+        AtomizedComponent.prototype._state = function _state(next, force$$1) {
+            var injector = this._getInjector();
+            if (injector === undefined || this._render.deps === undefined) {
+                throw new Error('Injector not defined');
+            }
+            if (this._render.props && force$$1) {
+                injector.value(this._render.props, this.props, true);
+            }
+
+            return injector.resolve(this._render.deps)[0];
         };
 
         AtomizedComponent.prototype.r = function r(element, force$$1) {
             var data = void 0;
 
             var render = this._render;
-            var prevContext = parentContext;
-            parentContext = this._injector;
 
             var state = render.deps !== undefined ? this._state(undefined, force$$1) : undefined;
+
+            var prevContext = parentContext;
+            parentContext = this._getInjector();
 
             try {
                 data = render(this.props, state);
@@ -1062,6 +1077,7 @@ function createReactWrapper(BaseComponent, defaultFromError, themeProcessor, roo
         function WrappedComponent(props, context) {
             AtomizedComponent.call(this, props, context, render);
         }
+        WrappedComponent.instances = 0;
         WrappedComponent.fromError = fromError || defaultFromError;
         WrappedComponent.displayName = render.displayName || render.name;
         WrappedComponent.prototype = Object.create(AtomizedComponent.prototype);
@@ -24628,7 +24644,6 @@ function TodoItem(_ref3, _ref4) {
 }
 TodoItem.deps = [{ itemStore: TodoItemStore, theme: TodoItemTheme }];
 TodoItem.props = TodoProps;
-TodoItem.separateState = true;
 
 function TodoOverviewTheme() {
     var toggleAll = {

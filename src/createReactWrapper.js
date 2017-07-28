@@ -18,7 +18,7 @@ interface IRenderFn<IElement, State> {
 
     displayName?: string;
     deps?: IArg[];
-    separateState?: boolean;
+    localState?: boolean;
     props?: Function;
 }
 
@@ -30,10 +30,13 @@ type IAtomize<IElement, State> = (
 ) => Class<IReactComponent<IElement>>
 
 function createEventFix(origin: (e: Event) => void): (e: Event) => void {
-    return function fixEvent(e: Event) {
+    function fixEvent(e: Event) {
         origin(e)
         defaultContext.run()
     }
+    fixEvent.displayName = origin.displayName || origin.name
+
+    return fixEvent
 }
 
 export function createCreateElement<IElement, State>(
@@ -126,9 +129,9 @@ export default function createReactWrapper<IElement>(
         props: IPropsWithContext
 
         static fromError: IFromError<IElement>
-
+        static instances: number
         _propsChanged: boolean = true
-        _injector: Injector | void
+        _injector: Injector | void = undefined
 
         constructor(
             props: IPropsWithContext,
@@ -137,47 +140,53 @@ export default function createReactWrapper<IElement>(
         ) {
             super(props, reactContext)
             this._render = render
-
-            if (render.separateState === undefined) {
-                this._injector = render.deps === undefined
-                    ? undefined
-                    : (this.props.__lom_ctx || rootInjector)
-            } else {
-                this._injector = this.props.__lom_ctx === undefined
-                    ? rootInjector
-                    : this.props.__lom_ctx.copy()
-            }
-            if (this._injector && render.props) {
-                this._injector.value(render.props, props)
+            if (render.deps !== undefined || render.props !== undefined) {
+                this.constructor.instances++
             }
         }
 
         shouldComponentUpdate(props: IPropsWithContext) {
-            if (shouldUpdate(this.props, props)) {
-                if (this._injector !== undefined && this._render.props !== undefined) {
-                    this._injector.value(this._render.props, props)
-                }
-                this._propsChanged = true
-                return true
-            }
-            return false
+            this._propsChanged = shouldUpdate(this.props, props)
+            return this._propsChanged
         }
 
         componentWillUnmount() {
             this._el = undefined
             this.props = (undefined: any)
-            this._render = (undefined: any)
             this._injector = undefined
+            const render = this._render
+            if (render.deps !== undefined || render.props !== undefined) {
+                this.constructor.instances--
+            }
+            this._render = (undefined: any)
             defaultContext.getAtom(this, this.r, 'r').destroyed(true)
+        }
+
+        _getInjector(): Injector | void {
+            if (this._injector === undefined) {
+                const parentInjector: Injector = this.props.__lom_ctx || rootInjector
+                // Autodetect separate state per component instance
+                if (this.constructor.instances > 0 || this._render.localState !== undefined) {
+                    this._injector = parentInjector.copy()
+                } else if (this._render.deps !== undefined) {
+                    this._injector = parentInjector
+                }
+            }
+
+            return this._injector
         }
 
         @mem
         _state(next?: State, force?: boolean): State {
-            if (this._injector === undefined || this._render.deps === undefined) {
+            const injector = this._getInjector()
+            if (injector === undefined || this._render.deps === undefined) {
                 throw new Error('Injector not defined')
             }
+            if (this._render.props && force) {
+                injector.value(this._render.props, this.props, true)
+            }
 
-            return this._injector.resolve(this._render.deps)[0]
+            return injector.resolve(this._render.deps)[0]
         }
 
         _el: IElement | void = undefined
@@ -187,12 +196,13 @@ export default function createReactWrapper<IElement>(
             let data: IElement
 
             const render = this._render
-            const prevContext = parentContext
-            parentContext = this._injector
 
             const state = render.deps !== undefined
                 ? this._state(undefined, force)
                 : undefined
+
+            const prevContext = parentContext
+            parentContext = this._getInjector()
 
             try {
                 data = render(
@@ -228,6 +238,7 @@ export default function createReactWrapper<IElement>(
         function WrappedComponent(props: IPropsWithContext, context?: Object) {
             AtomizedComponent.call(this, props, context, render)
         }
+        WrappedComponent.instances = 0
         WrappedComponent.fromError = fromError || defaultFromError
         WrappedComponent.displayName = render.displayName || render.name
         WrappedComponent.prototype = Object.create(AtomizedComponent.prototype)
