@@ -1,7 +1,7 @@
 // @flow
 
 import {AtomWait, mem, force} from 'lom_atom'
-import {Locale} from './common'
+import {ItemView, Locale} from './common'
 
 export class Hello {
     @mem name = 'test'
@@ -51,28 +51,29 @@ export function HelloView(
 ) {
     return <div>
         <h3>{options.actionName}, {hello.name}</h3>
-        <div className="kv">
-            <div className="kv-key">Lang:</div><div className="kv-value">{locale.lang}</div>
-        </div>
+        <ItemView>
+            <ItemView.Key>Lang:</ItemView.Key>
+            <ItemView.Value>{locale.lang}</ItemView.Value>
+        </ItemView>
 
-        <div className="kv">
-            <div className="kv-key">Srv:</div><div className="kv-value">{service.value()}</div>
-        </div>
+        <ItemView>
+            <ItemView.Key>Srv:</ItemView.Key>
+            <ItemView.Value>{service.value()}</ItemView.Value>
+        </ItemView>
 
-        <div className="kv">
-            <div className="kv-key">Name:</div>
-            <div className="kv-key"><input value={hello.name} onInput={({target}: Event) => {
+        <ItemView>
+            <ItemView.Key>Name:</ItemView.Key>
+            <ItemView.Value><input value={hello.name} onInput={({target}: Event) => {
                 hello.name = (target: any).value
-            }} /></div>
-        </div>
+            }} /></ItemView.Value>
+        </ItemView>
 
-        <div className="kv">
-            <div  className="kv-key">Action:</div>
-            <div className="kv-value"><input value={options.actionName} onInput={({target}: Event) => {
+        <ItemView>
+            <ItemView.Key>Action:</ItemView.Key>
+            <ItemView.Value><input value={options.actionName} onInput={({target}: Event) => {
                 options.actionName = (target: any).value
-            }} /></div>
-        </div>
-
+            }} /></ItemView.Value>
+        </ItemView>
     </div>
 }
 

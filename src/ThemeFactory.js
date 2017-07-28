@@ -37,9 +37,10 @@ class ThemeProvider<V: Object> {
         this._resolver = resolver
     }
 
-    @mem
+    // @mem
     theme(): {+[id: $Keys<V>]: string} {
         if (this._sheet) {
+            // return this._sheet.classes
             this._sheet.detach()
         }
         const sheet = this._sheet = this._processor.createStyleSheet(
@@ -75,12 +76,7 @@ export default class ThemeFactory {
         if (this._processor === undefined) {
             return {}
         }
-        const theme = new ThemeProvider(themeFn, resolver, this._processor)
-
-        return new Proxy(theme, {
-            get(t: ThemeProvider<V>, prop: $Keys<V>) {
-                return t.theme()[prop]
-            }
-        })
+        themeFn.cached = themeFn.cached || new ThemeProvider(themeFn, resolver, this._processor).theme()
+        return themeFn.cached
     }
 }

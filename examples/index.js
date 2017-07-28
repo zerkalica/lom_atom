@@ -4,14 +4,14 @@ import './setupReact'
 
 import {AtomWait, mem, force} from 'lom_atom'
 
-import ReactDOM from 'react-dom'
+import {render} from 'preact'
 
 import {CounterView, Counter} from './counter'
 import {HelloView, Hello} from './hello'
 import {TodoApp, todoMocks} from './todomvc'
 import {AutocompleteView, autocompleteMocks} from './autocomplete'
 
-import {Locale, mockFetch} from './common'
+import {ItemView, Locale, mockFetch} from './common'
 
 mockFetch(localStorage, 500, [
     todoMocks,
@@ -20,7 +20,7 @@ mockFetch(localStorage, 500, [
 
 class Store {
     links = ['hello', 'counter', 'error', 'todomvc', 'autocomplete']
-    @mem route: string = 'autocomplete'
+    @mem route: string = 'hello'
     @mem name = 'vvv'
     counter = new Counter()
     hello = new Hello()
@@ -69,12 +69,12 @@ function AppView({store}: AppProps) {
             <h1>{store.route}</h1>
             {page}
         </div>
-        <div className="kv">
-            <div className="kv-key">APPName:</div>
-            <div className="kv-value"><input value={store.name} onInput={({target}: Event) => {
+        <ItemView>
+            <ItemView.Key>APPName:</ItemView.Key>
+            <ItemView.Value><input value={store.name} onInput={({target}: Event) => {
                 store.name = (target: any).value
-            }} /></div>
-        </div>
+            }} /></ItemView.Value>
+        </ItemView>
     </div>
 }
 AppView.provide = (props: AppProps) => ([
@@ -83,4 +83,4 @@ AppView.provide = (props: AppProps) => ([
 
 const store = new Store()
 
-ReactDOM.render(<AppView store={store} lang="ru" />, document.getElementById('app'))
+render(<AppView store={store} lang="ru" />, document.getElementById('app'))

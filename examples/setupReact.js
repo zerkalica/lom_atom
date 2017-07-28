@@ -2,7 +2,7 @@
 
 import {AtomWait, createReactWrapper, createCreateElement} from 'lom_atom'
 
-import React from 'react'
+import {h, Component} from 'preact'
 import {create as createJss} from 'jss'
 import jssCamel from 'jss-camel-case'
 import jssGlobal from 'jss-global'
@@ -39,6 +39,6 @@ const jss = createJss({
     ]
 })
 
-const atomize = createReactWrapper(React.Component, ErrorableView, jss)
-const lomCreateElement = createCreateElement(atomize, React.createElement)
+const atomize = createReactWrapper(Component, ErrorableView, jss)
+const lomCreateElement = createCreateElement(atomize, h)
 global['lom_h'] = lomCreateElement

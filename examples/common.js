@@ -1,7 +1,49 @@
 // @flow
-
+import type {ThemeValues} from 'lom_atom'
 import {force, mem} from 'lom_atom'
 import fetchMock from 'fetch-mock/es5/client'
+
+function KeyValueTheme() {
+    return {
+        item: {
+            display: 'flex'
+        },
+        key: {
+            width: '20%'
+        },
+        value: {
+            width: '80%'
+        }
+    }
+}
+KeyValueTheme.theme = true
+
+
+function KeyView(
+    {children}: {children?: mixed},
+    {theme}: {theme: ThemeValues<typeof KeyValueTheme>}
+) {
+    return <div className={theme.key}>{children}</div>
+}
+KeyView.deps = [{theme: KeyValueTheme}]
+
+function ValueView(
+    {children}: {children?: mixed},
+    {theme}: {theme: ThemeValues<typeof KeyValueTheme>}
+) {
+    return <div className={theme.value}>{children}</div>
+}
+ValueView.deps = [{theme: KeyValueTheme}]
+
+export function ItemView(
+    {children}: {children?: mixed},
+    {theme}: {theme: ThemeValues<typeof KeyValueTheme>}
+) {
+    return <div className={theme.item}>{children}</div>
+}
+ItemView.deps = [{theme: KeyValueTheme}]
+ItemView.Key = KeyView
+ItemView.Value = ValueView
 
 export class Locale {
     _defaultLang: string
