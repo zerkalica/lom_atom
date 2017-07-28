@@ -158,7 +158,8 @@ export default class TodoStore {
     toggleAll(completed: boolean) {
         this.todos = this.todos.map(
             (todo: ITodo) => new TodoModel({
-                ...(todo: ITodoBase),
+                title: todo.title,
+                id: todo.id,
                 completed
             }, this)
         )

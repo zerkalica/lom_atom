@@ -834,6 +834,10 @@ var Injector = (_class$1 = function () {
         return this._fastCall(key, this.resolve(key.deps));
     };
 
+    Injector.prototype.copy = function copy(items) {
+        return new Injector(this, items, this._themeFactory);
+    };
+
     Injector.prototype.resolve = function resolve(argDeps) {
         var result = [];
         if (argDeps !== undefined) {
@@ -964,10 +968,10 @@ function createCreateElement(atomize, createElement) {
 
 var parentContext = undefined;
 
-function createReactWrapper(BaseComponent, defaultFromError, themeProcessor) {
+function createReactWrapper(BaseComponent, defaultFromError, themeProcessor, rootDeps) {
     var _desc, _value, _class;
 
-    var themeFactory = new ThemeFactory(themeProcessor);
+    var rootInjector = new Injector(undefined, rootDeps, new ThemeFactory(themeProcessor));
 
     var AtomizedComponent = (_class = function (_BaseComponent) {
         inherits(AtomizedComponent, _BaseComponent);
@@ -983,9 +987,9 @@ function createReactWrapper(BaseComponent, defaultFromError, themeProcessor) {
             _this._render = render;
 
             if (render.separateState === undefined) {
-                _this._injector = render.deps === undefined ? undefined : _this.props.__lom_ctx || new Injector(undefined, undefined, themeFactory);
+                _this._injector = render.deps === undefined ? undefined : _this.props.__lom_ctx || rootInjector;
             } else {
-                _this._injector = new Injector(_this.props.__lom_ctx, undefined, themeFactory);
+                _this._injector = _this.props.__lom_ctx === undefined ? rootInjector : _this.props.__lom_ctx.copy();
             }
             if (_this._injector && render.props) {
                 _this._injector.value(render.props, props);
@@ -1012,7 +1016,7 @@ function createReactWrapper(BaseComponent, defaultFromError, themeProcessor) {
             defaultContext.getAtom(this, this.r, 'r').destroyed(true);
         };
 
-        AtomizedComponent.prototype._getState = function _getState(next, force$$1) {
+        AtomizedComponent.prototype._state = function _state(next, force$$1) {
             if (this._injector === undefined || this._render.deps === undefined) {
                 throw new Error('Injector not defined');
             }
@@ -1027,7 +1031,7 @@ function createReactWrapper(BaseComponent, defaultFromError, themeProcessor) {
             var prevContext = parentContext;
             parentContext = this._injector;
 
-            var state = render.deps !== undefined ? this._getState(undefined, force$$1) : undefined;
+            var state = render.deps !== undefined ? this._state(undefined, force$$1) : undefined;
 
             try {
                 data = render(this.props, state);
@@ -1051,7 +1055,7 @@ function createReactWrapper(BaseComponent, defaultFromError, themeProcessor) {
         };
 
         return AtomizedComponent;
-    }(BaseComponent), (_applyDecoratedDescriptor$1(_class.prototype, '_getState', [mem], Object.getOwnPropertyDescriptor(_class.prototype, '_getState'), _class.prototype), _applyDecoratedDescriptor$1(_class.prototype, 'r', [detached], Object.getOwnPropertyDescriptor(_class.prototype, 'r'), _class.prototype)), _class);
+    }(BaseComponent), (_applyDecoratedDescriptor$1(_class.prototype, '_state', [mem], Object.getOwnPropertyDescriptor(_class.prototype, '_state'), _class.prototype), _applyDecoratedDescriptor$1(_class.prototype, 'r', [detached], Object.getOwnPropertyDescriptor(_class.prototype, 'r'), _class.prototype)), _class);
 
 
     return function reactWrapper(render, fromError) {
@@ -24076,9 +24080,11 @@ var TodoStore = (_class2 = function () {
         var _this4 = this;
 
         this.todos = this.todos.map(function (todo) {
-            return new TodoModel(Object.assign({}, todo, {
+            return new TodoModel({
+                title: todo.title,
+                id: todo.id,
                 completed: completed
-            }), _this4);
+            }, _this4);
         });
 
         this._handlePromise(fetch('/api/todos', {
@@ -24421,7 +24427,7 @@ var TodoItemStore = (_class2$3 = (_temp$3 = _class3$1 = function TodoItemStore(_
     this._focused = false;
 
     this.setEditInputRef = function (el) {
-        if (el) {
+        if (el && !_this._focused) {
             _this._focused = true;
             el.focus();
         }
@@ -24457,7 +24463,6 @@ var TodoItemStore = (_class2$3 = (_temp$3 = _class3$1 = function TodoItemStore(_
         _this.todoBeingEdited = null;
     };
 
-    debugger;
     this._todo = todo;
 }, _class3$1.deps = [TodoProps], _temp$3), (_descriptor$5 = _applyDecoratedDescriptor$10(_class2$3.prototype, 'todoBeingEdited', [mem], {
     enumerable: true,
@@ -24626,41 +24631,50 @@ TodoItem.props = TodoProps;
 TodoItem.separateState = true;
 
 function TodoOverviewTheme() {
+    var toggleAll = {
+        outline: 'none',
+        position: 'absolute',
+        top: '-55px',
+        left: '-12px',
+        width: '60px',
+        height: '34px',
+        textAlign: 'center',
+        border: 'none', /* Mobile Safari */
+
+        '&:before': {
+            content: '\'❯\'',
+            fontSize: '22px',
+            color: '#e6e6e6',
+            padding: '10px 27px 10px 27px'
+        },
+        '&:checked:before': {
+            color: '#737373'
+        }
+    };
+
     return {
         main: {
             position: 'relative',
             zIndex: 2,
             borderTop: '1px solid #e6e6e6'
         },
-        toggleAll: {
-            textAlign: 'center',
-            border: 'none',
-            opacity: 0,
-            position: 'absolute',
-            '& + label:before': {
-                content: '\'❯\'',
-                fontSize: '22px',
-                color: '#e6e6e6',
-                padding: '10px 27px 10px 27px'
-            },
-            '&:checked + label:before': {
-                color: '#737373'
-            },
-            '& + label': {
-                width: '60px',
-                height: '34px',
-                fontSize: 0,
-                position: 'absolute',
-                top: '-52px',
-                left: '-13px',
-                '-webkit-transform': 'rotate(90deg)',
-                transform: 'rotate(90deg)'
-            }
-        },
+        toggleAll: Object.assign({}, toggleAll),
         todoList: {
             margin: 0,
             padding: 0,
             listStyle: 'none'
+        },
+
+        /*
+        Hack to remove background from Mobile Safari.
+        Can't use it globally since it destroys checkboxes in Firefox
+        */
+        '@media screen and (-webkit-min-device-pixel-ratio:0)': {
+            toggleAll: Object.assign({}, toggleAll, {
+                transform: 'rotate(90deg)',
+                appearance: 'none',
+                '-webkit-appearance': 'none'
+            })
         }
     };
 }
@@ -24898,19 +24912,24 @@ function TodoApp(_ref, _ref2) {
 
     return lom_h(
         'div',
-        { className: theme.todoapp },
+        null,
+        todoStore.activeTodoCount > 0 ? null : null,
         lom_h(
             'div',
             { style: { padding: '0.3em 0.5em' } },
             todoStore.isOperationRunning ? 'Saving...' : 'Idle'
         ),
         lom_h(
-            'header',
-            null,
-            lom_h(TodoEntry, { todoStore: todoStore })
-        ),
-        lom_h(TodoOverview, { todoStore: todoStore, viewStore: viewStore }),
-        lom_h(TodoFooter, { todoStore: todoStore, viewStore: viewStore })
+            'div',
+            { className: theme.todoapp },
+            lom_h(
+                'header',
+                null,
+                lom_h(TodoEntry, { todoStore: todoStore })
+            ),
+            lom_h(TodoOverview, { todoStore: todoStore, viewStore: viewStore }),
+            lom_h(TodoFooter, { todoStore: todoStore, viewStore: viewStore })
+        )
     );
 }
 

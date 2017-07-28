@@ -24,7 +24,6 @@ class TodoItemStore {
     static deps = [TodoProps]
 
     constructor({todo}: TodoProps) {
-        debugger
         this._todo = todo
     }
 
@@ -39,7 +38,7 @@ class TodoItemStore {
 
     _focused = false
     setEditInputRef = (el: ?HTMLInputElement) => {
-        if (el) {
+        if (el && !this._focused) {
             this._focused = true
             el.focus()
         }

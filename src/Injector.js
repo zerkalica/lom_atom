@@ -4,14 +4,12 @@ import mem, {memkey} from './mem'
 import ThemeFactory from './ThemeFactory'
 
 export type IArg = Function | {[id: string]: Function}
-type IProvideItem = Function | [Function, Function]
+export type IProvideItem = Function | [Function, Function]
 
 export type IPropsWithContext = {
     [id: string]: any;
     __lom_ctx?: Injector;
 }
-
-export type IProvider<State> = (props: IPropsWithContext, prevState?: State) => IProvideItem[];
 
 let chainCount = 0
 
@@ -83,6 +81,10 @@ export default class Injector {
 
     instance<V>(key: Function): V {
         return this._fastCall(key, this.resolve(key.deps))
+    }
+
+    copy(items?: IProvideItem[]): Injector {
+        return new Injector(this, items, this._themeFactory)
     }
 
     resolve(argDeps?: IArg[]): any[] {

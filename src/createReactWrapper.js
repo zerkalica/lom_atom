@@ -3,7 +3,7 @@ import {defaultContext} from './Context'
 import mem, {force, detached} from './mem'
 import {shouldUpdate} from './utils'
 import Injector from './Injector'
-import type {IProvider, IArg, IPropsWithContext} from './Injector'
+import type {IProvideItem, IArg, IPropsWithContext} from './Injector'
 import ThemeFactory from './ThemeFactory'
 import type {IProcessor} from './ThemeFactory'
 
@@ -115,9 +115,10 @@ let parentContext: any = undefined
 export default function createReactWrapper<IElement>(
     BaseComponent: Class<*>,
     defaultFromError: IFromError<IElement>,
-    themeProcessor?: IProcessor
+    themeProcessor?: IProcessor,
+    rootDeps?: IProvideItem[]
 ): IAtomize<IElement, *> {
-    const themeFactory = new ThemeFactory(themeProcessor)
+    const rootInjector = new Injector(undefined, rootDeps, new ThemeFactory(themeProcessor))
 
     class AtomizedComponent<State> extends BaseComponent {
         _render: IRenderFn<IElement, State>
@@ -140,13 +141,11 @@ export default function createReactWrapper<IElement>(
             if (render.separateState === undefined) {
                 this._injector = render.deps === undefined
                     ? undefined
-                    : (this.props.__lom_ctx || new Injector(undefined, undefined, themeFactory))
+                    : (this.props.__lom_ctx || rootInjector)
             } else {
-                this._injector = new Injector(
-                    this.props.__lom_ctx,
-                    undefined,
-                    themeFactory
-                )
+                this._injector = this.props.__lom_ctx === undefined
+                    ? rootInjector
+                    : this.props.__lom_ctx.copy()
             }
             if (this._injector && render.props) {
                 this._injector.value(render.props, props)
@@ -173,7 +172,7 @@ export default function createReactWrapper<IElement>(
         }
 
         @mem
-        _getState(next?: State, force?: boolean): State {
+        _state(next?: State, force?: boolean): State {
             if (this._injector === undefined || this._render.deps === undefined) {
                 throw new Error('Injector not defined')
             }
@@ -192,7 +191,7 @@ export default function createReactWrapper<IElement>(
             parentContext = this._injector
 
             const state = render.deps !== undefined
-                ? this._getState(undefined, force)
+                ? this._state(undefined, force)
                 : undefined
 
             try {

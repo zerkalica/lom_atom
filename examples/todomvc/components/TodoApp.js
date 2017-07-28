@@ -53,13 +53,17 @@ export default function TodoApp(
         theme: ThemeValues<typeof TodoAppTheme>
     }
 ) {
-    return <div className={theme.todoapp}>
+    return <div>
+        {/* Loading fix: access data in TodoApp first to throw exception, if no todos loaded */}
+        {todoStore.activeTodoCount > 0 ? null : null}
         <div style={{padding: '0.3em 0.5em'}}>{todoStore.isOperationRunning ? 'Saving...' : 'Idle'}</div>
-        <header>
-            <TodoEntry todoStore={todoStore} />
-        </header>
-        <TodoOverview todoStore={todoStore} viewStore={viewStore} />
-        <TodoFooter todoStore={todoStore} viewStore={viewStore} />
+        <div className={theme.todoapp}>
+            <header>
+                <TodoEntry todoStore={todoStore} />
+            </header>
+            <TodoOverview todoStore={todoStore} viewStore={viewStore} />
+            <TodoFooter todoStore={todoStore} viewStore={viewStore} />
+        </div>
     </div>
 }
 
