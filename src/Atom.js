@@ -103,7 +103,7 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
                 this._context.unreap(this)
                 slaves = this._slaves = new Set()
             }
-            // console.log('add slave', slave.field, 'to master', this.field)
+            console.log('add slave', slave.field, 'to master', this.field)
             slaves.add(slave)
             slave.addMaster(this)
         }
@@ -205,10 +205,10 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         if (slaves) {
             if (slaves.size === 1) {
                 this._slaves = null
-                // console.log('reap (slaves === null)', this.field)
+                console.log('reap (slaves === null)', this.field)
                 this._context.proposeToReap(this)
             } else {
-                // console.log('delete slave', slave.field, 'from', this.field)
+                console.log('delete slave', slave.field, 'from', this.field)
                 slaves.delete(slave)
             }
         }

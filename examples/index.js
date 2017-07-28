@@ -8,12 +8,19 @@ import ReactDOM from 'react-dom'
 
 import {CounterView, Counter} from './counter'
 import {HelloView, Hello} from './hello'
-import {TodoApp} from './todomvc'
-import {Locale} from './common'
+import {TodoApp, todoMocks} from './todomvc'
+import {AutocompleteView, autocompleteMocks} from './autocomplete'
+
+import {Locale, mockFetch} from './common'
+
+mockFetch(localStorage, 500, [
+    todoMocks,
+    autocompleteMocks
+])
 
 class Store {
-    links = ['hello', 'counter', 'error', 'todomvc']
-    @mem route: string = 'hello'
+    links = ['hello', 'counter', 'error', 'todomvc', 'autocomplete']
+    @mem route: string = 'autocomplete'
     @mem name = 'vvv'
     counter = new Counter()
     hello = new Hello()
@@ -33,6 +40,10 @@ function AppView({store}: AppProps) {
 
         case 'counter':
             page = <CounterView counter={store.counter} />
+            break
+
+        case 'autocomplete':
+            page = <AutocompleteView initialValue={store.name} />
             break
 
         case 'todomvc':

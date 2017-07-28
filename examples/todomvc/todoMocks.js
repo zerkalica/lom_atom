@@ -1,38 +1,10 @@
 
-import fetchMock from 'fetch-mock/es5/client'
 import uuid from 'uuid/v4'
-
+import {BrowserLocalStorage} from '../common'
 interface ITodo {
     id: string;
     title: string;
     completed: boolean;
-}
-
-class BrowserLocalStorage {
-    _storage: Storage
-    _key: string
-
-    constructor(storage: Storage, key: string) {
-        this._storage = storage
-        this._key = key
-    }
-
-    get<V>(): ?V {
-        const value: ?string = this._storage.getItem(this._key)
-        return !value ? null : JSON.parse(value || '')
-    }
-
-    set<V>(value: V, _opts?: SetStorageOpts): void {
-        this._storage.setItem(this._key, JSON.stringify(value))
-    }
-
-    clear(): void {
-        this._storage.removeItem(this._key)
-    }
-
-    clearAll(): void {
-        this._storage.clear()
-    }
 }
 
 
@@ -56,7 +28,7 @@ function sortByDate(el1: ITodo, el2: ITodo): number {
     return 0
 }
 
-export default function createTodoEmulatedApi(
+export default function todoMocks(
     rawStorage: Storage
 ) {
     const storage = new BrowserLocalStorage(rawStorage, 'lom_todomvc')
@@ -167,16 +139,3 @@ export default function createTodoEmulatedApi(
         }
     ]
 }
-
-function delayed<V>(v: V, delay: number): (url: string, params: RequestOptions) => Promise<V> {
-    return function resp(url: string, params: RequestOptions) {
-        return new Promise((resolve: Function) => {
-            setTimeout(() => { resolve(v) }, delay)
-        })
-    }
-}
-
-const delay = 500
-createTodoEmulatedApi(localStorage).forEach((data) => {
-    fetchMock.mock({...data, response: delayed(data.response, delay)})
-})

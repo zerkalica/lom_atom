@@ -20,6 +20,7 @@ interface IRenderFn<IElement, State> {
     deps?: IArg[];
     localState?: boolean;
     props?: Function;
+    onError?: IFromError<IElement>;
 }
 
 type IFromError<IElement> = (props: {error: Error}) => IElement
@@ -38,6 +39,8 @@ function createEventFix(origin: (e: Event) => void): (e: Event) => void {
 
     return fixEvent
 }
+
+let parentContext: Injector | void = undefined
 
 export function createCreateElement<IElement, State>(
     atomize: IAtomize<IElement, State>,
@@ -112,8 +115,6 @@ export function createCreateElement<IElement, State>(
         }
     }
 }
-
-let parentContext: any = undefined
 
 export default function createReactWrapper<IElement>(
     BaseComponent: Class<*>,
@@ -190,20 +191,17 @@ export default function createReactWrapper<IElement>(
 
             const render = this._render
 
+            const prevContext = parentContext
+            parentContext = this._injector || this._getInjector()
+
             const state = render.deps !== undefined
                 ? this._state(undefined, force)
                 : undefined
 
-            const prevContext = parentContext
-            parentContext = this._injector || this._getInjector()
-
             try {
-                data = render(
-                    this.props,
-                    state
-                )
+                data = render(this.props, state)
             } catch (error) {
-                data = this.constructor.fromError({error})
+                data = (this._render.onError || defaultFromError)({error})
             }
             parentContext = prevContext
 
@@ -225,14 +223,12 @@ export default function createReactWrapper<IElement>(
     }
 
     return function reactWrapper<State>(
-        render: IRenderFn<IElement, State>,
-        fromError?: IFromError<IElement>
+        render: IRenderFn<IElement, State>
     ): Class<IReactComponent<IElement>> {
         function WrappedComponent(props: IPropsWithContext, context?: Object) {
             AtomizedComponent.call(this, props, context, render)
         }
         WrappedComponent.instances = 0
-        WrappedComponent.fromError = fromError || defaultFromError
         WrappedComponent.displayName = render.displayName || render.name
         WrappedComponent.prototype = Object.create(AtomizedComponent.prototype)
         WrappedComponent.prototype.constructor = WrappedComponent

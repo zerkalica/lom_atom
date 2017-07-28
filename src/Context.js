@@ -39,6 +39,7 @@ export default class Context implements IContext {
         if (atom === undefined) {
             atom = new Atom(key, createKeyedHandler(host, keyHandler, key), host, undefined, this)
             map.set(key, atom)
+            // host[key + '@'] = atom
         }
 
         return atom
@@ -54,6 +55,7 @@ export default class Context implements IContext {
         if (atom === undefined) {
             atom = new Atom(key, handler, host, isComponent, this)
             map.set(key, atom)
+            // host[key + '@'] = atom
         }
 
         return atom
