@@ -3,17 +3,15 @@
 import {AtomWait, mem, force} from 'lom_atom'
 import {ItemView, Locale} from './common'
 
-export class Hello {
+class Hello {
     @mem name = 'test'
 }
 
 interface IHelloProps {
-    hello: Hello;
     name: string;
 }
 
 class HelloProps implements IHelloProps {
-    hello: Hello
     name: string
 }
 
@@ -43,11 +41,12 @@ type HelloState = {
     locale: Locale;
     options: HelloOptions;
     service: SomeService;
+    hello: Hello;
 }
 
 export function HelloView(
-    {hello}: IHelloProps,
-    {options, locale, service}: HelloState
+    _: IHelloProps,
+    {hello, options, locale, service}: HelloState
 ) {
     return <div>
         <h3>{options.actionName}, {hello.name}</h3>
@@ -77,5 +76,5 @@ export function HelloView(
     </div>
 }
 
-HelloView.deps = [{options: HelloOptions, locale: Locale, service: SomeService}]
+HelloView.deps = [{hello: Hello, options: HelloOptions, locale: Locale, service: SomeService}]
 HelloView.props = HelloProps

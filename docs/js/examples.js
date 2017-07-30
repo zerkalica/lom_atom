@@ -1,3 +1,4 @@
+document.write('<script src="http://' + (location.host || 'localhost').split(':')[0] + ':35729/livereload.js?snipver=1"></' + 'script>');
 (function () {
 'use strict';
 
@@ -23,14 +24,14 @@ var global$1 = typeof global !== "undefined" ? global :
             typeof self !== "undefined" ? self :
             typeof window !== "undefined" ? window : {};
 
+// eslint-disable-line
 var ATOM_STATUS = {
     DESTROYED: 0,
     OBSOLETE: 1,
     CHECKING: 2,
     PULLING: 3,
     ACTUAL: 4
-}; // eslint-disable-line
-
+};
 
 var catchedId = Symbol('lom_atom_catched');
 //  | Error
@@ -644,60 +645,6 @@ function detached(proto, name, descr) {
     return memMethod(proto, name, descr, true);
 }
 
-var ThemeProvider = function () {
-    function ThemeProvider(themeFn, resolver, processor) {
-        classCallCheck(this, ThemeProvider);
-
-        this._themeFn = themeFn;
-        this._processor = processor;
-        this._resolver = resolver;
-    }
-
-    // @mem
-
-
-    ThemeProvider.prototype.theme = function theme() {
-        if (this._sheet) {
-            // return this._sheet.classes
-            this._sheet.detach();
-        }
-        var sheet = this._sheet = this._processor.createStyleSheet(this._resolver.instance(this._themeFn));
-        sheet.attach();
-
-        return sheet.classes;
-    };
-
-    ThemeProvider.prototype._destroy = function _destroy() {
-        if (this._sheet) {
-            this._sheet.detach();
-        }
-        this._themeFn = undefined;
-        this._processor = undefined;
-        this._resolver = undefined;
-        this._sheet = undefined;
-    };
-
-    return ThemeProvider;
-}();
-
-var ThemeFactory = function () {
-    function ThemeFactory(processor) {
-        classCallCheck(this, ThemeFactory);
-
-        this._processor = processor;
-    }
-
-    ThemeFactory.prototype.createTheme = function createTheme(themeFn, resolver) {
-        if (this._processor === undefined) {
-            return {};
-        }
-        themeFn.cached = themeFn.cached || new ThemeProvider(themeFn, resolver, this._processor).theme();
-        return themeFn.cached;
-    };
-
-    return ThemeFactory;
-}();
-
 var _class$1;
 
 function _applyDecoratedDescriptor$2(target, property, decorators, descriptor, context) {
@@ -731,13 +678,28 @@ function _applyDecoratedDescriptor$2(target, property, decorators, descriptor, c
 
 var chainCount = 0;
 
+var defaultSheetProcessor = {
+    createStyleSheet: function createStyleSheet(cssProps) {
+        return {
+            attach: function attach() {
+                return this;
+            },
+            detach: function detach() {
+                return this;
+            },
+
+            classes: {}
+        };
+    }
+};
+
 var Injector = (_class$1 = function () {
-    function Injector(parent, items, themeFactory) {
+    function Injector(parent, items, sheetProcessor) {
         classCallCheck(this, Injector);
 
         this.parent = parent;
         this.top = parent ? parent.top : this;
-        this._themeFactory = themeFactory;
+        this._sheetProcessor = sheetProcessor || defaultSheetProcessor;
         if (items !== undefined) {
             for (var i = 0; i < items.length; i++) {
                 var item = items[i];
@@ -757,7 +719,9 @@ var Injector = (_class$1 = function () {
 
         if (key.theme === true) {
             if (this.top === this) {
-                return this._themeFactory.createTheme(key, this);
+                var _sheet = this._sheetProcessor.createStyleSheet(this.instance(key));
+                _sheet.attach();
+                return _sheet;
             }
             return this.top.value(key);
         }
@@ -779,7 +743,7 @@ var Injector = (_class$1 = function () {
         this.parent = undefined;
         this.map = undefined;
         this.top = undefined;
-        this._themeFactory = undefined;
+        this._sheetProcessor = undefined;
     };
 
     Injector.prototype._fastCall = function _fastCall(key, args) {
@@ -804,10 +768,10 @@ var Injector = (_class$1 = function () {
     };
 
     Injector.prototype.copy = function copy(items) {
-        return new Injector(this, items, this._themeFactory);
+        return new Injector(this, items, this._sheetProcessor);
     };
 
-    Injector.prototype.resolve = function resolve(argDeps) {
+    Injector.prototype.resolve = function resolve(argDeps, acc) {
         var result = [];
         if (argDeps !== undefined) {
             for (var i = 0, l = argDeps.length; i < l; i++) {
@@ -816,7 +780,13 @@ var Injector = (_class$1 = function () {
                     var obj = {};
                     for (var prop in argDep) {
                         // eslint-disable-line
-                        obj[prop] = this.value(argDep[prop]);
+                        var key = argDep[prop];
+                        if (key.theme === undefined) {
+                            obj[prop] = this.value(key);
+                        } else if (acc !== undefined) {
+                            acc.sheet = this.value(key);
+                            obj[prop] = acc.sheet.classes;
+                        }
                     }
                     result.push(obj);
                 } else {
@@ -940,10 +910,10 @@ function createCreateElement(atomize, createElement) {
     };
 }
 
-function createReactWrapper(BaseComponent, defaultFromError, themeProcessor, rootDeps) {
+function createReactWrapper(BaseComponent, defaultFromError, sheetProcessor, rootDeps) {
     var _desc, _value, _class;
 
-    var rootInjector = new Injector(undefined, rootDeps, new ThemeFactory(themeProcessor));
+    var rootInjector = new Injector(undefined, rootDeps, sheetProcessor);
 
     var AtomizedComponent = (_class = function (_BaseComponent) {
         inherits(AtomizedComponent, _BaseComponent);
@@ -955,6 +925,7 @@ function createReactWrapper(BaseComponent, defaultFromError, themeProcessor, roo
 
             _this._propsChanged = true;
             _this._injector = undefined;
+            _this.sheet = undefined;
             _this._el = undefined;
 
             _this._render = render;
@@ -970,21 +941,29 @@ function createReactWrapper(BaseComponent, defaultFromError, themeProcessor, roo
         };
 
         AtomizedComponent.prototype.componentWillUnmount = function componentWillUnmount() {
-            this._el = undefined;
-            this.props = undefined;
-            this._injector = undefined;
+            defaultContext.getAtom(this, this.r, 'r').destroyed(true);
+        };
+
+        AtomizedComponent.prototype._destroy = function _destroy() {
             var render = this._render;
             if (render.deps !== undefined || render.props !== undefined) {
                 this.constructor.instances--;
             }
+
+            if (this.sheet !== undefined && this.constructor.instances === 0) {
+                this.sheet.detach();
+            }
+            this.sheet = undefined;
+            this._el = undefined;
+            this.props = undefined;
+            this._injector = undefined;
             this._render = undefined;
-            defaultContext.getAtom(this, this.r, 'r').destroyed(true);
         };
 
         AtomizedComponent.prototype._getInjector = function _getInjector() {
             var parentInjector = this.props.__lom_ctx || rootInjector;
             // Autodetect separate state per component instance
-            this._injector = this.constructor.instances > 0 || this._render.localState !== undefined ? parentInjector.copy() : parentInjector;
+            this._injector = this.constructor.instances > 0 ? parentInjector.copy() : parentInjector;
 
             return this._injector;
         };
@@ -994,8 +973,14 @@ function createReactWrapper(BaseComponent, defaultFromError, themeProcessor, roo
             if (this._render.props && force$$1) {
                 injector.value(this._render.props, this.props, true);
             }
+            var oldSheet = this.sheet;
+            var state = injector.resolve(this._render.deps, this)[0];
 
-            return injector.resolve(this._render.deps)[0];
+            if (oldSheet !== undefined && this.sheet !== oldSheet) {
+                oldSheet.detach();
+            }
+
+            return state;
         };
 
         AtomizedComponent.prototype.r = function r(element, force$$1) {
@@ -1011,7 +996,8 @@ function createReactWrapper(BaseComponent, defaultFromError, themeProcessor, roo
             try {
                 data = render(this.props, state);
             } catch (error) {
-                data = (this._render.onError || defaultFromError)({ error: error });
+                var _onError = render.onError || defaultFromError;
+                data = _onError({ error: error }, _onError.deps === undefined ? undefined : parentContext.resolve(_onError.deps)[0]);
             }
             parentContext = prevContext;
 
@@ -1150,7 +1136,6 @@ function extend(obj, props) {
  */
 var defer = typeof Promise == 'function' ? Promise.resolve().then.bind(Promise.resolve()) : setTimeout;
 
-// DOM properties that should NOT have "px" added when numeric
 var IS_NON_DIMENSIONAL = /acit|ex(?:s|g|n|p|$)|rph|ows|mnc|ntw|ine[ch]|zoo|^ord/i;
 
 /** Managed queue of dirty components to be re-rendered */
@@ -1993,6 +1978,9 @@ function render(vnode, parent, merge) {
   return diff(merge, vnode, {}, false, parent, false);
 }
 
+
+//# sourceMappingURL=preact.esm.js.map
+
 var commonjsGlobal = typeof window !== 'undefined' ? window : typeof global !== 'undefined' ? global : typeof self !== 'undefined' ? self : {};
 
 
@@ -2146,9 +2134,6 @@ var SheetsRegistry = function () {
 exports['default'] = SheetsRegistry;
 });
 
-// shim for using process in browser
-// based off https://github.com/defunctzombie/node-process/blob/master/browser.js
-
 function defaultSetTimout() {
     throw new Error('setTimeout has not been defined');
 }
@@ -2260,6 +2245,7 @@ function drainQueue() {
     runClearTimeout(timeout);
 }
 
+// v8 likes predictible objects
 
 
 
@@ -2296,13 +2282,6 @@ var performanceNow =
 
 // generate timestamp or delta
 // see http://nodejs.org/api/process.html#process_process_hrtime
-
-/**
- * Similar to invariant but only logs a warning if the condition is not met.
- * This can be used to log issues in development environments in critical
- * paths. Removing the logging code for production environments will keep the
- * same logic and follow the same code paths.
- */
 
 var warning = function() {};
 
@@ -5025,7 +5004,8 @@ var Counter = (_class$2 = function () {
     return Counter;
 }(), (_applyDecoratedDescriptor$3(_class$2.prototype, 'value', [mem], Object.getOwnPropertyDescriptor(_class$2.prototype, 'value'), _class$2.prototype), _applyDecoratedDescriptor$3(_class$2.prototype, 'value', [mem], Object.getOwnPropertyDescriptor(_class$2.prototype, 'value'), _class$2.prototype)), _class$2);
 
-function CounterView(_ref) {
+
+function CounterView(_, _ref) {
     var counter = _ref.counter;
 
     return lom_h(
@@ -5053,6 +5033,7 @@ function CounterView(_ref) {
         )
     );
 }
+CounterView.deps = [{ counter: Counter }];
 
 var index$6 = function (glob, opts) {
   if (typeof glob !== 'string') {
@@ -5190,9 +5171,6 @@ var index$10 = Array.isArray || function (arr) {
   return Object.prototype.toString.call(arr) == '[object Array]';
 };
 
-/**
- * Expose `pathToRegexp`.
- */
 var index$8 = pathToRegexp;
 var parse_1 = parse;
 var compile_1 = compile;
@@ -6550,11 +6528,11 @@ var SomeService = (_temp2 = _class6 = function () {
 }(), _class6.deps = [HelloOptions], _temp2);
 
 
-function HelloView(_ref2, _ref3) {
-    var hello = _ref2.hello;
-    var options = _ref3.options,
-        locale = _ref3.locale,
-        service = _ref3.service;
+function HelloView(_, _ref2) {
+    var hello = _ref2.hello,
+        options = _ref2.options,
+        locale = _ref2.locale,
+        service = _ref2.service;
 
     return lom_h(
         'div',
@@ -6605,8 +6583,8 @@ function HelloView(_ref2, _ref3) {
             lom_h(
                 ItemView.Value,
                 null,
-                lom_h('input', { value: hello.name, onInput: function onInput(_ref4) {
-                        var target = _ref4.target;
+                lom_h('input', { value: hello.name, onInput: function onInput(_ref3) {
+                        var target = _ref3.target;
 
                         hello.name = target.value;
                     } })
@@ -6623,8 +6601,8 @@ function HelloView(_ref2, _ref3) {
             lom_h(
                 ItemView.Value,
                 null,
-                lom_h('input', { value: options.actionName, onInput: function onInput(_ref5) {
-                        var target = _ref5.target;
+                lom_h('input', { value: options.actionName, onInput: function onInput(_ref4) {
+                        var target = _ref4.target;
 
                         options.actionName = target.value;
                     } })
@@ -6633,13 +6611,9 @@ function HelloView(_ref2, _ref3) {
     );
 }
 
-HelloView.deps = [{ options: HelloOptions, locale: Locale, service: SomeService }];
+HelloView.deps = [{ hello: Hello, options: HelloOptions, locale: Locale, service: SomeService }];
 HelloView.props = HelloProps;
 
-// Unique ID creation requires a high quality random # generator.  In the
-// browser this is a little complicated due to unknown quality of Math.random()
-// and inconsistent support for the `crypto` API.  We do the best we can via
-// feature-detection
 var rng;
 
 var crypto = commonjsGlobal.crypto || commonjsGlobal.msCrypto; // for IE 11
@@ -7210,7 +7184,7 @@ var TodoToAdd = (_class2$2 = (_temp$2 = _class3 = function TodoToAdd(_ref) {
 
     _initDefineProp$4(this, 'title', _descriptor$4, this);
 
-    this.onChange = function (_ref2) {
+    this.onInput = function (_ref2) {
         var target = _ref2.target;
 
         _this.title = target.value;
@@ -7259,7 +7233,7 @@ function TodoEntry(_, _ref3) {
     return lom_h('input', {
         className: theme.newTodo,
         placeholder: 'What needs to be done?',
-        onChange: todoToAdd.onChange,
+        onInput: todoToAdd.onInput,
         value: todoToAdd.title,
         onKeyDown: todoToAdd.onKeyDown,
         autoFocus: true
@@ -7346,7 +7320,9 @@ var TodoItemStore = (_class2$3 = (_temp$3 = _class3$1 = function TodoItemStore(_
     this.setEditInputRef = function (el) {
         if (el && !_this._focused) {
             _this._focused = true;
-            el.focus();
+            animationFrame(function () {
+                el.focus();
+            });
         }
     };
 
@@ -7519,7 +7495,7 @@ function TodoItem(_ref3, _ref4) {
             className: theme.edit,
             value: itemStore.editText,
             onBlur: itemStore.handleSubmit,
-            onChange: itemStore.setText,
+            onInput: itemStore.setText,
             onKeyDown: itemStore.handleKeyDown
         })
     ) : lom_h(
@@ -7530,14 +7506,14 @@ function TodoItem(_ref3, _ref4) {
             className: theme.toggle,
             type: 'checkbox',
             checked: todo.completed,
-            onChange: itemStore.toggle
+            onInput: itemStore.toggle
         }),
         lom_h(
             'label',
             {
                 className: todo.completed ? theme.viewLabelCompleted : theme.viewLabelRegular,
                 id: 'beginEdit',
-                onDoubleClick: itemStore.beginEdit },
+                onDblClick: itemStore.beginEdit },
             todo.title
         ),
         lom_h('button', { className: theme.destroy, id: 'destroy', onClick: itemStore.handleDestroy })
@@ -8061,9 +8037,6 @@ var Store = (_class = function Store() {
     _initDefineProp(this, 'route', _descriptor, this);
 
     _initDefineProp(this, 'name', _descriptor2, this);
-
-    this.counter = new Counter();
-    this.hello = new Hello();
 }, (_descriptor = _applyDecoratedDescriptor(_class.prototype, 'route', [mem], {
     enumerable: true,
     initializer: function initializer() {
@@ -8083,11 +8056,11 @@ function AppView(_ref) {
     var page = void 0;
     switch (store.route) {
         case 'hello':
-            page = lom_h(HelloView, { hello: store.hello, name: store.name });
+            page = lom_h(HelloView, { name: store.name });
             break;
 
         case 'counter':
-            page = lom_h(CounterView, { counter: store.counter });
+            page = lom_h(CounterView, null);
             break;
 
         case 'autocomplete':
@@ -8153,10 +8126,7 @@ function AppView(_ref) {
         )
     );
 }
-AppView.provide = function (props) {
-    return [new Locale(props.lang)];
-};
-
+AppView.deps = [{ locale: Locale }];
 var store = new Store();
 
 render(lom_h(AppView, { store: store, lang: 'ru' }), document.getElementById('app'));

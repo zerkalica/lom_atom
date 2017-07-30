@@ -1,7 +1,7 @@
 // @flow
 
-import {mem} from 'lom_atom'
-import type {ResultOf, ThemeValues} from 'lom_atom'
+import {animationFrame, mem} from 'lom_atom'
+import type {ResultOf, NamesOf} from 'lom_atom'
 import type {ITodo} from '../stores/TodoStore'
 
 const ESCAPE_KEY = 27
@@ -40,7 +40,9 @@ class TodoItemStore {
     setEditInputRef = (el: ?HTMLInputElement) => {
         if (el && !this._focused) {
             this._focused = true
-            el.focus()
+            animationFrame(() => {
+                el.focus()
+            })
         }
     }
 
@@ -196,7 +198,7 @@ TodoItemTheme.theme = true
 export default function TodoItem(
     {todo}: ITodoProps,
     {itemStore, theme}: {
-        theme: ThemeValues<typeof TodoItemTheme>;
+        theme: NamesOf<typeof TodoItemTheme>;
         itemStore: TodoItemStore;
     }
 ) {
@@ -208,7 +210,7 @@ export default function TodoItem(
                 className={theme.edit}
                 value={itemStore.editText}
                 onBlur={itemStore.handleSubmit}
-                onChange={itemStore.setText}
+                onInput={itemStore.setText}
                 onKeyDown={itemStore.handleKeyDown}
             />
         </li>
@@ -218,12 +220,12 @@ export default function TodoItem(
                 className={theme.toggle}
                 type="checkbox"
                 checked={todo.completed}
-                onChange={itemStore.toggle}
+                onInput={itemStore.toggle}
             />
             <label
                 className={todo.completed ? theme.viewLabelCompleted : theme.viewLabelRegular}
                 id="beginEdit"
-                onDoubleClick={itemStore.beginEdit}>
+                onDblClick={itemStore.beginEdit}>
                 {todo.title}
             </label>
             <button className={theme.destroy} id="destroy" onClick={itemStore.handleDestroy} />

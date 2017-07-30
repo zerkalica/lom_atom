@@ -1,7 +1,7 @@
 // @flow
 
 import {mem} from 'lom_atom'
-import type {ThemeValues} from 'lom_atom'
+import type {NamesOf} from 'lom_atom'
 
 interface IStore {
     addTodo(title: string): void;
@@ -26,7 +26,7 @@ class TodoToAdd {
         this._store = todoStore
     }
 
-    onChange = ({target}: Event) => {
+    onInput = ({target}: Event) => {
         this.title = (target: any).value
     }
 
@@ -65,14 +65,14 @@ TodoEntryTheme.theme = true
 export default function TodoEntry(
     _: ITodoEntryProps,
     {todoToAdd, theme}: {
-        theme: ThemeValues<typeof TodoEntryTheme>;
+        theme: NamesOf<typeof TodoEntryTheme>;
         todoToAdd: TodoToAdd;
     }
 ) {
     return <input
         className={theme.newTodo}
         placeholder="What needs to be done?"
-        onChange={todoToAdd.onChange}
+        onInput={todoToAdd.onInput}
         value={todoToAdd.title}
         onKeyDown={todoToAdd.onKeyDown}
         autoFocus={true}

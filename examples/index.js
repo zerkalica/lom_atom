@@ -6,8 +6,8 @@ import {AtomWait, mem, force} from 'lom_atom'
 
 import {render} from 'preact'
 
-import {CounterView, Counter} from './counter'
-import {HelloView, Hello} from './hello'
+import {CounterView} from './counter'
+import {HelloView} from './hello'
 import {TodoApp, todoMocks} from './todomvc'
 import {AutocompleteView, autocompleteMocks} from './autocomplete'
 
@@ -22,8 +22,6 @@ class Store {
     links = ['hello', 'counter', 'error', 'todomvc', 'autocomplete']
     @mem route: string = 'hello'
     @mem name = 'vvv'
-    counter = new Counter()
-    hello = new Hello()
 }
 
 interface AppProps {
@@ -35,11 +33,11 @@ function AppView({store}: AppProps) {
     let page
     switch (store.route) {
         case 'hello':
-            page = <HelloView hello={store.hello} name={store.name} />
+            page = <HelloView name={store.name} />
             break
 
         case 'counter':
-            page = <CounterView counter={store.counter} />
+            page = <CounterView />
             break
 
         case 'autocomplete':
@@ -77,10 +75,7 @@ function AppView({store}: AppProps) {
         </ItemView>
     </div>
 }
-AppView.provide = (props: AppProps) => ([
-    new Locale(props.lang)
-])
-
+AppView.deps = [{locale: Locale}]
 const store = new Store()
 
 render(<AppView store={store} lang="ru" />, document.getElementById('app'))

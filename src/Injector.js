@@ -1,7 +1,6 @@
 // @flow
 
 import mem, {memkey} from './mem'
-import ThemeFactory from './ThemeFactory'
 
 export type IArg = Function | {[id: string]: Function}
 export type IProvideItem = Function | [Function, Function]
@@ -11,18 +10,42 @@ export type IPropsWithContext = {
     __lom_ctx?: Injector;
 }
 
+export interface ISheet<V: Object> {
+    attach(): ISheet<V>;
+    detach(): ISheet<V>;
+    classes: {+[id: $Keys<V>]: string};
+}
+
+export interface IProcessor {
+    createStyleSheet<V: Object>(_cssObj: V, options: any): ISheet<V>;
+}
+
 let chainCount = 0
+
+const defaultSheetProcessor: IProcessor = {
+    createStyleSheet<V: Object>(cssProps: V): ISheet<*> {
+        return {
+            attach() {
+                return this
+            },
+            detach() {
+                return this
+            },
+            classes: ({}: Object)
+        }
+    }
+}
 
 export default class Injector {
     map: Map<Function, *>
     parent: Injector | void
     top: Injector
-    _themeFactory: ThemeFactory
+    _sheetProcessor: IProcessor
 
-    constructor(parent?: Injector, items?: IProvideItem[], themeFactory: ThemeFactory) {
+    constructor(parent?: Injector, items?: IProvideItem[], sheetProcessor?: IProcessor) {
         this.parent = parent
         this.top = parent ? parent.top : this
-        this._themeFactory = themeFactory
+        this._sheetProcessor = sheetProcessor || defaultSheetProcessor
         if (items !== undefined) {
             for (let i = 0; i < items.length; i++) {
                 const item = items[i]
@@ -43,7 +66,9 @@ export default class Injector {
 
         if (key.theme === true) {
             if (this.top === this) {
-                return (this._themeFactory.createTheme(key, this): any)
+                const sheet = this._sheetProcessor.createStyleSheet(this.instance(key))
+                sheet.attach()
+                return (sheet: any)
             }
             return this.top.value(key)
         }
@@ -65,7 +90,7 @@ export default class Injector {
         this.parent = undefined
         this.map = (undefined: any)
         this.top = (undefined: any)
-        this._themeFactory = (undefined: any)
+        this._sheetProcessor = (undefined: any)
     }
 
     _fastCall<V>(key: any, args: mixed[]): V {
@@ -84,10 +109,10 @@ export default class Injector {
     }
 
     copy(items?: IProvideItem[]): Injector {
-        return new Injector(this, items, this._themeFactory)
+        return new Injector(this, items, this._sheetProcessor)
     }
 
-    resolve(argDeps?: IArg[]): any[] {
+    resolve(argDeps?: IArg[], acc?: {sheet: ISheet<*> | void}): any[] {
         const result = []
         if (argDeps !== undefined) {
             for (let i = 0, l = argDeps.length; i < l; i++) {
@@ -95,7 +120,13 @@ export default class Injector {
                 if (typeof argDep === 'object') {
                     const obj = {}
                     for (let prop in argDep) { // eslint-disable-line
-                        obj[prop] = this.value(argDep[prop])
+                        const key = argDep[prop]
+                        if (key.theme === undefined) {
+                            obj[prop] = this.value(key)
+                        } else if (acc !== undefined) {
+                            acc.sheet = ((this.value(key): any): ISheet<*>)
+                            obj[prop] = acc.sheet.classes
+                        }
                     }
                     result.push(obj)
                 } else {

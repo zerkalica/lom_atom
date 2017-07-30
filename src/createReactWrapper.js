@@ -3,9 +3,8 @@ import {defaultContext} from './Context'
 import mem, {force, detached} from './mem'
 import {shouldUpdate} from './utils'
 import Injector from './Injector'
-import type {IProvideItem, IArg, IPropsWithContext} from './Injector'
-import ThemeFactory from './ThemeFactory'
-import type {IProcessor} from './ThemeFactory'
+import type {IProcessor, ISheet, IProvideItem, IArg, IPropsWithContext} from './Injector'
+import type {NamesOf} from './interfaces'
 
 type IReactComponent<IElement> = {
     constructor(props: IPropsWithContext, context?: Object): IReactComponent<IElement>;
@@ -18,16 +17,14 @@ interface IRenderFn<IElement, State> {
 
     displayName?: string;
     deps?: IArg[];
-    localState?: boolean;
     props?: Function;
     onError?: IFromError<IElement>;
 }
 
-type IFromError<IElement> = (props: {error: Error}) => IElement
+type IFromError<IElement> = (props: {error: Error}, state?: any) => IElement
 
 type IAtomize<IElement, State> = (
-    render: IRenderFn<IElement, State>,
-    fromError?: IFromError<IElement>
+    render: IRenderFn<IElement, State>
 ) => Class<IReactComponent<IElement>>
 
 function createEventFix(origin: (e: Event) => void): (e: Event) => void {
@@ -119,20 +116,20 @@ export function createCreateElement<IElement, State>(
 export default function createReactWrapper<IElement>(
     BaseComponent: Class<*>,
     defaultFromError: IFromError<IElement>,
-    themeProcessor?: IProcessor,
+    sheetProcessor?: IProcessor,
     rootDeps?: IProvideItem[]
 ): IAtomize<IElement, *> {
-    const rootInjector = new Injector(undefined, rootDeps, new ThemeFactory(themeProcessor))
+    const rootInjector = new Injector(undefined, rootDeps, sheetProcessor)
 
     class AtomizedComponent<State> extends BaseComponent {
         _render: IRenderFn<IElement, State>
 
         props: IPropsWithContext
 
-        static fromError: IFromError<IElement>
         static instances: number
         _propsChanged: boolean = true
         _injector: Injector | void = undefined
+        sheet: ISheet<*> | void = undefined
 
         constructor(
             props: IPropsWithContext,
@@ -152,21 +149,29 @@ export default function createReactWrapper<IElement>(
         }
 
         componentWillUnmount() {
-            this._el = undefined
-            this.props = (undefined: any)
-            this._injector = undefined
+            defaultContext.getAtom(this, this.r, 'r').destroyed(true)
+        }
+
+        _destroy() {
             const render = this._render
             if (render.deps !== undefined || render.props !== undefined) {
                 this.constructor.instances--
             }
+
+            if (this.sheet !== undefined && this.constructor.instances === 0) {
+                this.sheet.detach()
+            }
+            this.sheet = undefined
+            this._el = undefined
+            this.props = (undefined: any)
+            this._injector = undefined
             this._render = (undefined: any)
-            defaultContext.getAtom(this, this.r, 'r').destroyed(true)
         }
 
         _getInjector(): Injector {
             const parentInjector: Injector = this.props.__lom_ctx || rootInjector
             // Autodetect separate state per component instance
-            this._injector = this.constructor.instances > 0 || this._render.localState !== undefined
+            this._injector = this.constructor.instances > 0
                 ? parentInjector.copy()
                 : parentInjector
 
@@ -179,8 +184,14 @@ export default function createReactWrapper<IElement>(
             if (this._render.props && force) {
                 injector.value(this._render.props, this.props, true)
             }
+            const oldSheet = this.sheet
+            const state = injector.resolve(this._render.deps, this)[0]
 
-            return injector.resolve(this._render.deps)[0]
+            if (oldSheet !== undefined && this.sheet !== oldSheet) {
+                oldSheet.detach()
+            }
+
+            return state
         }
 
         _el: IElement | void = undefined
@@ -201,7 +212,13 @@ export default function createReactWrapper<IElement>(
             try {
                 data = render(this.props, state)
             } catch (error) {
-                data = (this._render.onError || defaultFromError)({error})
+                const onError = render.onError || defaultFromError
+                data = onError(
+                    {error},
+                    onError.deps === undefined
+                        ? undefined
+                        : parentContext.resolve(onError.deps)[0]
+                )
             }
             parentContext = prevContext
 

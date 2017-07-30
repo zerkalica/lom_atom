@@ -3,7 +3,7 @@
 export {default as Atom} from './Atom'
 export {default as mem, force} from './mem'
 export {default as createReactWrapper, createCreateElement} from './createReactWrapper'
-export {defaultContext} from './Context'
+export {defaultContext, animationFrame} from './Context'
 
 export {
     AtomWait
@@ -19,12 +19,12 @@ export type {
     IAtom,
     IAtomStatus,
     IContext,
-    IAtomHandler
+    IAtomHandler,
+    NamesOf
 } from './interfaces'
 
 
 export type {
     IProcessor,
-    ISheet,
-    ThemeValues
-} from './ThemeFactory'
+    ISheet
+} from './Injector'

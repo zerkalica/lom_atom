@@ -1,5 +1,5 @@
 // @flow
-import type {ThemeValues} from 'lom_atom'
+import type {NamesOf} from 'lom_atom'
 import TodoStore from '../stores/TodoStore'
 import ViewStore from '../stores/ViewStore'
 import type {ITodo} from '../stores/TodoStore'
@@ -65,7 +65,7 @@ export default function TodoOverview(
         viewStore: ViewStore;
     },
     {theme}: {
-        theme: ThemeValues<typeof TodoOverviewTheme>;
+        theme: NamesOf<typeof TodoOverviewTheme>;
     }
 ) {
     if (!todoStore.todos.length) {

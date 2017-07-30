@@ -1,5 +1,5 @@
 // @flow
-import type {ThemeValues} from 'lom_atom'
+import type {NamesOf} from 'lom_atom'
 import TodoStore from '../stores/TodoStore'
 import ViewStore from '../stores/ViewStore'
 
@@ -50,7 +50,7 @@ export default function TodoApp(
     {todoStore, viewStore, theme}: {
         todoStore: TodoStore;
         viewStore: ViewStore;
-        theme: ThemeValues<typeof TodoAppTheme>
+        theme: NamesOf<typeof TodoAppTheme>
     }
 ) {
     return <div>

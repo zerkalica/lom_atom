@@ -1,6 +1,6 @@
 // @flow
 
-import type {ThemeValues} from 'lom_atom'
+import type {NamesOf} from 'lom_atom'
 import TodoStore from '../stores/TodoStore'
 import ViewStore, {TODO_FILTER} from '../stores/ViewStore'
 
@@ -118,7 +118,7 @@ export default function TodoFooter(
         viewStore: ViewStore;
     },
     {theme}: {
-        theme: ThemeValues<typeof TodoFooterTheme>;
+        theme: NamesOf<typeof TodoFooterTheme>;
     }
 ) {
     if (!todoStore.activeTodoCount && !todoStore.completedCount) {

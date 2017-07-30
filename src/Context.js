@@ -9,7 +9,7 @@ function reap(atom: IAtomInt, key: IAtomInt, reaping: Set<IAtomInt>) {
     atom.destroyed(true)
 }
 
-const animationFrame =  typeof requestAnimationFrame === 'function'
+export const animationFrame =  typeof requestAnimationFrame === 'function'
     ? requestAnimationFrame
     : (fn: () => void) => setTimeout(fn, 0)
 

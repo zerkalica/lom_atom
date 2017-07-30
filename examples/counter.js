@@ -2,7 +2,7 @@
 
 import {AtomWait, mem, force} from 'lom_atom'
 
-export class Counter {
+class Counter {
     @mem get value(): number {
         setTimeout(() => {
             this.value = 1
@@ -19,9 +19,12 @@ export class Counter {
     }
 }
 
-export function CounterView({counter}: {
-    counter: Counter
-}) {
+export function CounterView(
+    _: {},
+    {counter}: {
+        counter: Counter
+    }
+) {
     return <div>
         <div>
             Count: {counter.value}
@@ -30,3 +33,4 @@ export function CounterView({counter}: {
         <button onClick={() => { counter.value = ('error': any) }}>Gen error</button>
     </div>
 }
+CounterView.deps = [{counter: Counter}]
