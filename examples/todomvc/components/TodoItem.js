@@ -41,7 +41,9 @@ class TodoItemStore {
         if (el && !this._focused) {
             this._focused = true
             animationFrame(() => {
-                el.focus()
+                if (el) {
+                    el.focus()
+                }
             })
         }
     }
