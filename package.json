@@ -13,9 +13,7 @@
   "main": "dist/lom_atom.js",
   "umd:main": "dist/lom_atom.umd.js",
   "scripts": {
-    "release": "standard-version",
-    "preversion": "npm test && npm run build",
-    "postversion": "git push --follow-tags origin master && npm publish",
+    "release": "npm test && npm run build && standard-version && git push --follow-tags origin master && npm publish",
     "build": "rimraf dist && rollup -c",
     "test": "flow check && mocha",
     "test.dev": "mocha --growl --watch",
