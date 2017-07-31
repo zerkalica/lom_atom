@@ -1,8 +1,7 @@
 // @flow
 /* eslint-env mocha */
 
-import assert from 'power-assert'
-import sinon from 'sinon'
+import assert from 'assert'
 import Atom from '../src/Atom'
 import mem, {memkey, force} from '../src/mem'
 import {AtomWait} from '../src/utils'

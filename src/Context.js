@@ -20,14 +20,30 @@ function createKeyedHandler<V>(host: IAtomHost, handler: IAtomKeyHandler<V, *>, 
 }
 
 export default class Context implements IContext {
-    last: ?IAtomInt = null
-    force: boolean = false
+    last: ?IAtomInt
+    force: boolean
 
-    _logger: ?ILogger = null
-    _updating: IAtomInt[] = []
-    _reaping: Set<IAtomInt> = new Set()
-    _scheduled = false
-    _atomMap: WeakMap<IAtomHost, Map<string | Function, IAtom<*>>> = new WeakMap()
+    _logger: ?ILogger
+    _updating: IAtomInt[]
+    _reaping: Set<IAtomInt>
+    _scheduled: boolean
+    _atomMap: WeakMap<IAtomHost, Map<string | Function, IAtom<*>>>
+    _run: () => void
+
+    constructor() {
+        this.last = null
+        this.force = false
+        this._logger = null
+        this._updating = []
+        this._reaping = new Set()
+        this._scheduled = false
+        this._atomMap = new WeakMap()
+        this._run = () => {
+            if (this._scheduled) {
+                this.run()
+            }
+        }
+    }
 
     getKeyAtom(host: IAtomHost, keyHandler: IAtomKeyHandler<*, *>, key: string | Function): IAtom<*> {
         let map = this._atomMap.get(host)
@@ -107,11 +123,6 @@ export default class Context implements IContext {
         this._reaping.delete(atom)
     }
 
-    _run = () => {
-        if (this._scheduled) {
-            this.run()
-        }
-    }
 
     _schedule() {
         if (this._scheduled) {

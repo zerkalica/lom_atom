@@ -36,35 +36,10 @@ export function defaultNormalize<V>(next: V, prev?: V): V {
 }
 
 export class AtomWait extends Error {
-    name = 'AtomWait'
-
     constructor(message?: string = 'Wait...') {
         super(message)
         // $FlowFixMe new.target
         ;(this: Object)['__proto__'] = new.target.prototype
         ;(this: Object)[catchedId] = true
     }
-}
-
-
-export function shouldUpdate<Props: Object>(oldProps: Props, props: Props): boolean {
-    if (oldProps === props) {
-        return false
-    }
-    if ((!oldProps && props) || (!props && oldProps)) {
-        return true
-    }
-
-    let lpKeys = 0
-    for (let k in oldProps) { // eslint-disable-line
-        if (oldProps[k] !== props[k]) {
-            return true
-        }
-        lpKeys++
-    }
-    for (let k in props) { // eslint-disable-line
-        lpKeys--
-    }
-
-    return lpKeys !== 0
 }

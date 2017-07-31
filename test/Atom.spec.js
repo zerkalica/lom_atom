@@ -1,8 +1,7 @@
 // @flow
 /* eslint-env mocha */
 
-import assert from 'power-assert'
-import sinon from 'sinon'
+import assert from 'assert'
 import Atom from '../src/Atom'
 import {AtomWait} from '../src/utils'
 import {defaultContext} from '../src/Context'
@@ -157,6 +156,6 @@ describe('Atom', () => {
 
         assert.throws(() => {
             target.get().valueOf()
-        }, error.message)
+        })
     })
 })

@@ -1,8 +1,9 @@
 // @flow
 
+type s = string
+
 export {default as Atom} from './Atom'
-export {default as mem, force} from './mem'
-export {default as createReactWrapper, createCreateElement} from './createReactWrapper'
+export {default as mem, memkey, detached, force} from './mem'
 export {defaultContext, animationFrame} from './Context'
 
 export {
@@ -22,9 +23,3 @@ export type {
     IAtomHandler,
     NamesOf
 } from './interfaces'
-
-
-export type {
-    IProcessor,
-    ISheet
-} from './Injector'
