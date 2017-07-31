@@ -7,8 +7,6 @@ import fs from 'fs'
 
 const pkg = JSON.parse(fs.readFileSync('./package.json'))
 
-const plugins = [ uglify({}, minify) ]
-
 const commonConf = {
     entry: 'src/index.js',
     sourceMap: true,

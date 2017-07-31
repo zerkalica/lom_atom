@@ -6,7 +6,7 @@ import Atom from '../src/Atom'
 import mem, {memkey, force} from '../src/mem'
 import {AtomWait} from '../src/utils'
 import {defaultContext} from '../src/Context'
-import {catchedId, ATOM_STATUS} from '../src/interfaces'
+import {catchedId} from '../src/interfaces'
 
 describe('mem', () => {
     it('mem by key', () => {

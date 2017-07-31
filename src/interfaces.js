@@ -26,21 +26,16 @@ export interface IContext {
     run(): void;
 }
 
-export const ATOM_STATUS = {
-    DESTROYED: 0,
-    OBSOLETE: 1,
-    CHECKING: 2,
-    PULLING: 3,
-    ACTUAL: 4
-}
+export const ATOM_STATUS_DESTROYED = 0
+export const ATOM_STATUS_OBSOLETE = 1
+export const ATOM_STATUS_CHECKING = 2
+export const ATOM_STATUS_PULLING = 3
+export const ATOM_STATUS_ACTUAL = 4
 
 export const catchedId = Symbol('lom_atom_catched')
 
-type $Object<V> = { +[ key : string] : V }
-type $ObjectValues<V, O : $Object<V>> = V
-type $Values<O: Object> = $ObjectValues<*, O>
-
-export type IAtomStatus = $Values<typeof ATOM_STATUS>
+export type IAtomStatus = typeof ATOM_STATUS_DESTROYED | typeof ATOM_STATUS_OBSOLETE
+    | typeof ATOM_STATUS_CHECKING | typeof ATOM_STATUS_PULLING | typeof ATOM_STATUS_ACTUAL
 
 export interface IAtom<V> {
     status: IAtomStatus;

@@ -5,7 +5,7 @@ import assert from 'assert'
 import Atom from '../src/Atom'
 import {AtomWait} from '../src/utils'
 import {defaultContext} from '../src/Context'
-import {IAtom, catchedId, ATOM_STATUS} from '../src/interfaces'
+import {IAtom, catchedId, ATOM_STATUS_OBSOLETE, ATOM_STATUS_ACTUAL} from '../src/interfaces'
 
 describe('Atom', () => {
     function atom<V>(key: string, fn: Function): IAtom<V> {
@@ -89,12 +89,12 @@ describe('Atom', () => {
         let s = atom('s', () => c.get() === 0 ? b.get() : a.get())
 
         assert(s.get() === 1)
-        assert(b.status === ATOM_STATUS.OBSOLETE)
-        assert(a.status === ATOM_STATUS.ACTUAL)
+        assert(b.status === ATOM_STATUS_OBSOLETE)
+        assert(a.status === ATOM_STATUS_ACTUAL)
         c.set(0)
         defaultContext.run()
         assert(s.get() === 2)
-        assert(b.status === ATOM_STATUS.ACTUAL)
+        assert(b.status === ATOM_STATUS_ACTUAL)
         assert(a.destroyed() === true)
     })
 

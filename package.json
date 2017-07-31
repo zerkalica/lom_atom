@@ -27,13 +27,15 @@
   },
   "keywords": [
     "state",
-    "functional",
-    "immutable",
-    "hot",
-    "live",
-    "replay",
-    "flux",
-    "elm"
+    "mobx",
+    "observable",
+    "reactive",
+    "model",
+    "frp",
+    "functional-reactive-programming",
+    "state management",
+    "data flow",
+    "react"
   ],
   "files": [
     "*.map",

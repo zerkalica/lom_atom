@@ -1,6 +1,9 @@
 // @flow
 
-import {catchedId, ATOM_STATUS} from './interfaces'
+import {
+    catchedId,
+    ATOM_STATUS_DESTROYED, ATOM_STATUS_OBSOLETE, ATOM_STATUS_CHECKING, ATOM_STATUS_PULLING, ATOM_STATUS_ACTUAL
+} from './interfaces'
 
 import type {
     IAtom,
@@ -26,19 +29,19 @@ function disleadThis(master: IAtomInt) {
 }
 
 function actualizeMaster(master: IAtomInt) {
-    if (this.status === ATOM_STATUS.CHECKING) {
+    if (this.status === ATOM_STATUS_CHECKING) {
         master.actualize()
     }
 }
 
 export default class Atom<V> implements IAtom<V>, IAtomInt {
-    status: IAtomStatus
+    status: IAtomStatus = ATOM_STATUS_OBSOLETE
     field: string | Function
     isComponent: boolean
-    _masters: ?Set<IAtomInt>
-    _slaves: ?Set<IAtomInt>
+    _masters: ?Set<IAtomInt> = null
+    _slaves: ?Set<IAtomInt> = null
     _context: IContext
-    _cached: V | void
+    _cached: V | void = undefined
     _normalize: (nv: V, old?: V) => V
 
     _handler: IAtomHandler<V>
@@ -58,20 +61,15 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         this.isComponent = isComponent || false
         this._normalize = normalize || defaultNormalize
         this._context = context
-
-        this.status = ATOM_STATUS.OBSOLETE
-        this._masters = null
-        this._slaves = null
-        this._cached = undefined
     }
 
     destroyed(isDestroyed?: boolean): boolean {
         if (isDestroyed === undefined) {
-            return this.status === ATOM_STATUS.DESTROYED
+            return this.status === ATOM_STATUS_DESTROYED
         }
 
         if (isDestroyed) {
-            if (this.status !== ATOM_STATUS.DESTROYED) {
+            if (this.status !== ATOM_STATUS_DESTROYED) {
                 // console.log('destroy', this.field)
                 if (this._masters) {
                     this._masters.forEach(disleadThis, this)
@@ -79,7 +77,7 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
                 }
                 this._checkSlaves()
                 this._cached = undefined
-                this.status = ATOM_STATUS.DESTROYED
+                this.status = ATOM_STATUS_DESTROYED
                 const host = this._host
                 if (host !== undefined) {
                     this._context.destroyHost(host, this.field)
@@ -130,7 +128,7 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
 
         if (force || this._context.force || normalized instanceof Error) {
             this._context.force = false
-            this.status = ATOM_STATUS.ACTUAL
+            this.status = ATOM_STATUS_ACTUAL
             this._context.newValue(this, this._cached, normalized)
             this._cached = normalized instanceof Error
                 ? createMock(normalized)
@@ -147,21 +145,21 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
     }
 
     actualize(proposedValue?: V): void {
-        if (this.status === ATOM_STATUS.ACTUAL) {
+        if (this.status === ATOM_STATUS_ACTUAL) {
             return
         }
 
-        if (this.status === ATOM_STATUS.CHECKING) {
+        if (this.status === ATOM_STATUS_CHECKING) {
             if (this._masters) {
                 this._masters.forEach(actualizeMaster, this)
             }
 
-            if (this.status === ATOM_STATUS.CHECKING) {
-                this.status = ATOM_STATUS.ACTUAL
+            if (this.status === ATOM_STATUS_CHECKING) {
+                this.status = ATOM_STATUS_ACTUAL
             }
         }
 
-        if (this.status !== ATOM_STATUS.ACTUAL) {
+        if (this.status !== ATOM_STATUS_ACTUAL) {
             this._pullPush(proposedValue)
         }
     }
@@ -172,7 +170,7 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         }
         let newValue: V
 
-        this.status = ATOM_STATUS.PULLING
+        this.status = ATOM_STATUS_PULLING
 
         const context = this._context
         const slave = context.last
@@ -194,7 +192,7 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
 
         context.last = slave
 
-        this.status = ATOM_STATUS.ACTUAL
+        this.status = ATOM_STATUS_ACTUAL
 
         if (newValue !== undefined && this._cached !== newValue) {
             this._context.newValue(this, this._cached, newValue)
@@ -229,15 +227,15 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
     }
 
     check() {
-        if (this.status === ATOM_STATUS.ACTUAL) {
-            this.status = ATOM_STATUS.CHECKING
+        if (this.status === ATOM_STATUS_ACTUAL) {
+            this.status = ATOM_STATUS_CHECKING
             this._checkSlaves()
         }
     }
 
     obsolete() {
-        if (this.status !== ATOM_STATUS.OBSOLETE) {
-            this.status = ATOM_STATUS.OBSOLETE
+        if (this.status !== ATOM_STATUS_OBSOLETE) {
+            this.status = ATOM_STATUS_OBSOLETE
             this._checkSlaves()
         }
     }

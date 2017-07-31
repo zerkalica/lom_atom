@@ -20,28 +20,18 @@ function createKeyedHandler<V>(host: IAtomHost, handler: IAtomKeyHandler<V, *>, 
 }
 
 export default class Context implements IContext {
-    last: ?IAtomInt
-    force: boolean
+    last: ?IAtomInt = null
+    force: boolean = false
 
-    _logger: ?ILogger
-    _updating: IAtomInt[]
-    _reaping: Set<IAtomInt>
-    _scheduled: boolean
-    _atomMap: WeakMap<IAtomHost, Map<string | Function, IAtom<*>>>
-    _run: () => void
+    _logger: ?ILogger = null
+    _updating: IAtomInt[] = []
+    _reaping: Set<IAtomInt> = new Set()
+    _scheduled: boolean = false
+    _atomMap: WeakMap<IAtomHost, Map<string | Function, IAtom<*>>> = new WeakMap()
 
-    constructor() {
-        this.last = null
-        this.force = false
-        this._logger = null
-        this._updating = []
-        this._reaping = new Set()
-        this._scheduled = false
-        this._atomMap = new WeakMap()
-        this._run = () => {
-            if (this._scheduled) {
-                this.run()
-            }
+    _run: () => void = () => {
+        if (this._scheduled) {
+            this.run()
         }
     }
 
@@ -153,7 +143,6 @@ export default class Context implements IContext {
         while (reaping.size > 0) {
             reaping.forEach(reap)
         }
-        // console.log('---------------------------- state changed\n')
         this._scheduled = false
     }
 }

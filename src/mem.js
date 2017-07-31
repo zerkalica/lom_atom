@@ -2,6 +2,7 @@
 
 import type {IAtom, IAtomHandler, IAtomKeyHandler, IAtomHost} from './interfaces'
 import {defaultContext} from './Context'
+import {AtomWait} from './utils'
 
 type TypedPropertyDescriptor<T> = {
     enumerable?: boolean;
@@ -138,6 +139,14 @@ export function force<V>(
     }
 }
 
+export function detached<P: Object, V, K>(
+    proto: P,
+    name: string,
+    descr: TypedPropertyDescriptor<*>
+): TypedPropertyDescriptor<any> | void {
+    return memMethod(proto, name, descr, true)
+}
+
 export default function mem<P: Object, V, K>(
     proto: P,
     name: string,
@@ -148,10 +157,6 @@ export default function mem<P: Object, V, K>(
         : memMethod(proto, name, descr)
 }
 
-export function detached<P: Object, V, K>(
-    proto: P,
-    name: string,
-    descr: TypedPropertyDescriptor<*>
-): TypedPropertyDescriptor<any> | void {
-    return memMethod(proto, name, descr, true)
-}
+mem.Wait = AtomWait
+mem.key = memkey
+mem.detached = detached
