@@ -14,9 +14,15 @@ export interface IContext {
     last: ?IAtomInt;
     force: boolean;
 
-    getKeyAtom(host: IAtomHost, handler: IAtomKeyHandler<*, *>, key: string | Function): IAtom<*>;
-    getAtom(host: IAtomHost, handler: IAtomHandler<*>, key: string | Function, isComponent?: boolean): IAtom<*>;
-    destroyHost(host: IAtomHost, field: string | Function): void;
+    getAtom<V>(
+        field: string,
+        host: IAtomHost,
+        key?: string | Function,
+        normalize?: INormalize<V>,
+        isComponent?: boolean
+    ): IAtom<V>;
+
+    destroyHost(atom: IAtomInt): void;
 
     newValue<V>(t: IAtom<V>, from?: V | Error, to: V | Error): void;
     setLogger(logger: ILogger): void;
@@ -39,7 +45,7 @@ export type IAtomStatus = typeof ATOM_STATUS_DESTROYED | typeof ATOM_STATUS_OBSO
 
 export interface IAtom<V> {
     status: IAtomStatus;
-    field: string | Function;
+    field: string;
     get(force?: boolean): V;
     set(v: V | Error, force?: boolean): V;
     value(next?: V | Error, force?: boolean): V;
@@ -48,6 +54,9 @@ export interface IAtom<V> {
 
 export interface IAtomInt extends IAtom<*> {
     isComponent: boolean;
+    key: string | Function | void;
+    host: IAtomHost;
+    cached: any;
 
     actualize(): void;
     check(): void;
@@ -56,11 +65,13 @@ export interface IAtomInt extends IAtom<*> {
     addMaster(master: IAtomInt): void;
 }
 //  | Error
-export type IAtomHandler<V> = (next?: V, force?: boolean) => V
-export type IAtomKeyHandler<V, K> = (key: K, next?: V | Error, force?: boolean) => V
-export type IAtomHandlers<V, K> = IAtomHandler<V> | IAtomKeyHandler<V, K>
+export type IAtomHandler<V, K> = (key: K, next?: V | Error, force?: boolean, oldValue?: V) => V
+    | (next?: V | Error, force?: boolean, oldValue?: V) => V
+
+export type INormalize<V> = (next: V, prev?: V) => V
 
 export interface IAtomHost {
-    [key: string]: IAtomHandlers<*, *>;
+    [key: string]: IAtomHandler<*, *>;
+    _destroyProp?: (key: string | Function, value: mixed | void) => void;
     _destroy?: () => void;
 }

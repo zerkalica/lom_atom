@@ -244,51 +244,101 @@ describe('mem', () => {
         assert(a === t)
     })
 
-    it('must be deferred destroyed when no longer referenced', () => {
-        let destroyed = false
+    describe('must be deferred destroyed when no longer referenced', () => {
+        it('any property in host object', () => {
+            let destroyed: string = ''
 
-        class A {
-            @mem
-            foo(): number {
-                destroyed = false
-                return 1
+            class A {
+                @mem
+                foo(): number {
+                    destroyed = ''
+                    return 1
+                }
+
+                _destroyProp(key: string, value?: number) {
+                    destroyed = key
+                }
             }
 
-            _destroy() {
-                destroyed = true
+            class B {
+                _a = new A()
+
+                @mem
+                showing(next?: boolean): boolean {
+                    return next === undefined
+                        ? true
+                        : next
+                }
+
+                @mem
+                bar(): ?number {
+                    return this.showing()
+                        ? this._a.foo()
+                        : null
+                }
             }
-        }
 
-        class B {
-            _a = new A()
+            const b = new B()
+            assert(b.bar() === 1)
 
-            @mem
-            showing(next?: boolean): boolean {
-                return next === undefined
-                    ? true
-                    : next
+            b.showing(false)
+            b.bar()
+            defaultContext.run()
+
+            assert(destroyed === 'foo$')
+
+            b.showing(true)
+            defaultContext.run()
+
+            assert(destroyed === '')
+        })
+
+        it('all properties in host object', () => {
+            let destroyed = false
+
+            class A {
+                @mem
+                foo(): number {
+                    destroyed = false
+                    return 1
+                }
+
+                _destroy() {
+                    destroyed = true
+                }
             }
 
-            @mem
-            bar(): ?number {
-                return this.showing()
-                    ? this._a.foo()
-                    : null
+            class B {
+                _a = new A()
+
+                @mem
+                showing(next?: boolean): boolean {
+                    return next === undefined
+                        ? true
+                        : next
+                }
+
+                @mem
+                bar(): ?number {
+                    return this.showing()
+                        ? this._a.foo()
+                        : null
+                }
             }
-        }
 
-        const b = new B()
-        assert(b.bar() === 1)
+            const b = new B()
+            assert(b.bar() === 1)
 
-        b.showing(false)
-        b.bar()
-        defaultContext.run()
+            b.showing(false)
+            b.bar()
+            defaultContext.run()
 
-        assert(destroyed === true)
+            assert(destroyed === true)
 
-        b.showing(true)
-        defaultContext.run()
+            b.showing(true)
+            defaultContext.run()
 
-        assert(destroyed === false)
+            assert(destroyed === false)
+        })
     })
 })

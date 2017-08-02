@@ -1,6 +1,6 @@
 // @flow
 
-import type {IAtom, IAtomHandler, IAtomKeyHandler, IAtomHost} from './interfaces'
+import type {IAtom, IAtomHandler, IAtomHost, INormalize} from './interfaces'
 import {defaultContext} from './Context'
 import {AtomWait} from './utils'
 
@@ -16,21 +16,22 @@ type TypedPropertyDescriptor<T> = {
 
 function memMethod<V, P: Object>(
     proto: P,
-    name: string,
-    descr: TypedPropertyDescriptor<IAtomHandler<V>>,
+    field: string,
+    descr: TypedPropertyDescriptor<*>,
+    normalize?: INormalize<V>,
     isComponent?: boolean
-): TypedPropertyDescriptor<IAtomHandler<V>> {
-    proto[`${name}$`] = descr.value
-    const handler = descr.value
-    if (handler === undefined) {
-        throw new TypeError(`${name} is not an function (next?: V)`)
+): TypedPropertyDescriptor<*> {
+    const handlerKey = `${field}$`
+    if (descr.value === undefined) {
+        throw new TypeError(`${field} is not an function (next?: V)`)
     }
+    proto[handlerKey] = descr.value
 
     return {
         enumerable: descr.enumerable,
         configurable: descr.configurable,
         value(next?: V | Error, force?: boolean) {
-            return defaultContext.getAtom(this, handler, name, isComponent)
+            return defaultContext.getAtom(handlerKey, this, undefined, normalize, isComponent)
                 .value(next, force)
         }
     }
@@ -39,7 +40,7 @@ function memMethod<V, P: Object>(
 function createGetSetHandler<V>(
     get?: () => V,
     set?: (v: V | Error) => void
-): IAtomHandler<V> {
+): IAtomHandler<V, *> {
     return function getSetHandler(next?: V) {
         if (next === undefined) {
             return (get: any).call(this)
@@ -49,7 +50,7 @@ function createGetSetHandler<V>(
     }
 }
 
-function createValueHandler<V>(initializer?: () => V): IAtomHandler<V> {
+function createValueHandler<V>(initializer?: () => V): IAtomHandler<V, *> {
     return function valueHandler(next?: V | Error) {
         return next === undefined && initializer !== undefined
             ? initializer.call(this)
@@ -60,11 +61,12 @@ function createValueHandler<V>(initializer?: () => V): IAtomHandler<V> {
 function memProp<V, P: Object>(
     proto: P,
     name: string,
-    descr: TypedPropertyDescriptor<V>
-): TypedPropertyDescriptor<*> | void {
+    descr: TypedPropertyDescriptor<V>,
+    normalize?: INormalize<V>
+): TypedPropertyDescriptor<V> {
     const handlerKey = `${name}$`
     if (proto[handlerKey] !== undefined) {
-        return
+        return (undefined: any)
     }
 
     const handler = proto[handlerKey] = descr.get === undefined && descr.set === undefined
@@ -75,10 +77,10 @@ function memProp<V, P: Object>(
         enumerable: descr.enumerable,
         configurable: descr.configurable,
         get() {
-            return defaultContext.getAtom(this, handler, name).get()
+            return defaultContext.getAtom(handlerKey, this, undefined, normalize).get()
         },
         set(val: V | Error) {
-            defaultContext.getAtom(this, handler, name).set(val)
+            defaultContext.getAtom(handlerKey, this, undefined, normalize).set(val)
         }
     }
 }
@@ -96,29 +98,63 @@ function getKey(params: mixed): string {
         : JSON.stringify(params)
 }
 
-export function memkey<V, K, P: Object>(
+function memkeyProp<V, K, P: Object>(
     proto: P,
     name: string,
-    descr: TypedPropertyDescriptor<IAtomKeyHandler<V, K>>
-): TypedPropertyDescriptor<IAtomKeyHandler<V, K>> {
+    descr: TypedPropertyDescriptor<IAtomHandler<V, K>>,
+    normalize?: INormalize<V>
+): TypedPropertyDescriptor<IAtomHandler<V, K>> {
     const handler = descr.value
     if (handler === undefined) {
         throw new TypeError(`${name} is not an function (rawKey: K, next?: V)`)
     }
 
-    proto[`${name}$`] = handler
+    const handlerKey = `${name}$`
+
+    proto[handlerKey] = handler
 
     return {
         enumerable: descr.enumerable,
         configurable: descr.configurable,
         value(rawKey: K, next?: V | Error, force?: boolean) {
-            return defaultContext.getKeyAtom(
+            return defaultContext.getAtom(
+                handlerKey,
                 this,
-                handler,
-                typeof rawKey === 'function' ? rawKey : `${name}(${getKey(rawKey)})`
+                typeof rawKey === 'function' ? rawKey : `${name}(${getKey(rawKey)})`,
+                normalize
             )
                 .value(next, force)
         }
+    }
+}
+
+type IMemKeyProp<V, K, P: Object> = (
+    proto: P,
+    name: string,
+    descr: TypedPropertyDescriptor<IAtomHandler<V, K>>,
+    normalize?: INormalize<V>
+) => TypedPropertyDescriptor<IAtomHandler<V, K>>
+
+declare function memkey<V, K, P: Object>(normalize: INormalize<V>): () => IMemKeyProp<V, K, P>
+declare function memkey<V, K, P: Object>(
+    proto: P,
+    name: string,
+    descr: TypedPropertyDescriptor<IAtomHandler<V, K>>,
+    normalize?: INormalize<V>
+): TypedPropertyDescriptor<IAtomHandler<V, K>>
+
+export function memkey() {
+    if (arguments.length === 3) {
+        return memkeyProp(arguments[0], arguments[1], arguments[2])
+    }
+
+    const normalize: INormalize<*> = arguments[0]
+    return function (
+        proto: Object,
+        name: string,
+        descr: TypedPropertyDescriptor<IAtomHandler<*, *>>
+    ): TypedPropertyDescriptor<IAtomHandler<*, *>> {
+        return memkeyProp(proto, name, descr, normalize)
     }
 }
 
@@ -144,17 +180,42 @@ export function detached<P: Object, V, K>(
     name: string,
     descr: TypedPropertyDescriptor<*>
 ): TypedPropertyDescriptor<any> | void {
-    return memMethod(proto, name, descr, true)
+    return memMethod(proto, name, descr, undefined, true)
 }
 
-export default function mem<P: Object, V, K>(
+type IMemProp<V, P: Object> = (
     proto: P,
     name: string,
-    descr: TypedPropertyDescriptor<*>
-): TypedPropertyDescriptor<any> | void {
-    return descr.value === undefined
-        ? memProp(proto, name, descr)
-        : memMethod(proto, name, descr)
+    descr: TypedPropertyDescriptor<IAtomHandler<V>>,
+    normalize?: INormalize<V>
+) => TypedPropertyDescriptor<IAtomHandler<V>>
+
+declare function mem<V, P: Object>(normalize: INormalize<V>): () => IMemProp<V, P>
+declare function mem<V, P: Object>(
+    proto: P,
+    name: string,
+    descr: TypedPropertyDescriptor<V>,
+    normalize?: INormalize<V>
+): TypedPropertyDescriptor<*>
+
+export default function mem() {
+    if (arguments.length === 3) {
+        return arguments[2].value === undefined
+            ? memProp(arguments[0], arguments[1], arguments[2])
+            : memMethod(arguments[0], arguments[1], arguments[2])
+    }
+
+    const normalize: INormalize<*> = arguments[0]
+
+    return function (
+        proto: Object,
+        name: string,
+        descr: TypedPropertyDescriptor<*>
+    ): TypedPropertyDescriptor<*> {
+        return descr.value === undefined
+            ? memProp(proto, name, descr, normalize)
+            : memMethod(proto, name, descr, normalize)
+    }
 }
 
 mem.Wait = AtomWait

@@ -9,8 +9,8 @@ import {IAtom, catchedId, ATOM_STATUS_OBSOLETE, ATOM_STATUS_ACTUAL} from '../src
 
 describe('Atom', () => {
     function atom<V>(key: string, fn: Function): IAtom<V> {
-        const host: {[id: string]: any} = {}
-        return defaultContext.getAtom(host, fn, key)
+        const host: {[id: string]: any} = {[key]: fn}
+        return defaultContext.getAtom(key, host)
     }
 
     it('caching', () => {

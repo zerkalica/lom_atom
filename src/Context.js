@@ -1,6 +1,14 @@
 // @flow
 
-import type {IAtomHost, IAtomHandlers, IAtomHandler, IAtomKeyHandler, IAtomInt, IAtom, IContext, ILogger} from './interfaces'
+import type {
+    INormalize,
+    IAtomHost,
+    IAtomHandler,
+    IAtomInt,
+    IAtom,
+    IContext,
+    ILogger
+} from './interfaces'
 import {AtomWait} from './utils'
 import Atom from './Atom'
 
@@ -13,12 +21,6 @@ export const animationFrame =  typeof requestAnimationFrame === 'function'
     ? requestAnimationFrame
     : (fn: () => void) => setTimeout(fn, 0)
 
-function createKeyedHandler<V>(host: IAtomHost, handler: IAtomKeyHandler<V, *>, key: string | Function): IAtomHandler<V> {
-    return function keyedHandler(next?: V, force?: boolean): V {
-        return handler.call(host, key, next, force)
-    }
-}
-
 export default class Context implements IContext {
     last: ?IAtomInt = null
     force: boolean = false
@@ -27,7 +29,7 @@ export default class Context implements IContext {
     _updating: IAtomInt[] = []
     _reaping: Set<IAtomInt> = new Set()
     _scheduled: boolean = false
-    _atomMap: WeakMap<IAtomHost, Map<string | Function, IAtom<*>>> = new WeakMap()
+    _atomMap: WeakMap<IAtomHost, Map<string | Function, IAtom<any>>> = new WeakMap()
 
     _run: () => void = () => {
         if (this._scheduled) {
@@ -35,41 +37,37 @@ export default class Context implements IContext {
         }
     }
 
-    getKeyAtom(host: IAtomHost, keyHandler: IAtomKeyHandler<*, *>, key: string | Function): IAtom<*> {
+    getAtom<V>(
+        field: string,
+        host: IAtomHost,
+        key?: string | Function,
+        normalize?: INormalize<V>,
+        isComponent?: boolean
+    ): IAtom<V> {
         let map = this._atomMap.get(host)
         if (map === undefined) {
             map = new Map()
             this._atomMap.set(host, map)
         }
-        let atom = map.get(key)
+        const k = key === undefined ? field : key
+        let atom: IAtom<V> | void = map.get(k)
         if (atom === undefined) {
-            atom = new Atom(key, createKeyedHandler(host, keyHandler, key), host, undefined, this)
-            map.set(key, atom)
-            // host[key + '@'] = atom
+            atom = new Atom(field, host, this, key, normalize, isComponent)
+            map.set(k, atom)
+            // host[field + '@'] = atom
         }
 
         return atom
     }
 
-    getAtom(host: IAtomHost, handler: IAtomHandler<*>, key: string | Function, isComponent?: boolean): IAtom<*> {
-        let map = this._atomMap.get(host)
-        if (map === undefined) {
-            map = new Map()
-            this._atomMap.set(host, map)
-        }
-        let atom = map.get(key)
-        if (atom === undefined) {
-            atom = new Atom(key, handler, host, isComponent, this)
-            map.set(key, atom)
-            // host[key + '@'] = atom
-        }
-
-        return atom
-    }
-
-    destroyHost(host: IAtomHost, key: string | Function) {
+    destroyHost(atom: IAtomInt) {
+        const host = atom.host
         const map = this._atomMap.get(host)
         if (map !== undefined) {
+            const key: string | Function = atom.key === undefined ? atom.field : atom.key
+            if (host._destroyProp !== undefined) {
+                host._destroyProp(key, atom.cached)
+            }
             map.delete(key)
             if (map.size === 0) {
                 if (host._destroy !== undefined) {
