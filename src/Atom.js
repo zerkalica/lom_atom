@@ -38,7 +38,7 @@ function actualizeMaster(master: IAtomInt) {
 export default class Atom<V> implements IAtom<V>, IAtomInt {
     status: IAtomStatus = ATOM_STATUS_OBSOLETE
     field: string
-    key: string | Function | void
+    key: mixed | void
     host: IAtomHost
     cached: V | void = undefined
     isComponent: boolean
@@ -53,7 +53,7 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         field: string,
         host: IAtomHost,
         context: IContext,
-        key?: string | Function,
+        key?: mixed,
         normalize?: INormalize<V>,
         isComponent?: boolean
     ) {

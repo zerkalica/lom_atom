@@ -17,7 +17,7 @@ export interface IContext {
     getAtom<V>(
         field: string,
         host: IAtomHost,
-        key?: string | Function,
+        key?: mixed,
         normalize?: INormalize<V>,
         isComponent?: boolean
     ): IAtom<V>;
@@ -54,7 +54,7 @@ export interface IAtom<V> {
 
 export interface IAtomInt extends IAtom<*> {
     isComponent: boolean;
-    key: string | Function | void;
+    key: mixed | void;
     host: IAtomHost;
     cached: any;
 
@@ -72,6 +72,6 @@ export type INormalize<V> = (next: V, prev?: V) => V
 
 export interface IAtomHost {
     [key: string]: IAtomHandler<*, *>;
-    _destroyProp?: (key: string | Function, value: mixed | void) => void;
+    _destroyProp?: (key: mixed, value: mixed | void) => void;
     _destroy?: () => void;
 }

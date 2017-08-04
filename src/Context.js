@@ -21,6 +21,19 @@ export const animationFrame =  typeof requestAnimationFrame === 'function'
     ? requestAnimationFrame
     : (fn: () => void) => setTimeout(fn, 0)
 
+function getKey(params: any): string | number | Function {
+    if (typeof params === 'string' || typeof params === 'number' || typeof params === 'function' || !params) {
+        return params || ''
+    }
+
+    return typeof params === 'object'
+        ? Object.keys(params)
+            .sort()
+            .map((key: string) => `${key}:${JSON.stringify(params[key])}`)
+            .join('.')
+        : JSON.stringify(params)
+}
+
 export default class Context implements IContext {
     last: ?IAtomInt = null
     force: boolean = false
@@ -29,7 +42,7 @@ export default class Context implements IContext {
     _updating: IAtomInt[] = []
     _reaping: Set<IAtomInt> = new Set()
     _scheduled: boolean = false
-    _atomMap: WeakMap<IAtomHost, Map<string | Function, IAtom<any>>> = new WeakMap()
+    _atomMap: WeakMap<IAtomHost, Map<mixed, IAtom<any>>> = new WeakMap()
 
     _run: () => void = () => {
         if (this._scheduled) {
@@ -40,7 +53,7 @@ export default class Context implements IContext {
     getAtom<V>(
         field: string,
         host: IAtomHost,
-        key?: string | Function,
+        key?: mixed,
         normalize?: INormalize<V>,
         isComponent?: boolean
     ): IAtom<V> {
@@ -49,7 +62,7 @@ export default class Context implements IContext {
             map = new Map()
             this._atomMap.set(host, map)
         }
-        const k = key === undefined ? field : key
+        const k = key === undefined ? field : getKey(key)
         let atom: IAtom<V> | void = map.get(k)
         if (atom === undefined) {
             atom = new Atom(field, host, this, key, normalize, isComponent)
@@ -64,11 +77,10 @@ export default class Context implements IContext {
         const host = atom.host
         const map = this._atomMap.get(host)
         if (map !== undefined) {
-            const key: string | Function = atom.key === undefined ? atom.field : atom.key
             if (host._destroyProp !== undefined) {
-                host._destroyProp(key, atom.cached)
+                host._destroyProp(atom.key === undefined ? atom.field : atom.key, atom.cached)
             }
-            map.delete(key)
+            map.delete(atom.key === undefined ? atom.field : getKey(atom.key))
             if (map.size === 0) {
                 if (host._destroy !== undefined) {
                     host._destroy()

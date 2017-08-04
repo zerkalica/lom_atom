@@ -85,19 +85,6 @@ function memProp<V, P: Object>(
     }
 }
 
-function getKey(params: mixed): string {
-    if (!params) {
-        return ''
-    }
-
-    return typeof params === 'object'
-        ? Object.keys(params)
-            .sort()
-            .map((key: string) => `${key}:${JSON.stringify((params: any)[key])}`)
-            .join('.')
-        : JSON.stringify(params)
-}
-
 function memkeyProp<V, K, P: Object>(
     proto: P,
     name: string,
@@ -120,7 +107,7 @@ function memkeyProp<V, K, P: Object>(
             return defaultContext.getAtom(
                 handlerKey,
                 this,
-                typeof rawKey === 'function' ? rawKey : `${name}(${getKey(rawKey)})`,
+                rawKey,
                 normalize
             )
                 .value(next, force)
