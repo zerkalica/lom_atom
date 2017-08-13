@@ -29,7 +29,9 @@ export interface IContext {
     proposeToPull(atom: IAtomInt): void;
     proposeToReap(atom: IAtomInt): void;
     unreap(atom: IAtomInt): void;
+    beginTransaction(): void;
     run(): void;
+    endTransaction(noUpdate?: boolean): void;
 }
 
 export const ATOM_STATUS_DESTROYED = 0

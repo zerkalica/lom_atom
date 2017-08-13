@@ -3,7 +3,7 @@
 
 import assert from 'assert'
 import Atom from '../src/Atom'
-import mem, {memkey, force} from '../src/mem'
+import mem, {action, memkey, force} from '../src/mem'
 import {AtomWait} from '../src/utils'
 import {defaultContext} from '../src/Context'
 import {catchedId} from '../src/interfaces'
@@ -72,10 +72,11 @@ describe('mem', () => {
         assert(userByIdCalled === false)
 
         assert(user1 === x.currentUser)
-        x.force.currentUser = {
+        x.currentUser = {
             name: 'test2',
             email: 'test2@t.t'
         }
+        console.log(x.fullName)
         assert(x.fullName === 'test2 <test2@t.t>')
     })
 
@@ -138,10 +139,86 @@ describe('mem', () => {
         assert(fooCalled === true)
 
         fooCalled = false
-        x.force.foo = 5
+        x.foo = 5
         assert(fooCalled === false)
 
         assert(x.bar() === 6)
+    })
+
+    it('force set from get self', () => {
+        let fooCalled = ''
+        class X {
+            @force
+            force: X
+
+            @mem
+            get foo() {
+                fooCalled += 'G'
+                return 1
+            }
+
+            @mem
+            set foo(v: number) {
+                fooCalled += 'S'
+            }
+        }
+
+        const x = new X()
+        x.foo === 1 // cache x.foo
+
+        fooCalled = ''
+        x.force.foo = 2
+        assert(fooCalled === 'S')
+    })
+
+
+    it('transactional set', () => {
+        let callCount = 0
+        class X {
+            @mem foo = 1
+            @mem bar = 1
+
+            @action
+            some() {
+                this.foo++
+                this.bar++
+            }
+
+            @mem
+            computed() {
+                callCount++
+                return this.foo + this.bar
+            }
+        }
+
+        const x = new X()
+        x.computed()
+        x.some()
+        assert(callCount === 2)
+    })
+
+    it('direct set', () => {
+        let callCount = 0
+        class X {
+            @mem foo = 1
+            @mem bar = 1
+
+            some() {
+                this.foo++
+                this.bar++
+            }
+
+            @mem
+            computed() {
+                callCount++
+                return this.foo + this.bar
+            }
+        }
+
+        const x = new X()
+        x.computed()
+        x.some()
+        assert(callCount === 3)
     })
 
     it('getset property', () => {
@@ -190,12 +267,11 @@ describe('mem', () => {
         let testResolve: ?() => void
 
         class Test {
-            @force force: Test
             @mem
             source(next?: string): string {
                 new Promise((resolve: () => void) => {
                     testResolve = () => {
-                        this.force.source('Jin')
+                        this.source('Jin')
                         resolve()
                     }
                 })

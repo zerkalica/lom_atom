@@ -126,19 +126,21 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         if (normalized === undefined) {
             return this.cached
         }
-
+        const context = this._context
         // console.log('set', this.field, 'value', normalized)
-
-        if (force || this._context.force || normalized instanceof Error) {
-            this._context.force = false
+        if ((!force && !context.force) || normalized instanceof Error) {
+            context.force = false
             this.status = ATOM_STATUS_ACTUAL
-            this._context.newValue(this, this.cached, normalized)
+            const oldValue = this.cached
             this.cached = normalized instanceof Error
                 ? createMock(normalized)
                 : normalized
             if (this._slaves) {
                 this._slaves.forEach(obsoleteSlave)
             }
+            context.newValue(this, oldValue, normalized)
+            context.beginTransaction()
+            context.endTransaction()
         } else {
             this.obsolete()
             this.actualize(normalized)
@@ -178,6 +180,7 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         const context = this._context
         const slave = context.last
         context.last = this
+        context.beginTransaction()
         try {
             newValue = this._normalize(
                 this.key === undefined
@@ -198,11 +201,15 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         this.status = ATOM_STATUS_ACTUAL
 
         if (newValue !== undefined && this.cached !== newValue) {
-            this._context.newValue(this, this.cached, newValue)
+            const oldValue = this.cached
             this.cached = newValue
             if (this._slaves) {
                 this._slaves.forEach(obsoleteSlave)
             }
+            this._context.newValue(this, oldValue, newValue)
+            context.endTransaction()
+        } else {
+            context.endTransaction(true)
         }
     }
 

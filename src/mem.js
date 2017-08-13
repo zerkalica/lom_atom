@@ -177,6 +177,63 @@ type IMemProp<V, P: Object> = (
     normalize?: INormalize<V>
 ) => TypedPropertyDescriptor<IAtomHandler<V>>
 
+function createAction(t: Object, hk: string): (...args: any[]) => any {
+    function action() {
+        let result: mixed | void
+        defaultContext.beginTransaction()
+        switch (arguments.length) {
+            case 0: result = t[hk](); break
+            case 1: result = t[hk](arguments[0]); break
+            case 2: result = t[hk](arguments[0], arguments[1]); break
+            case 3: result = t[hk](arguments[0], arguments[1], arguments[2]); break
+            case 4: result = t[hk](arguments[0], arguments[1], arguments[2], arguments[3]); break
+            case 5: result = t[hk](arguments[0], arguments[1], arguments[2], arguments[3], arguments[4]); break
+            default: result = t[hk].apply(t, arguments)
+        }
+        defaultContext.endTransaction()
+
+        return result
+    }
+    action.displayName = hk
+
+    return action
+}
+
+
+export function action<V, P: Object>(
+    proto: P,
+    field: string,
+    descr: TypedPropertyDescriptor<*>
+): TypedPropertyDescriptor<*> {
+    const hk = `${field}$`
+    if (descr.value === undefined) {
+        throw new TypeError(`${field} is not an function (next?: V)`)
+    }
+    proto[hk] = descr.value
+    let definingProperty = false
+
+    return {
+        enumerable: descr.enumerable,
+        configurable: descr.configurable,
+        get() {
+            if (definingProperty) {
+                return this[hk]
+            }
+            definingProperty = true
+            const actionFn = createAction(this, hk)
+            Object.defineProperty(this, field, {
+                configurable: true,
+                get() {
+                    return actionFn
+                }
+            })
+            definingProperty = false
+
+            return actionFn
+        }
+    }
+}
+
 declare function mem<V, P: Object>(normalize: INormalize<V>): () => IMemProp<V, P>
 declare function mem<V, P: Object>(
     proto: P,

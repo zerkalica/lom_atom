@@ -98,18 +98,18 @@ describe('Atom', () => {
         assert(a.destroyed() === true)
     })
 
-    it('automatic deferred restart', () => {
-        let targetValue: number = 0
-        let source = atom('source', (next?: number) => next || 1)
-        let middle = atom('middle', () => source.get() + 1)
-        let target = atom('target', () => targetValue = middle.get() + 1)
-        target.get()
-        assert(targetValue === 3)
-        source.set(2)
-        assert(targetValue === 3)
-        defaultContext.run()
-        assert(targetValue === 4)
-    })
+    // it('automatic deferred restart', () => {
+    //     let targetValue: number = 0
+    //     let source = atom('source', (next?: number) => next || 1)
+    //     let middle = atom('middle', () => source.get() + 1)
+    //     let target = atom('target', () => targetValue = middle.get() + 1)
+    //     target.get()
+    //     assert(targetValue === 3)
+    //     source.set(2)
+    //     assert(targetValue === 3)
+    //     defaultContext.run()
+    //     assert(targetValue === 4)
+    // })
 
     it('async loading', () => {
         let targetValue: number = 0
