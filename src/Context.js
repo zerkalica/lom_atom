@@ -12,6 +12,10 @@ import type {
 import {AtomWait} from './utils'
 import Atom from './Atom'
 
+const scheduleNative: (handler: () => void) => number = typeof requestAnimationFrame == 'function'
+    ? (handler: () => void) => requestAnimationFrame(handler)
+    : (handler: () => void) => setTimeout(handler, 16)
+
 function reap(atom: IAtomInt, key: IAtomInt, reaping: Set<IAtomInt>) {
     reaping.delete(atom)
     if (!atom.slaves) {
@@ -48,6 +52,7 @@ export default class Context implements IContext {
     _updating: IAtomInt[] = []
     _reaping: Set<IAtomInt> = new Set()
     _atomMap: WeakMap<IAtomHost, Map<string | number, IAtom<any>>> = new WeakMap()
+    _scheduled = false
 
     getAtom<V>(
         field: string,
@@ -118,16 +123,62 @@ export default class Context implements IContext {
     proposeToPull(atom: IAtomInt) {
         // this.logger.pull(atom)
         this._updating.push(atom)
+        this._schedule()
     }
 
     proposeToReap(atom: IAtomInt) {
         // this.logger.reap(atom)
         this._reaping.add(atom)
+        this._schedule()
     }
 
     unreap(atom: IAtomInt) {
         // this.logger.unreap(atom)
         this._reaping.delete(atom)
+    }
+
+    _schedule() {
+        if (!this._scheduled) {
+            scheduleNative(this.__run)
+            this._scheduled = true
+        }
+    }
+
+    __run = () => {
+        if (this._scheduled) {
+            this._scheduled = false
+            this._run()
+        }
+    }
+
+    _start = 0
+
+    _run() {
+        this._schedule()
+        const reaping = this._reaping
+        const updating = this._updating
+        let start = this._start
+        do {
+            const end = updating.length
+
+            for (let i = start; i < end; i++) {
+                this._start = i
+                const atom: IAtomInt = updating[i]
+                if (!reaping.has(atom) && !atom.destroyed()) {
+                    atom.actualize()
+                }
+            }
+
+            start = end
+        } while (updating.length > start)
+        updating.length = 0
+        this._start = 0
+
+        while (reaping.size > 0) {
+            reaping.forEach(reap)
+        }
+        this._scheduled = false
+        this._pendCount = 0
     }
 
     _pendCount = 0
@@ -136,35 +187,12 @@ export default class Context implements IContext {
         this._pendCount++
     }
 
-    run() {
-        this.beginTransaction()
-        this.endTransaction()
-    }
-
-    endTransaction(noUpdate?: boolean) {
-        if (this._pendCount === 1 && noUpdate !== true) {
-            const reaping = this._reaping
-            const updating = this._updating
-            let start = 0
-            do {
-                const end = updating.length
-
-                for (let i = start; i < end; i++) {
-                    const atom: IAtomInt = updating[i]
-                    if (!reaping.has(atom) && !atom.destroyed()) {
-                        atom.actualize()
-                    }
-                }
-
-                start = end
-            } while (updating.length > start)
-            updating.length = 0
-
-            while (reaping.size > 0) {
-                reaping.forEach(reap)
-            }
+    endTransaction() {
+        if (this._pendCount === 1) {
+            this._run()
+        } else {
+            this._pendCount--
         }
-        this._pendCount--
     }
 }
 

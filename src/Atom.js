@@ -48,7 +48,6 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
     _context: IContext
     _normalize: INormalize<V>
 
-
     constructor(
         field: string,
         host: IAtomHost,
@@ -139,8 +138,6 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
                 this._slaves.forEach(obsoleteSlave)
             }
             context.newValue(this, oldValue, normalized)
-            context.beginTransaction()
-            context.endTransaction()
         } else {
             this.obsolete()
             this.actualize(normalized)
@@ -180,7 +177,6 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         const context = this._context
         const slave = context.last
         context.last = this
-        context.beginTransaction()
         try {
             newValue = this._normalize(
                 this.key === undefined
@@ -207,9 +203,6 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
                 this._slaves.forEach(obsoleteSlave)
             }
             this._context.newValue(this, oldValue, newValue)
-            context.endTransaction()
-        } else {
-            context.endTransaction(true)
         }
     }
 

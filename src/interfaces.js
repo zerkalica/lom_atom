@@ -30,8 +30,7 @@ export interface IContext {
     proposeToReap(atom: IAtomInt): void;
     unreap(atom: IAtomInt): void;
     beginTransaction(): void;
-    run(): void;
-    endTransaction(noUpdate?: boolean): void;
+    endTransaction(): void;
 }
 
 export const ATOM_STATUS_DESTROYED = 0

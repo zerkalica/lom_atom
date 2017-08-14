@@ -13,6 +13,11 @@ describe('Atom', () => {
         return defaultContext.getAtom(key, host)
     }
 
+    function sync() {
+        defaultContext.beginTransaction()
+        defaultContext.endTransaction()
+    }
+
     it('caching', () => {
         let random = atom('random', () => Math.random())
 
@@ -22,7 +27,7 @@ describe('Atom', () => {
     it('lazyness', () => {
         let value = 0
         const prop = atom('prop', () => value = 1)
-        defaultContext.run()
+        sync()
 
         assert(value === 0)
     })
@@ -77,7 +82,7 @@ describe('Atom', () => {
         assert(actualizations === 'TM')
 
         source.set(2)
-        defaultContext.run()
+        sync()
 
         assert(actualizations, 'TMTM')
     })
@@ -92,7 +97,7 @@ describe('Atom', () => {
         assert(b.status === ATOM_STATUS_OBSOLETE)
         assert(a.status === ATOM_STATUS_ACTUAL)
         c.set(0)
-        defaultContext.run()
+        sync()
         assert(s.get() === 2)
         assert(b.status === ATOM_STATUS_ACTUAL)
         assert(a.destroyed() === true)
@@ -107,7 +112,7 @@ describe('Atom', () => {
     //     assert(targetValue === 3)
     //     source.set(2)
     //     assert(targetValue === 3)
-    //     defaultContext.run()
+    //     sync()
     //     assert(targetValue === 4)
     // })
 
@@ -124,7 +129,7 @@ describe('Atom', () => {
 
             setTimeout(() => {
                 source.set(1)
-                setTimeout(() => resolve(), 0)
+                setTimeout(() => resolve(), 30)
                 // resolve()
             }, 0)
             throw new AtomWait()

@@ -1,6 +1,6 @@
 // @flow
 
-import type {IAtom, IAtomHandler, IAtomHost, INormalize} from './interfaces'
+import type {IAtom, IAtomHandler, IAtomHost, INormalize, IContext} from './interfaces'
 import {defaultContext} from './Context'
 import {AtomWait} from './utils'
 
@@ -177,10 +177,10 @@ type IMemProp<V, P: Object> = (
     normalize?: INormalize<V>
 ) => TypedPropertyDescriptor<IAtomHandler<V>>
 
-function createAction(t: Object, hk: string): (...args: any[]) => any {
+function createActionMethod(t: Object, hk: string, context: IContext): (...args: any[]) => any {
     function action() {
         let result: mixed | void
-        defaultContext.beginTransaction()
+        context.beginTransaction()
         switch (arguments.length) {
             case 0: result = t[hk](); break
             case 1: result = t[hk](arguments[0]); break
@@ -190,7 +190,7 @@ function createAction(t: Object, hk: string): (...args: any[]) => any {
             case 5: result = t[hk](arguments[0], arguments[1], arguments[2], arguments[3], arguments[4]); break
             default: result = t[hk].apply(t, arguments)
         }
-        defaultContext.endTransaction()
+        context.endTransaction()
 
         return result
     }
@@ -199,11 +199,33 @@ function createAction(t: Object, hk: string): (...args: any[]) => any {
     return action
 }
 
+function createActionFn<F: Function>(fn: F, name?: string, context: IContext): F {
+    function action(): any {
+        let result: mixed | void
+        context.beginTransaction()
+        switch (arguments.length) {
+            case 0: result = fn(); break
+            case 1: result = fn(arguments[0]); break
+            case 2: result = fn(arguments[0], arguments[1]); break
+            case 3: result = fn(arguments[0], arguments[1], arguments[2]); break
+            case 4: result = fn(arguments[0], arguments[1], arguments[2], arguments[3]); break
+            case 5: result = fn(arguments[0], arguments[1], arguments[2], arguments[3], arguments[4]); break
+            default: result = fn.apply(null, arguments)
+        }
+        context.endTransaction()
 
-export function action<V, P: Object>(
+        return result
+    }
+    action.displayName = name || fn.displayName || fn.name
+
+    return (action: any)
+}
+
+function actionMethod<V, P: Object>(
     proto: P,
     field: string,
-    descr: TypedPropertyDescriptor<*>
+    descr: TypedPropertyDescriptor<*>,
+    context: IContext
 ): TypedPropertyDescriptor<*> {
     const hk = `${field}$`
     if (descr.value === undefined) {
@@ -220,7 +242,7 @@ export function action<V, P: Object>(
                 return this[hk]
             }
             definingProperty = true
-            const actionFn = createAction(this, hk)
+            const actionFn = createActionMethod(this, hk, context)
             Object.defineProperty(this, field, {
                 configurable: true,
                 get() {
@@ -232,6 +254,21 @@ export function action<V, P: Object>(
             return actionFn
         }
     }
+}
+
+declare function action<F: Function>(fn: F, name?: string): F
+declare function action(
+    proto: Object,
+    name: string,
+    descr: TypedPropertyDescriptor<*>
+): TypedPropertyDescriptor<*>
+
+export function action() {
+    if (arguments.length === 3) {
+        return actionMethod(arguments[0], arguments[1], arguments[2], defaultContext)
+    }
+
+    return createActionFn(arguments[0], arguments[1], defaultContext)
 }
 
 declare function mem<V, P: Object>(normalize: INormalize<V>): () => IMemProp<V, P>

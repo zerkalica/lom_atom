@@ -9,6 +9,11 @@ import {defaultContext} from '../src/Context'
 import {catchedId} from '../src/interfaces'
 
 describe('mem', () => {
+    function sync() {
+        defaultContext.beginTransaction()
+        defaultContext.endTransaction()
+    }
+
     it('mem by key', () => {
         let userByIdCalled = false
         interface IUser {
@@ -218,7 +223,8 @@ describe('mem', () => {
         const x = new X()
         x.computed()
         x.some()
-        assert(callCount === 3)
+        sync()
+        assert(callCount === 2)
     })
 
     it('getset property', () => {
@@ -359,12 +365,12 @@ describe('mem', () => {
 
             b.showing(false)
             b.bar()
-            defaultContext.run()
+            sync()
 
             assert(destroyed === 'foo$')
 
             b.showing(true)
-            defaultContext.run()
+            sync()
 
             assert(destroyed === '')
         })
@@ -407,12 +413,12 @@ describe('mem', () => {
 
             b.showing(false)
             b.bar()
-            defaultContext.run()
+            sync()
 
             assert(destroyed === true)
 
             b.showing(true)
-            defaultContext.run()
+            sync()
 
             assert(destroyed === false)
         })
