@@ -99,6 +99,9 @@ function memkeyProp<V, K, P: Object>(
     const handlerKey = `${name}$`
 
     proto[handlerKey] = handler
+    proto[handlerKey + '?'] = function(rawKey: K) {
+        return defaultContext.hasAtom(this, rawKey)
+    }
 
     return {
         enumerable: descr.enumerable,

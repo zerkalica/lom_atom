@@ -64,6 +64,19 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         this._context = context
     }
 
+    get displayName(): string {
+        const hc = this.host.constructor
+        const k = this.key
+
+        return (this.host.displayName || (hc ? String(hc.displayName || hc.name) : ''))
+            + '.'
+            + this.field
+            + (k
+                ? ('(' + (typeof k === 'function' ? (k.displayName || k.name) : String(k)) + ')')
+                : ''
+            )
+    }
+
     destroyed(isDestroyed?: boolean): boolean {
         if (isDestroyed === undefined) {
             return this.status === ATOM_STATUS_DESTROYED
@@ -71,16 +84,12 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
 
         if (isDestroyed) {
             if (this.status !== ATOM_STATUS_DESTROYED) {
-                // console.log('destroy', this.field)
                 if (this._masters) {
                     this._masters.forEach(disleadThis, this)
                     this._masters = null
                 }
                 this._checkSlaves()
-                const host = this.host
-                if (host !== undefined) {
-                    this._context.destroyHost(this)
-                }
+                this._context.destroyHost(this)
                 this.cached = undefined
                 this.status = ATOM_STATUS_DESTROYED
                 this.key = undefined
@@ -104,11 +113,9 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         if (slave && (!slave.isComponent || !this.isComponent)) {
             let slaves = this._slaves
             if (!slaves) {
-                // console.log('unreap', this.field)
                 this._context.unreap(this)
                 slaves = this._slaves = new Set()
             }
-            // console.log('add slave', slave.field, 'to master', this.field)
             slaves.add(slave)
             slave.addMaster(this)
         }
@@ -126,7 +133,6 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
             return this.cached
         }
         const context = this._context
-        // console.log('set', this.field, 'value', normalized)
         if ((!force && !context.force) || normalized instanceof Error) {
             context.force = false
             this.status = ATOM_STATUS_ACTUAL
@@ -134,10 +140,11 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
             this.cached = normalized instanceof Error
                 ? createMock(normalized)
                 : normalized
+
+            context.newValue(this, oldValue, normalized)
             if (this._slaves) {
                 this._slaves.forEach(obsoleteSlave)
             }
-            context.newValue(this, oldValue, normalized)
         } else {
             this.obsolete()
             this.actualize(normalized)
@@ -199,10 +206,11 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         if (newValue !== undefined && this.cached !== newValue) {
             const oldValue = this.cached
             this.cached = newValue
+
+            this._context.newValue(this, oldValue, newValue, true)
             if (this._slaves) {
                 this._slaves.forEach(obsoleteSlave)
             }
-            this._context.newValue(this, oldValue, newValue)
         }
     }
 
@@ -211,10 +219,8 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         if (slaves) {
             if (slaves.size === 1) {
                 this._slaves = null
-                // console.log('reap (slaves === null)', this.field)
                 this._context.proposeToReap(this)
             } else {
-                // console.log('delete slave', slave.field, 'from', this.field)
                 slaves.delete(slave)
             }
         }
@@ -224,7 +230,6 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         if (this._slaves) {
             this._slaves.forEach(checkSlave)
         } else {
-            // console.log('pull', this.field)
             this._context.proposeToPull(this)
         }
     }

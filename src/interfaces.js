@@ -4,10 +4,12 @@ type _ResultOf<V, F: (...x: any[]) => V> = V // eslint-disable-line
 export type ResultOf<F> = _ResultOf<*, F>
 export type NamesOf<F> = {+[id: $Keys<ResultOf<F>>]: string}
 
+export type ILoggerStatus = 'destroy' | 'waiting' | 'proposeToReap' | 'proposeToPull'
+
 export interface ILogger {
-    pulling(atom: IAtom<*>): void;
+    status(status: ILoggerStatus, atom: IAtom<*>): void;
     error<V>(atom: IAtom<V>, err: Error): void;
-    newValue<V>(atom: IAtom<V>, from?: V | Error, to: V): void;
+    newValue<V>(atom: IAtom<V>, from?: V | Error, to: V, isActualize?: boolean): void;
 }
 
 export interface IContext {
@@ -21,10 +23,10 @@ export interface IContext {
         normalize?: INormalize<V>,
         isComponent?: boolean
     ): IAtom<V>;
+    hasAtom(host: IAtomHost, key: mixed): boolean;
 
     destroyHost(atom: IAtomInt): void;
-
-    newValue<V>(t: IAtom<V>, from?: V | Error, to: V | Error): void;
+    newValue<V>(t: IAtom<V>, from?: V | Error, to: V | Error, isActualize?: boolean): void;
     setLogger(logger: ILogger): void;
     proposeToPull(atom: IAtomInt): void;
     proposeToReap(atom: IAtomInt): void;
@@ -46,7 +48,8 @@ export type IAtomStatus = typeof ATOM_STATUS_DESTROYED | typeof ATOM_STATUS_OBSO
 
 export interface IAtom<V> {
     status: IAtomStatus;
-    field: string;
+    +field: string;
+    +displayName: string;
     get(force?: boolean): V;
     set(v: V | Error, force?: boolean): V;
     value(next?: V | Error, force?: boolean): V;
@@ -72,6 +75,7 @@ export type IAtomHandler<V, K> = (key: K, next?: V | Error, force?: boolean, old
 export type INormalize<V> = (next: V, prev?: V) => V
 
 export interface IAtomHost {
+    displayName?: string;
     [key: string]: IAtomHandler<*, *>;
     _destroyProp?: (key: mixed, value: mixed | void) => void;
     _destroy?: () => void;

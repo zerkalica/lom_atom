@@ -7,7 +7,8 @@ import type {
     IAtomInt,
     IAtom,
     IContext,
-    ILogger
+    ILogger,
+    ILoggerStatus
 } from './interfaces'
 import {AtomWait} from './utils'
 import Atom from './Atom'
@@ -44,6 +45,26 @@ function getKey(params: any): string | number {
         : JSON.stringify(params)
 }
 
+export class BaseLogger implements ILogger {
+    status(status: ILoggerStatus, atom: IAtom<*>): void {}
+    error<V>(atom: IAtom<V>, err: Error): void {}
+    newValue<V>(atom: IAtom<V>, from?: V | Error, to: V, isActualize?: boolean): void {}
+}
+
+export class ConsoleLogger extends BaseLogger implements ILogger {
+    status(status: ILoggerStatus, atom: IAtom<*>): void {
+        console.log(status, atom.displayName)
+    }
+
+    error<V>(atom: IAtom<V>, err: Error): void {
+        console.log('error', atom.displayName, err)
+    }
+
+    newValue<V>(atom: IAtom<V>, from?: V | Error, to: V, isActualize?: boolean): void {
+        console.log(isActualize ? 'actualize' : 'cacheSet', atom.displayName, 'from', from, 'to', to)
+    }
+}
+
 export default class Context implements IContext {
     last: ?IAtomInt = null
     force: boolean = false
@@ -54,6 +75,12 @@ export default class Context implements IContext {
     _atomMap: WeakMap<IAtomHost, Map<string | number, IAtom<any>>> = new WeakMap()
     _scheduled = false
 
+    hasAtom(host: IAtomHost, key: mixed): boolean {
+        // return host[getKey(key) + '@'] !== undefined
+        const map = this._atomMap.get(host)
+        return map !== undefined && map.has(getKey(key))
+    }
+
     getAtom<V>(
         field: string,
         host: IAtomHost,
@@ -62,6 +89,7 @@ export default class Context implements IContext {
         isComponent?: boolean
     ): IAtom<V> {
         const k = key === undefined ? field : getKey(key)
+
         let map = this._atomMap.get(host)
         if (map === undefined) {
             map = new Map()
@@ -70,10 +98,11 @@ export default class Context implements IContext {
         let atom: IAtom<V> | void = map.get(k)
 
         // let atom: IAtom<V> | void = host[k + '@']
+
         if (atom === undefined) {
             atom = new Atom(field, host, this, key, normalize, isComponent)
             map.set(k, atom)
-            // host[k + '@'] = atom
+            // host[k + '@'] = (atom: any)
         }
 
         return atom
@@ -82,11 +111,18 @@ export default class Context implements IContext {
     destroyHost(atom: IAtomInt) {
         const host = atom.host
 
-        // host[(atom.key === undefined ? atom.field : getKey(atom.key)) + '@'] = undefined
-        //
-        // if (host._destroy !== undefined) {
+        // const k = atom.key === undefined ? atom.field : getKey(atom.key)
+        // host[k + '@'] = (undefined: any)
+        // if (host._destroyProp !== undefined) {
+        //     host._destroyProp(atom.key === undefined ? atom.field : atom.key, atom.cached)
+        // }
+        // if (host._destroy !== undefined && atom.key === undefined) {
         //     host._destroy()
         // }
+
+        if (this._logger) {
+            this._logger.status('destroy', atom)
+        }
 
         const map = this._atomMap.get(host)
         if (map !== undefined) {
@@ -108,32 +144,36 @@ export default class Context implements IContext {
         this._logger = logger
     }
 
-    newValue<V>(atom: IAtom<V>, from?: V | Error, to: V | Error) {
-        if (this._logger) {
-            if (to instanceof AtomWait) {
-                this._logger.pulling(atom)
-            } else if (to instanceof Error) {
-                this._logger.error(atom, to)
-            } else {
-                this._logger.newValue(atom, from, to)
-            }
+    newValue<V>(atom: IAtom<V>, from?: V | Error, to: V | Error, isActualize?: boolean) {
+        if (!this._logger) {
+            return
+        }
+        if (to instanceof AtomWait) {
+            this._logger.status('waiting', atom)
+        } else if (to instanceof Error) {
+            this._logger.error(atom, to)
+        } else {
+            this._logger.newValue(atom, from, to, isActualize)
         }
     }
 
     proposeToPull(atom: IAtomInt) {
-        // this.logger.pull(atom)
+        if (this._logger) {
+            this._logger.status('proposeToPull', atom)
+        }
         this._updating.push(atom)
         this._schedule()
     }
 
     proposeToReap(atom: IAtomInt) {
-        // this.logger.reap(atom)
+        if (this._logger) {
+            this._logger.status('proposeToReap', atom)
+        }
         this._reaping.add(atom)
         this._schedule()
     }
 
     unreap(atom: IAtomInt) {
-        // this.logger.unreap(atom)
         this._reaping.delete(atom)
     }
 
