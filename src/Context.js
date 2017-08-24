@@ -69,7 +69,7 @@ export default class Context implements IContext {
     last: ?IAtomInt = null
     force: boolean = false
 
-    _logger: ?ILogger = null
+    _logger: ILogger | void = undefined
     _updating: IAtomInt[] = []
     _reaping: Set<IAtomInt> = new Set()
     _atomMap: WeakMap<IAtomHost, Map<string | number, IAtom<any>>> = new WeakMap()
@@ -90,19 +90,19 @@ export default class Context implements IContext {
     ): IAtom<V> {
         const k = key === undefined ? field : getKey(key)
 
-        let map = this._atomMap.get(host)
-        if (map === undefined) {
-            map = new Map()
-            this._atomMap.set(host, map)
-        }
-        let atom: IAtom<V> | void = map.get(k)
+        // let map = this._atomMap.get(host)
+        // if (map === undefined) {
+        //     map = new Map()
+        //     this._atomMap.set(host, map)
+        // }
+        // let atom: IAtom<V> | void = map.get(k)
 
-        // let atom: IAtom<V> | void = host[k + '@']
+        let atom: IAtom<V> | void = host[k + '@']
 
         if (atom === undefined) {
             atom = new Atom(field, host, this, key, normalize, isComponent)
-            map.set(k, atom)
-            // host[k + '@'] = (atom: any)
+            // map.set(k, atom)
+            host[k + '@'] = (atom: any)
         }
 
         return atom
@@ -111,33 +111,33 @@ export default class Context implements IContext {
     destroyHost(atom: IAtomInt) {
         const host = atom.host
 
-        // const k = atom.key === undefined ? atom.field : getKey(atom.key)
-        // host[k + '@'] = (undefined: any)
-        // if (host._destroyProp !== undefined) {
-        //     host._destroyProp(atom.key === undefined ? atom.field : atom.key, atom.cached)
-        // }
-        // if (host._destroy !== undefined && atom.key === undefined) {
-        //     host._destroy()
-        // }
-
-        if (this._logger) {
+        if (this._logger !== undefined) {
             this._logger.status('destroy', atom)
         }
 
-        const map = this._atomMap.get(host)
-        if (map !== undefined) {
-            if (host._destroyProp !== undefined) {
-                host._destroyProp(atom.key === undefined ? atom.field : atom.key, atom.cached)
-            }
-
-            map.delete(atom.key === undefined ? atom.field : getKey(atom.key))
-            if (map.size === 0) {
-                if (host._destroy !== undefined) {
-                    host._destroy()
-                }
-                this._atomMap.delete(host)
-            }
+        const k = atom.key === undefined ? atom.field : getKey(atom.key)
+        host[k + '@'] = (undefined: any)
+        if (host._destroyProp !== undefined) {
+            host._destroyProp(atom.key === undefined ? atom.field : atom.key, atom.cached)
         }
+        if (host._destroy !== undefined && atom.key === undefined) {
+            host._destroy()
+        }
+
+        // const map = this._atomMap.get(host)
+        // if (map !== undefined) {
+        //     if (host._destroyProp !== undefined) {
+        //         host._destroyProp(atom.key === undefined ? atom.field : atom.key, atom.cached)
+        //     }
+        //
+        //     map.delete(atom.key === undefined ? atom.field : getKey(atom.key))
+        //     if (map.size === 0) {
+        //         if (host._destroy !== undefined) {
+        //             host._destroy()
+        //         }
+        //         this._atomMap.delete(host)
+        //     }
+        // }
     }
 
     setLogger(logger: ILogger) {
@@ -145,7 +145,7 @@ export default class Context implements IContext {
     }
 
     newValue<V>(atom: IAtom<V>, from?: V | Error, to: V | Error, isActualize?: boolean) {
-        if (!this._logger) {
+        if (this._logger === undefined) {
             return
         }
         if (to instanceof AtomWait) {
@@ -158,7 +158,7 @@ export default class Context implements IContext {
     }
 
     proposeToPull(atom: IAtomInt) {
-        if (this._logger) {
+        if (this._logger !== undefined) {
             this._logger.status('proposeToPull', atom)
         }
         this._updating.push(atom)
@@ -166,7 +166,7 @@ export default class Context implements IContext {
     }
 
     proposeToReap(atom: IAtomInt) {
-        if (this._logger) {
+        if (this._logger !== undefined) {
             this._logger.status('proposeToReap', atom)
         }
         this._reaping.add(atom)
@@ -202,7 +202,7 @@ export default class Context implements IContext {
             const end = updating.length
 
             for (let i = start; i < end; i++) {
-                this._start = i
+                this._start = i // save progress, atom.actualize or destroyed can throw exception
                 const atom: IAtomInt = updating[i]
                 if (!reaping.has(atom) && !atom.destroyed()) {
                     atom.actualize()
