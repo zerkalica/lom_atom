@@ -27,11 +27,10 @@ describe('mem', () => {
             currentUser: IUser;
         }
 
-        function f<T>(t: Class<T>): Class<T & {force: T}> {
+        function f<T>(t: Class<T>): Class<T> {
             return (t: any)
         }
         class UserService implements IUserService {
-            @force get force() { return this }
             @mem currentUserId: number = 1
 
             @memkey
@@ -81,7 +80,6 @@ describe('mem', () => {
             name: 'test2',
             email: 'test2@t.t'
         }
-        console.log(x.fullName)
         assert(x.fullName === 'test2 <test2@t.t>')
     })
 
@@ -111,71 +109,6 @@ describe('mem', () => {
 
         assert(x.xxx() === 7)
     })
-
-    it('force getset', () => {
-        let fooCalled = false
-        class X {
-            @force
-            force: X
-
-            @mem
-            get foo() {
-                fooCalled = true
-                return 1
-            }
-
-            @mem
-            set foo(v: number) {
-                fooCalled = true
-            }
-
-            @mem
-            bar(): number {
-                return this.foo + 1
-            }
-        }
-
-        const x = new X()
-        assert(x.bar() === 2)
-        fooCalled = false
-        x.foo
-        assert(fooCalled === false)
-        x.force.foo;
-        assert(fooCalled === true)
-
-        fooCalled = false
-        x.foo = 5
-        assert(fooCalled === false)
-
-        assert(x.bar() === 6)
-    })
-
-    it('force set from get self', () => {
-        let fooCalled = ''
-        class X {
-            @force
-            force: X
-
-            @mem
-            get foo() {
-                fooCalled += 'G'
-                return 1
-            }
-
-            @mem
-            set foo(v: number) {
-                fooCalled += 'S'
-            }
-        }
-
-        const x = new X()
-        x.foo === 1 // cache x.foo
-
-        fooCalled = ''
-        x.force.foo = 2
-        assert(fooCalled === 'S')
-    })
-
 
     it('transactional set', () => {
         let callCount = 0
@@ -324,6 +257,147 @@ describe('mem', () => {
         a.foo()
 
         assert(a === t)
+    })
+
+    describe('forced', () => {
+        it('regular prop', () => {
+            class X {
+                @force force: X
+                @mem foo = 1
+            }
+
+            const x = new X()
+            x.foo
+            assert(x.force.foo === 1)
+            x.force.foo = 2
+            assert(x.foo === 2)
+        })
+
+        it('get prop', () => {
+            let fooCalled = false
+            class X {
+                @force force: X
+                @mem get foo() {
+                    fooCalled = true
+                    return 1
+                }
+            }
+
+            const x = new X()
+
+            fooCalled = false
+            x.foo
+            assert(fooCalled === true)
+
+            fooCalled = false
+            x.foo
+            assert(fooCalled === false)
+
+            fooCalled = false
+            x.force.foo
+            assert(fooCalled === true)
+        })
+
+        it('set prop', () => {
+            let fooCalled = false
+            class X {
+                @force force: X
+                @mem get foo() {
+                    return 1
+                }
+                @mem set foo(v: number) {
+                    fooCalled = true
+                }
+            }
+
+            const x = new X()
+
+            fooCalled = false
+            x.foo = 2
+            assert(fooCalled === false)
+
+            fooCalled = false
+            x.force.foo = 1
+            assert(fooCalled === true)
+        })
+
+
+        it('update property from itself', () => {
+            let fooCalled = ''
+            class X {
+                @force
+                force: X
+
+                @mem
+                get foo() {
+                    fooCalled += 'G'
+                    return 1
+                }
+
+                @mem
+                set foo(v: number) {
+                    fooCalled += 'S'
+                }
+            }
+
+            const x = new X()
+            x.foo === 1 // cache x.foo
+
+            fooCalled = ''
+            x.force.foo = x.foo + 1
+            assert(fooCalled === 'S')
+        })
+
+        it('increment property', () => {
+            let fooCalled = ''
+            class X {
+                @force
+                force: X
+
+                @mem
+                get foo() {
+                    fooCalled += 'G'
+                    return 1
+                }
+
+                @mem
+                set foo(v: number) {
+                    fooCalled += 'S'
+                }
+            }
+
+            const x = new X()
+            x.foo === 1 // cache x.foo
+
+            fooCalled = ''
+            x.force.foo++
+            assert(fooCalled === 'GS')
+        })
+
+        it('method call', () => {
+            let fooCalled = ''
+            class X {
+                @force
+                force: X
+
+                @mem
+                foo(v?: number) {
+                    if (v !== undefined) {
+                        fooCalled += 'S'
+                        return v
+                    }
+                    fooCalled += 'G'
+                    return 1
+                }
+            }
+
+            const x = new X()
+            // x.foo() === 1 // cache x.foo
+            const v = x.foo()
+            fooCalled = ''
+            x.force.foo(v + 1)
+            assert(fooCalled === 'S')
+        })
     })
 
     describe('must be deferred destroyed when no longer referenced', () => {

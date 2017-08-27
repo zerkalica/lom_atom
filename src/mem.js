@@ -58,18 +58,20 @@ function createValueHandler<V>(initializer?: () => V): IAtomHandler<V, *> {
     }
 }
 
+let isForced = false
+
 function memProp<V, P: Object>(
     proto: P,
     name: string,
     descr: TypedPropertyDescriptor<V>,
     normalize?: INormalize<V>
 ): TypedPropertyDescriptor<V> {
-    const handlerKey = `${name}$`
+    const handlerKey = `${name}@`
     if (proto[handlerKey] !== undefined) {
         return (undefined: any)
     }
 
-    const handler = proto[handlerKey] = descr.get === undefined && descr.set === undefined
+    proto[handlerKey] = descr.get === undefined && descr.set === undefined
         ? createValueHandler(descr.initializer)
         : createGetSetHandler(descr.get, descr.set)
 
@@ -77,15 +79,23 @@ function memProp<V, P: Object>(
         enumerable: descr.enumerable,
         configurable: descr.configurable,
         get() {
+            if (isForced) {
+                isForced = false
+                return defaultContext.getAtom(handlerKey, this, undefined, normalize).get(true)
+            }
             return defaultContext.getAtom(handlerKey, this, undefined, normalize).get()
         },
         set(val: V | Error) {
+            if (isForced) {
+                isForced = false
+                defaultContext.getAtom(handlerKey, this, undefined, normalize).set(val, true)
+            }
             defaultContext.getAtom(handlerKey, this, undefined, normalize).set(val)
         }
     }
 }
 
-function memkeyProp<V, K, P: Object>(
+function memKeyMethod<V, K, P: Object>(
     proto: P,
     name: string,
     descr: TypedPropertyDescriptor<IAtomHandler<V, K>>,
@@ -118,14 +128,14 @@ function memkeyProp<V, K, P: Object>(
     }
 }
 
-type IMemKeyProp<V, K, P: Object> = (
+type IMemKeyMethod<V, K, P: Object> = (
     proto: P,
     name: string,
     descr: TypedPropertyDescriptor<IAtomHandler<V, K>>,
     normalize?: INormalize<V>
 ) => TypedPropertyDescriptor<IAtomHandler<V, K>>
 
-declare function memkey<V, K, P: Object>(normalize: INormalize<V>): () => IMemKeyProp<V, K, P>
+declare function memkey<V, K, P: Object>(normalize: INormalize<V>): () => IMemKeyMethod<V, K, P>
 declare function memkey<V, K, P: Object>(
     proto: P,
     name: string,
@@ -135,7 +145,7 @@ declare function memkey<V, K, P: Object>(
 
 export function memkey() {
     if (arguments.length === 3) {
-        return memkeyProp(arguments[0], arguments[1], arguments[2])
+        return memKeyMethod(arguments[0], arguments[1], arguments[2])
     }
 
     const normalize: INormalize<*> = arguments[0]
@@ -144,13 +154,44 @@ export function memkey() {
         name: string,
         descr: TypedPropertyDescriptor<IAtomHandler<*, *>>
     ): TypedPropertyDescriptor<IAtomHandler<*, *>> {
-        return memkeyProp(proto, name, descr, normalize)
+        return memKeyMethod(proto, name, descr, normalize)
+    }
+}
+
+const forceProxyOpts = {
+    get(t: Object, name: string) {
+        if (t[name + '@'] !== undefined) {
+            isForced = true
+            return t[name]
+        }
+
+        let forcedFn = t[name + '$f']
+        if (forcedFn === undefined) {
+            forcedFn = function (a, b, c) {
+                return t[name + '$?'] === undefined
+                    ? t[name](a, true)
+                    : t[name](a, b, true)
+            }
+
+            forcedFn.displayName = name + '$f'
+            t[name + '$f'] = forcedFn
+        }
+
+        return forcedFn
+    },
+    set(t: Object, name: string, val: mixed) {
+        if (t[name + '@'] !== undefined) {
+            isForced = true
+            t[name] = val
+            return true
+        }
+
+        return false
     }
 }
 
 function forceGet() {
-    defaultContext.force = true
-    return this
+    return new Proxy(this, forceProxyOpts)
 }
 
 export function force<V>(
@@ -248,9 +289,7 @@ function actionMethod<V, P: Object>(
             const actionFn = createActionMethod(this, hk, context)
             Object.defineProperty(this, field, {
                 configurable: true,
-                get() {
-                    return actionFn
-                }
+                value: actionFn
             })
             definingProperty = false
 

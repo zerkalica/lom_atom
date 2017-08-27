@@ -67,7 +67,6 @@ export class ConsoleLogger extends BaseLogger implements ILogger {
 
 export default class Context implements IContext {
     last: ?IAtomInt = null
-    force: boolean = false
 
     _logger: ILogger | void = undefined
     _updating: IAtomInt[] = []

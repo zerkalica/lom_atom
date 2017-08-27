@@ -14,7 +14,6 @@ export interface ILogger {
 
 export interface IContext {
     last: ?IAtomInt;
-    force: boolean;
 
     getAtom<V>(
         field: string,

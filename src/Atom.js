@@ -102,8 +102,7 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
     }
 
     get(force?: boolean): V {
-        if (force || this._context.force) {
-            this._context.force = false
+        if (force) {
             this._pullPush(undefined, true)
         } else {
             this.actualize()
@@ -125,23 +124,20 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
 
     set(v: V | Error, force?: boolean): V {
         const normalized: V = this._normalize((v: any), this.cached)
-
         if (this.cached === normalized) {
             return normalized
         }
         if (normalized === undefined) {
             return this.cached
         }
-        const context = this._context
-        if ((!force && !context.force) || normalized instanceof Error) {
-            context.force = false
+        if (!force || normalized instanceof Error) {
             this.status = ATOM_STATUS_ACTUAL
             const oldValue = this.cached
             this.cached = normalized instanceof Error
                 ? createMock(normalized)
                 : normalized
 
-            context.newValue(this, oldValue, normalized)
+            this._context.newValue(this, oldValue, normalized)
             if (this._slaves) {
                 this._slaves.forEach(obsoleteSlave)
             }
