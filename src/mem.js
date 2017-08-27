@@ -342,6 +342,17 @@ export default function mem() {
     }
 }
 
+export function props<P: Object>(
+    proto: P,
+    name: string,
+    descr: TypedPropertyDescriptor<*>,
+) {
+    proto.constructor.__lom_prop = name
+    if (!descr.value && !descr.set) {
+        descr.writable = true
+    }
+}
+
 mem.Wait = AtomWait
 mem.key = memkey
 mem.detached = detached
