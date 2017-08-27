@@ -89,6 +89,7 @@ function memProp<V, P: Object>(
             if (isForced) {
                 isForced = false
                 defaultContext.getAtom(handlerKey, this, undefined, normalize).set(val, true)
+                return
             }
             defaultContext.getAtom(handlerKey, this, undefined, normalize).set(val)
         }
