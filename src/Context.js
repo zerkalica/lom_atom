@@ -24,6 +24,20 @@ function reap(atom: IAtomInt, key: IAtomInt, reaping: Set<IAtomInt>) {
     }
 }
 
+function getKeyFromObj(params: Object): string {
+    const keys = Object.keys(params)
+        .sort()
+
+    let result = ''
+    for (let i = 0; i < keys.length; i++) {
+        const key = keys[i]
+        const value = params[key]
+        result += `.${key}:${typeof value === 'object' ? JSON.stringify(value) : value}`
+    }
+
+    return result
+}
+
 let lastId = 0
 function getKey(params: any): string | number {
     if (typeof params === 'string' || typeof params === 'number') {
@@ -38,20 +52,19 @@ function getKey(params: any): string | number {
     }
 
     return typeof params === 'object'
-        ? Object.keys(params)
-            .sort()
-            .map((key: string) => `${key}:${JSON.stringify(params[key])}`)
-            .join('.')
+        ? getKeyFromObj(params)
         : JSON.stringify(params)
 }
 
 export class BaseLogger implements ILogger {
+    create<V>(host: IAtomHost, field: string, key?: mixed): V | void {}
+    destroy(atom: IAtom<*>): void {}
     status(status: ILoggerStatus, atom: IAtom<*>): void {}
     error<V>(atom: IAtom<V>, err: Error): void {}
-    newValue<V>(atom: IAtom<V>, from?: V | Error, to: V, isActualize?: boolean): void {}
+    newValue<V>(atom: IAtom<any>, from?: V | Error, to: V, isActualize?: boolean): void {}
 }
 
-export class ConsoleLogger extends BaseLogger implements ILogger {
+export class ConsoleLogger extends BaseLogger {
     status(status: ILoggerStatus, atom: IAtom<*>): void {
         console.log(status, atom.displayName)
     }
@@ -71,13 +84,14 @@ export default class Context implements IContext {
     _logger: ILogger | void = undefined
     _updating: IAtomInt[] = []
     _reaping: Set<IAtomInt> = new Set()
-    _atomMap: WeakMap<IAtomHost, Map<string | number, IAtom<any>>> = new WeakMap()
+    // _atomMap: WeakMap<IAtomHost, Map<string | number, IAtomInt>> = new WeakMap()
     _scheduled = false
 
     hasAtom(host: IAtomHost, key: mixed): boolean {
-        // return host[getKey(key) + '@'] !== undefined
-        const map = this._atomMap.get(host)
-        return map !== undefined && map.has(getKey(key))
+        return host[getKey(key) + '@'] !== undefined
+
+        // const map = this._atomMap.get(host)
+        // return map !== undefined && map.has(getKey(key))
     }
 
     getAtom<V>(
@@ -85,39 +99,73 @@ export default class Context implements IContext {
         host: IAtomHost,
         key?: mixed,
         normalize?: INormalize<V>,
-        isComponent?: boolean
+        isComponent?: boolean,
     ): IAtom<V> {
-        const k = key === undefined ? field : getKey(key)
-
         // let map = this._atomMap.get(host)
         // if (map === undefined) {
         //     map = new Map()
         //     this._atomMap.set(host, map)
         // }
-        // let atom: IAtom<V> | void = map.get(k)
+        // let atom: IAtom<V> | void
+        // let dict = map
+        // let k
+        // if (key === undefined) {
+        //     k = field
+        //     atom = map.get(field)
+        // } else {
+        //     k = getKey(key)
+        //     dict = map.get(field)
+        //     if (dict === undefined) {
+        //         dict = new Map()
+        //         map.set(field, dict)
+        //     }
+        //     atom = dict.get(k)
+        // }
 
+        const k = key === undefined ? field : getKey(key)
         let atom: IAtom<V> | void = host[k + '@']
 
         if (atom === undefined) {
-            atom = new Atom(field, host, this, key, normalize, isComponent)
-            // map.set(k, atom)
-            host[k + '@'] = (atom: any)
+            let ptr: Object | void = host.__lom_state
+            if (ptr !== undefined) {
+                if (ptr[field] === undefined) {
+                    ptr = undefined
+                } else if (key !== undefined) {
+                    if (ptr[field] === null) {
+                        ptr[field] = {}
+                    }
+                    ptr = ptr[field]
+                    if (typeof ptr !== 'object') {
+                        throw new Error(`${host.displayName || host.constructor.name}.${field} need an object`)
+                    }
+                }
+            }
+            if (this._logger !== undefined) {
+                this._logger.create(host, field, key)
+            }
+            atom = new Atom(field, host, this, key, normalize, isComponent, ptr)
+            // dict.set(k, atom)
+            ;(host: Object)[k + '@'] = (atom: any)
         }
 
         return atom
     }
 
-    destroyHost(atom: IAtomInt) {
-        const host = atom.host
+    setHostState(host: IAtomHost, state: Object) {
+        host.__lom_state = state
+    }
 
+    destroyHost(atom: IAtomInt) {
         if (this._logger !== undefined) {
-            this._logger.status('destroy', atom)
+            this._logger.destroy(atom)
         }
+
+        const host = atom.host
 
         const k = atom.key === undefined ? atom.field : getKey(atom.key)
         host[k + '@'] = (undefined: any)
         if (host._destroyProp !== undefined) {
-            host._destroyProp(atom.key === undefined ? atom.field : atom.key, atom.cached)
+            host._destroyProp(atom.key || atom.field, atom.cached)
         }
         if (host._destroy !== undefined && atom.key === undefined) {
             host._destroy()

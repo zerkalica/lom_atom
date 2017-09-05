@@ -4,9 +4,11 @@ type _ResultOf<V, F: (...x: any[]) => V> = V // eslint-disable-line
 export type ResultOf<F> = _ResultOf<*, F>
 export type NamesOf<F> = {+[id: $Keys<ResultOf<F>>]: string}
 
-export type ILoggerStatus = 'destroy' | 'waiting' | 'proposeToReap' | 'proposeToPull'
+export type ILoggerStatus = 'waiting' | 'proposeToReap' | 'proposeToPull'
 
 export interface ILogger {
+    create<V>(host: IAtomHost, field: string, key?: mixed): V | void;
+    destroy(atom: IAtom<*>): void;
     status(status: ILoggerStatus, atom: IAtom<*>): void;
     error<V>(atom: IAtom<V>, err: Error): void;
     newValue<V>(atom: IAtom<V>, from?: V | Error, to: V, isActualize?: boolean): void;
@@ -78,4 +80,5 @@ export interface IAtomHost {
     [key: string]: IAtomHandler<*, *>;
     _destroyProp?: (key: mixed, value: mixed | void) => void;
     _destroy?: () => void;
+    __lom_state?: Object;
 }

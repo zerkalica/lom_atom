@@ -36,17 +36,18 @@ function actualizeMaster(master: IAtomInt) {
 }
 
 export default class Atom<V> implements IAtom<V>, IAtomInt {
-    status: IAtomStatus = ATOM_STATUS_OBSOLETE
+    status: IAtomStatus
     field: string
     key: mixed | void
     host: IAtomHost
-    cached: V | void = undefined
+    cached: V | void
     isComponent: boolean
 
     _masters: ?Set<IAtomInt> = null
     _slaves: ?Set<IAtomInt> = null
     _context: IContext
     _normalize: INormalize<V>
+    _ptr: Object | void
 
     constructor(
         field: string,
@@ -54,7 +55,8 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         context: IContext,
         key?: mixed,
         normalize?: INormalize<V>,
-        isComponent?: boolean
+        isComponent?: boolean,
+        ptr?: Object
     ) {
         this.field = field
         this.key = key
@@ -62,6 +64,14 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         this.isComponent = isComponent || false
         this._normalize = normalize || defaultNormalize
         this._context = context
+        const value = ptr === undefined
+            ? undefined
+            : (key === undefined ? ptr[field] : ptr[key])
+        this.status = value === undefined
+            ? ATOM_STATUS_OBSOLETE
+            : ATOM_STATUS_ACTUAL
+        this.cached = value
+        this._ptr = ptr
     }
 
     get displayName(): string {
@@ -91,6 +101,14 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
                 this._checkSlaves()
                 this._context.destroyHost(this)
                 this.cached = undefined
+                const ptr = this._ptr
+                if (ptr !== undefined) {
+                    if (this.key !== undefined) {
+                        ptr[this.key] = undefined
+                    } else {
+                        ptr[this.field] = undefined
+                    }
+                }
                 this.status = ATOM_STATUS_DESTROYED
                 this.key = undefined
             }
@@ -123,20 +141,29 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
     }
 
     set(v: V | Error, force?: boolean): V {
-        const normalized: V = this._normalize((v: any), this.cached)
-        if (this.cached === normalized) {
+        let oldValue = this.cached
+        const normalized: V = this._normalize((v: any), oldValue)
+        if (oldValue === normalized) {
             return normalized
         }
         if (normalized === undefined) {
-            return this.cached
+            return (oldValue: any)
         }
         if (!force || normalized instanceof Error) {
             this.status = ATOM_STATUS_ACTUAL
-            const oldValue = this.cached
+
             this.cached = normalized instanceof Error
                 ? createMock(normalized)
                 : normalized
 
+            const ptr = this._ptr
+            if (ptr !== undefined) {
+                if (this.key !== undefined) {
+                    ptr[this.key] = this.cached
+                } else {
+                    ptr[this.field] = this.cached
+                }
+            }
             this._context.newValue(this, oldValue, normalized)
             if (this._slaves) {
                 this._slaves.forEach(obsoleteSlave)
@@ -180,12 +207,13 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         const context = this._context
         const slave = context.last
         context.last = this
+        const cached = this.cached
         try {
             newValue = this._normalize(
                 this.key === undefined
-                    ? (this.host: any)[this.field](proposedValue, force, this.cached)
-                    : (this.host: any)[this.field](this.key, proposedValue, force, this.cached),
-                this.cached
+                    ? (this.host: any)[this.field + '$'](proposedValue, force, cached)
+                    : (this.host: any)[this.field + '$'](this.key, proposedValue, force, cached),
+                cached
             )
         } catch (error) {
             if (error[catchedId] === undefined) {
@@ -199,11 +227,18 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
 
         this.status = ATOM_STATUS_ACTUAL
 
-        if (newValue !== undefined && this.cached !== newValue) {
-            const oldValue = this.cached
+        if (newValue !== undefined && cached !== newValue) {
             this.cached = newValue
+            const ptr = this._ptr
+            if (ptr !== undefined) {
+                if (this.key !== undefined) {
+                    ptr[this.key] = newValue
+                } else {
+                    ptr[this.field] = newValue
+                }
+            }
 
-            this._context.newValue(this, oldValue, newValue, true)
+            this._context.newValue(this, cached, newValue, true)
             if (this._slaves) {
                 this._slaves.forEach(obsoleteSlave)
             }

@@ -16,22 +16,22 @@ type TypedPropertyDescriptor<T> = {
 
 function memMethod<V, P: Object>(
     proto: P,
-    field: string,
+    name: string,
     descr: TypedPropertyDescriptor<*>,
     normalize?: INormalize<V>,
     isComponent?: boolean
 ): TypedPropertyDescriptor<*> {
-    const handlerKey = `${field}$`
+    const handlerKey = `${name}$`
     if (descr.value === undefined) {
-        throw new TypeError(`${field} is not an function (next?: V)`)
+        throw new TypeError(`${name} is not an function (next?: V)`)
     }
     proto[handlerKey] = descr.value
 
     return {
         enumerable: descr.enumerable,
         configurable: descr.configurable,
-        value(next?: V | Error, force?: boolean) {
-            return defaultContext.getAtom(handlerKey, this, undefined, normalize, isComponent)
+        value(next?: V | Error, force?: boolean): V {
+            return (defaultContext.getAtom(name, this, undefined, normalize, isComponent): IAtom<V>)
                 .value(next, force)
         }
     }
@@ -52,7 +52,7 @@ function createGetSetHandler<V>(
 
 function createValueHandler<V>(initializer?: () => V): IAtomHandler<V, *> {
     return function valueHandler(next?: V | Error) {
-        return next === undefined && initializer !== undefined
+        return next === undefined && initializer
             ? initializer.call(this)
             : (next: any)
     }
@@ -66,10 +66,11 @@ function memProp<V, P: Object>(
     descr: TypedPropertyDescriptor<V>,
     normalize?: INormalize<V>
 ): TypedPropertyDescriptor<V> {
-    const handlerKey = `${name}@`
+    const handlerKey = `${name}$`
     if (proto[handlerKey] !== undefined) {
         return (undefined: any)
     }
+    proto[`${name}#`] = true
 
     proto[handlerKey] = descr.get === undefined && descr.set === undefined
         ? createValueHandler(descr.initializer)
@@ -81,17 +82,17 @@ function memProp<V, P: Object>(
         get() {
             if (isForced) {
                 isForced = false
-                return defaultContext.getAtom(handlerKey, this, undefined, normalize).get(true)
+                return defaultContext.getAtom(name, this, undefined, normalize).get(true)
             }
-            return defaultContext.getAtom(handlerKey, this, undefined, normalize).get()
+            return defaultContext.getAtom(name, this, undefined, normalize).get()
         },
         set(val: V | Error) {
             if (isForced) {
                 isForced = false
-                defaultContext.getAtom(handlerKey, this, undefined, normalize).set(val, true)
+                ;(defaultContext.getAtom(name, this, undefined, normalize): IAtom<V>).set(val, true)
                 return
             }
-            defaultContext.getAtom(handlerKey, this, undefined, normalize).set(val)
+            ;(defaultContext.getAtom(name, this, undefined, normalize): IAtom<V>).set(val)
         }
     }
 }
@@ -118,12 +119,12 @@ function memKeyMethod<V, K, P: Object>(
         enumerable: descr.enumerable,
         configurable: descr.configurable,
         value(rawKey: K, next?: V | Error, force?: boolean) {
-            return defaultContext.getAtom(
-                handlerKey,
+            return (defaultContext.getAtom(
+                name,
                 this,
                 rawKey,
                 normalize
-            )
+            ): IAtom<V>)
                 .value(next, force)
         }
     }
@@ -161,7 +162,9 @@ export function memkey() {
 
 const forceProxyOpts = {
     get(t: Object, name: string) {
-        if (t[name + '@'] !== undefined) {
+
+        // is property or get/set magic ?
+        if (t[name + '#'] !== undefined) {
             isForced = true
             return t[name]
         }
@@ -181,7 +184,8 @@ const forceProxyOpts = {
         return forcedFn
     },
     set(t: Object, name: string, val: mixed) {
-        if (t[name + '@'] !== undefined) {
+        // is property or get/set magic ?
+        if (t[name + '#'] !== undefined) {
             isForced = true
             t[name] = val
             return true
@@ -351,6 +355,17 @@ export function props<P: Object>(
     if (!descr.value && !descr.set) {
         descr.writable = true
     }
+}
+
+export function serializable(
+    proto: Object,
+    name: string,
+    descr: TypedPropertyDescriptor<*>,
+) {
+    if (!proto.__lom_state) {
+        proto.__lom_state = {}
+    }
+    proto.__lom_state[name] = null
 }
 
 mem.Wait = AtomWait
