@@ -78,6 +78,14 @@ export class ConsoleLogger extends BaseLogger {
     }
 }
 
+export class NoSerializableException extends Error {
+    constructor(host: IAtomHost, field?: string) {
+        super(`${host.displayName || host.constructor.name}${field ? `.${field}` : ''} not a serializable`)
+        // $FlowFixMe new.target
+        ;(this: Object)['__proto__'] = new.target.prototype
+    }
+}
+
 export default class Context implements IContext {
     last: ?IAtomInt = null
 
@@ -122,8 +130,11 @@ export default class Context implements IContext {
         //     atom = dict.get(k)
         // }
 
-        const k = key === undefined ? field : getKey(key)
-        let atom: IAtom<V> | void = host[k + '@']
+        const k = key === undefined
+            ? (field + '@')
+            : (field + '.' + getKey(key) + '@')
+
+        let atom: IAtom<V> | void = host[k]
 
         if (atom === undefined) {
             let ptr: Object | void = host.__lom_state
@@ -136,8 +147,10 @@ export default class Context implements IContext {
                     }
                     ptr = ptr[field]
                     if (typeof ptr !== 'object') {
-                        throw new Error(`${host.displayName || host.constructor.name}.${field} need an object`)
+                        throw new NoSerializableException(host, field)
                     }
+                } else if (ptr[field] === null) {
+                    ptr[field] = undefined
                 }
             }
             if (this._logger !== undefined) {
@@ -145,14 +158,58 @@ export default class Context implements IContext {
             }
             atom = new Atom(field, host, this, key, normalize, isComponent, ptr)
             // dict.set(k, atom)
-            ;(host: Object)[k + '@'] = (atom: any)
+            ;(host: Object)[k] = (atom: any)
         }
 
         return atom
     }
 
-    setHostState(host: IAtomHost, state: Object) {
-        host.__lom_state = state
+    getState(host: Object): Object {
+        if (!host.__lom_state) {
+            throw new NoSerializableException(host)
+        }
+        return host.__lom_state
+    }
+
+    setState(host: Object, state: Object, init?: boolean) {
+        if (init) {
+            host.__lom_state = state
+            return
+        }
+        const oldState = host.__lom_state
+        if (oldState === undefined) {
+            throw new NoSerializableException(host)
+        }
+        const fields = Object.keys(state)
+        for (let i = 0; i < fields.length; i++) {
+            const field = fields[i]
+            const value = state[field]
+            if (host[field + '?'] !== undefined) {
+                if (typeof value !== 'object' || value === null) {
+                    throw new NoSerializableException(host, field)
+                }
+                const keys = Object.keys(value)
+                for (let j = 0; j < keys.length; j++) {
+                    const key = keys[j]
+                    const atom: IAtom<*> | void = host[field + '.' + key + '@']
+                    if (atom !== undefined) {
+                        atom.set(value[key])
+                    } else {
+                        if (!oldState[field]) {
+                            oldState[field] = {}
+                        }
+                        oldState[field][key] = value[key]
+                    }
+                }
+            } else {
+                const atom: IAtom<*> | void = host[field + '@']
+                if (atom !== undefined) {
+                    atom.set(value)
+                } else {
+                    oldState[field] = value
+                }
+            }
+        }
     }
 
     destroyHost(atom: IAtomInt) {
@@ -162,8 +219,11 @@ export default class Context implements IContext {
 
         const host = atom.host
 
-        const k = atom.key === undefined ? atom.field : getKey(atom.key)
-        host[k + '@'] = (undefined: any)
+        const k = atom.key === undefined
+            ? (atom.field + '@')
+            : (atom.field + '.' + getKey(atom.key) + '@')
+
+        host[k] = (undefined: any)
         if (host._destroyProp !== undefined) {
             host._destroyProp(atom.key || atom.field, atom.cached)
         }

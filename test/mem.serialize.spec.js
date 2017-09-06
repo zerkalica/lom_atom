@@ -129,4 +129,19 @@ describe('mem serialize', () => {
         x.user()
         assert(x.__lom_state.some === 111)
     })
+
+    it('set new state to host after reading', () => {
+        class UserService {
+            @serializable @mem some;
+        }
+        const x = new UserService()
+        defaultContext.setState(x, {
+            some: 111
+        }, true)
+
+        defaultContext.setState(x, {
+            some: 123
+        })
+        assert(x.some === 123)
+    })
 })

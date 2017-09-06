@@ -24,6 +24,8 @@ export interface IContext {
         normalize?: INormalize<V>,
         isComponent?: boolean
     ): IAtom<V>;
+    setState(host: Object, state: Object): void;
+    getState(host: Object): Object;
     hasAtom(host: IAtomHost, key: mixed): boolean;
 
     destroyHost(atom: IAtomInt): void;

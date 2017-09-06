@@ -106,7 +106,7 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
                     if (this.key !== undefined) {
                         ptr[this.key] = undefined
                     } else {
-                        ptr[this.field] = undefined
+                        ptr[this.field] = null
                     }
                 }
                 this.status = ATOM_STATUS_DESTROYED
