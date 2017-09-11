@@ -132,3 +132,33 @@ const list = new TodoList()
 list.todo('1', {id: 1, title: 'Todo 1'}) // set todo
 list.todo('1') // get todo
 ```
+
+## State load/save
+
+```js
+class TodosStore {
+    @serializable @mem todos []
+}
+```
+
+save:
+
+```js
+const store = new TodosStore()
+store.todos.push({id: '1', title: 'todo one'})
+
+store.__lom_state.todos[0].id === '1'
+
+```
+
+load:
+
+```js
+const store = new TodosStore()
+// setup initial state
+store.__lom_state = {
+    todos: [{id: 1, title: 'todo one'}]
+}
+
+store.todos[0]
+```
