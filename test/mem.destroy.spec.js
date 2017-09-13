@@ -5,7 +5,7 @@ import assert from 'assert'
 import mem from '../src/mem'
 import {defaultContext} from '../src/Context'
 
-describe('mem must be deferred destroyed when no longer referenced', () => {
+describe('mem.destroy must be deferred destroyed when no longer referenced', () => {
     function sync() {
         defaultContext.beginTransaction()
         defaultContext.endTransaction()
@@ -21,7 +21,7 @@ describe('mem must be deferred destroyed when no longer referenced', () => {
                 return 1
             }
 
-            _destroyProp(key: string, value?: number) {
+            destroy(value?: number, key: string) {
                 destroyed = key
             }
         }
@@ -69,7 +69,7 @@ describe('mem must be deferred destroyed when no longer referenced', () => {
                 return 1
             }
 
-            _destroy() {
+            destroy() {
                 destroyed = true
             }
         }

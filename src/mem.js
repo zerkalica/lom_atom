@@ -3,6 +3,7 @@
 import type {IAtom, IAtomHandler, IAtomHost, INormalize, IContext} from './interfaces'
 import {defaultContext} from './Context'
 import {AtomWait} from './utils'
+import Atom from './Atom'
 
 type TypedPropertyDescriptor<T> = {
     enumerable?: boolean;
@@ -21,18 +22,36 @@ function memMethod<V, P: Object>(
     normalize?: INormalize<V>,
     isComponent?: boolean
 ): TypedPropertyDescriptor<*> {
-    const handlerKey = `${name}$`
     if (descr.value === undefined) {
         throw new TypeError(`${name} is not an function (next?: V)`)
     }
-    proto[handlerKey] = descr.value
+    proto[`${name}$`] = descr.value
+    const hostAtoms: WeakMap<Object, IAtom<V>> = new WeakMap()
+
+    Object.defineProperty(proto, `${name}()`, {
+        get() {
+            return hostAtoms.get(this)
+        }
+    })
+    const forcedFn = function (next?: V | Error, force?: boolean) {
+        return this[name](next, force === undefined ? true : force)
+    }
+    forcedFn.displayName = `${name}*`
+    proto[`${name}*`] = forcedFn
 
     return {
         enumerable: descr.enumerable,
         configurable: descr.configurable,
         value(next?: V | Error, force?: boolean): V {
-            return (defaultContext.getAtom(name, this, undefined, normalize, isComponent): IAtom<V>)
-                .value(next, force)
+            let atom: IAtom<V> | void = hostAtoms.get(this)
+            if (atom === undefined) {
+                atom = new Atom(name, this, defaultContext, normalize, undefined, isComponent)
+                hostAtoms.set(this, atom)
+            }
+
+            return next === undefined
+                ? (atom: IAtom<V>).get(force)
+                : (atom: IAtom<V>).set(next, force)
         }
     }
 }
@@ -70,31 +89,70 @@ function memProp<V, P: Object>(
     if (proto[handlerKey] !== undefined) {
         return (undefined: any)
     }
-    proto[`${name}#`] = true
 
     proto[handlerKey] = descr.get === undefined && descr.set === undefined
         ? createValueHandler(descr.initializer)
         : createGetSetHandler(descr.get, descr.set)
 
+    const hostAtoms: WeakMap<Object, IAtom<V>> = new WeakMap()
+
+    Object.defineProperty(proto, `${name}()`, {
+        get() {
+            return hostAtoms.get(this)
+        }
+    })
+
     return {
         enumerable: descr.enumerable,
         configurable: descr.configurable,
         get() {
+            let atom: IAtom<V> | void = hostAtoms.get(this)
+            if (atom === undefined) {
+                atom = new Atom(name, this, defaultContext, normalize)
+                hostAtoms.set(this, atom)
+            }
             if (isForced) {
                 isForced = false
-                return defaultContext.getAtom(name, this, undefined, normalize).get(true)
+                return atom.get(true)
             }
-            return defaultContext.getAtom(name, this, undefined, normalize).get()
+            return atom.get()
         },
         set(val: V | Error) {
+            let atom: IAtom<V> | void = hostAtoms.get(this)
+            if (atom === undefined) {
+                atom = new Atom(name, this, defaultContext, normalize)
+                hostAtoms.set(this, atom)
+            }
             if (isForced) {
                 isForced = false
-                ;(defaultContext.getAtom(name, this, undefined, normalize): IAtom<V>).set(val, true)
+                ;(atom: IAtom<V>).set(val, true)
                 return
             }
-            ;(defaultContext.getAtom(name, this, undefined, normalize): IAtom<V>).set(val)
+            ;(atom: IAtom<V>).set(val)
         }
     }
+}
+
+function getKeyFromObj(params: Object): string {
+    const keys = Object.keys(params)
+        .sort()
+
+    let result = ''
+    for (let i = 0; i < keys.length; i++) {
+        const key = keys[i]
+        const value = params[key]
+        result += `.${key}:${typeof value === 'object' ? JSON.stringify(value) : value}`
+    }
+
+    return result
+}
+
+function getKey(params: any): string {
+    if (!params) return ''
+    if (params instanceof Array) return JSON.stringify(params)
+    if (typeof params === 'object') return getKeyFromObj(params)
+
+    return '' + params
 }
 
 function memKeyMethod<V, K, P: Object>(
@@ -107,25 +165,36 @@ function memKeyMethod<V, K, P: Object>(
     if (handler === undefined) {
         throw new TypeError(`${name} is not an function (rawKey: K, next?: V)`)
     }
-
-    const handlerKey = `${name}$`
-
-    proto[handlerKey] = handler
-    proto[handlerKey + '?'] = function(rawKey: K) {
-        return defaultContext.hasAtom(this, rawKey)
+    proto[`${name}$`] = handler
+    const hostAtoms: WeakMap<Object, Map<string, IAtom<V>>> = new WeakMap()
+    Object.defineProperty(proto, `${name}()`, {
+        get() {
+            return hostAtoms.get(this)
+        }
+    })
+    const forcedFn = function (rawKey: K, next?: V | Error, force?: boolean) {
+        return this[name](rawKey, next, force === undefined ? true : force)
     }
+    forcedFn.displayName = `${name}*`
+    proto[`${name}*`] = forcedFn
 
     return {
         enumerable: descr.enumerable,
         configurable: descr.configurable,
         value(rawKey: K, next?: V | Error, force?: boolean) {
-            return (defaultContext.getAtom(
-                name,
-                this,
-                rawKey,
-                normalize
-            ): IAtom<V>)
-                .value(next, force)
+            let atomMap: Map<string, IAtom<V>> | void = hostAtoms.get(this)
+            if (atomMap === undefined) {
+                atomMap = new Map()
+                hostAtoms.set(this, atomMap)
+            }
+            const key = getKey(rawKey)
+            let atom: IAtom<V> | void = atomMap.get(key)
+            if (atom === undefined) {
+                atom = new Atom(name, this, defaultContext, normalize, rawKey)
+                atomMap.set(key, atom)
+            }
+
+            return next === undefined ? (atom: IAtom<V>).get(force) : (atom: IAtom<V>).set(next, force)
         }
     }
 }
@@ -162,30 +231,18 @@ export function memkey() {
 
 const forceProxyOpts = {
     get(t: Object, name: string) {
-
+        const forceFn = t[`${name}*`]
         // is property or get/set magic ?
-        if (t[name + '#'] !== undefined) {
+        if (forceFn === undefined) {
             isForced = true
             return t[name]
         }
 
-        let forcedFn = t[name + '$f']
-        if (forcedFn === undefined) {
-            forcedFn = function (a, b, c) {
-                return t[name + '$?'] === undefined
-                    ? t[name](a, true)
-                    : t[name](a, b, true)
-            }
-
-            forcedFn.displayName = name + '$f'
-            t[name + '$f'] = forcedFn
-        }
-
-        return forcedFn
+        return forceFn.bind(t)
     },
     set(t: Object, name: string, val: mixed) {
         // is property or get/set magic ?
-        if (t[name + '#'] !== undefined) {
+        if (t[`${name}*`] === undefined) {
             isForced = true
             t[name] = val
             return true
@@ -195,19 +252,23 @@ const forceProxyOpts = {
     }
 }
 
-function forceGet() {
-    return new Proxy(this, forceProxyOpts)
-}
-
 export function force<V>(
     proto: mixed,
     name: string,
     descr: TypedPropertyDescriptor<V>
 ): TypedPropertyDescriptor<V> {
+    const proxyMap: WeakMap<V, any> = new WeakMap()
     return {
         enumerable: descr.enumerable,
         configurable: descr.configurable,
-        get: forceGet
+        get() {
+            let proxy: V | void = proxyMap.get(this)
+            if (proxy === undefined) {
+                proxy = new Proxy(this, forceProxyOpts)
+                proxyMap.set(this, proxy)
+            }
+            return proxy
+        }
     }
 }
 
@@ -355,17 +416,6 @@ export function props<P: Object>(
     if (!descr.value && !descr.set) {
         descr.writable = true
     }
-}
-
-export function serializable(
-    proto: Object,
-    name: string,
-    descr: TypedPropertyDescriptor<*>,
-) {
-    if (!proto.__lom_state) {
-        proto.__lom_state = {}
-    }
-    proto.__lom_state[name] = null
 }
 
 mem.Wait = AtomWait

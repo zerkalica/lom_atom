@@ -7,27 +7,43 @@ export type NamesOf<F> = {+[id: $Keys<ResultOf<F>>]: string}
 export type ILoggerStatus = 'waiting' | 'proposeToReap' | 'proposeToPull'
 
 export interface ILogger {
-    create<V>(host: IAtomHost, field: string, key?: mixed): V | void;
+    /**
+     * Invokes before atom creating
+     *
+     * @param host Object Object with atom
+     * @param field string property name
+     * @param key mixed | void for dictionary atoms - dictionary key
+     */
+    create<V>(host: Object, field: string, key?: mixed): V | void;
+
+    /**
+     * After atom destroy
+     */
     destroy(atom: IAtom<*>): void;
+
+    /**
+     * Atom status changes
+         - 'waiting' - atom fetching from server (mem.Wait throwed)
+         - 'proposeToReap' - atom probably will be destroyed on next tick
+         - 'proposeToPull' - atom will be actualized on next tick
+     */
     status(status: ILoggerStatus, atom: IAtom<*>): void;
+
+    /**
+     * Error while actualizing atom
+     */
     error<V>(atom: IAtom<V>, err: Error): void;
+
+    /**
+     * Atom value changed
+     * @param isActualize bool if true - atom handler invoked, if false - only atom.cache value getted/setted
+     */
     newValue<V>(atom: IAtom<V>, from?: V | Error, to: V, isActualize?: boolean): void;
 }
 
 export interface IContext {
     last: ?IAtomInt;
-
-    getAtom<V>(
-        field: string,
-        host: IAtomHost,
-        key?: mixed,
-        normalize?: INormalize<V>,
-        isComponent?: boolean
-    ): IAtom<V>;
-    setState(host: Object, state: Object): void;
-    getState(host: Object): Object;
-    hasAtom(host: IAtomHost, key: mixed): boolean;
-
+    create<V>(host: Object, field: string, key?: mixed): V | void;
     destroyHost(atom: IAtomInt): void;
     newValue<V>(t: IAtom<V>, from?: V | Error, to: V | Error, isActualize?: boolean): void;
     setLogger(logger: ILogger): void;
@@ -51,11 +67,11 @@ export type IAtomStatus = typeof ATOM_STATUS_DESTROYED | typeof ATOM_STATUS_OBSO
 
 export interface IAtom<V> {
     status: IAtomStatus;
+    value: V | void;
     +field: string;
     +displayName: string;
     get(force?: boolean): V;
     set(v: V | Error, force?: boolean): V;
-    value(next?: V | Error, force?: boolean): V;
     destroyed(isDestroyed?: boolean): boolean;
 }
 
@@ -63,7 +79,6 @@ export interface IAtomInt extends IAtom<*> {
     isComponent: boolean;
     key: mixed | void;
     host: IAtomHost;
-    cached: any;
 
     actualize(): void;
     check(): void;
@@ -80,7 +95,5 @@ export type INormalize<V> = (next: V, prev?: V) => V
 export interface IAtomHost {
     displayName?: string;
     [key: string]: IAtomHandler<*, *>;
-    _destroyProp?: (key: mixed, value: mixed | void) => void;
-    _destroy?: () => void;
-    __lom_state?: Object;
+    destroy?: (value: mixed, field: string, key?: mixed) => void;
 }

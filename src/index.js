@@ -1,7 +1,7 @@
 // @flow
 
 export {default as Atom} from './Atom'
-export {default as mem, serializable, props, memkey, detached, force, action} from './mem'
+export {default as mem, props, memkey, detached, force, action} from './mem'
 export {defaultContext, BaseLogger, ConsoleLogger} from './Context'
 
 export type {
