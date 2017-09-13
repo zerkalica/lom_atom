@@ -1,6 +1,6 @@
 {
   "name": "lom_atom",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Observable state management",
   "publishConfig": {
     "registry": "https://registry.npmjs.org"
