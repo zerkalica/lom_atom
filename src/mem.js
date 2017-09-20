@@ -36,7 +36,7 @@ function memMethod<V, P: Object>(
     const forcedFn = function (next?: V | Error, force?: boolean) {
         return this[name](next, force === undefined ? true : force)
     }
-    forcedFn.displayName = `${name}*`
+    setFunctionName(forcedFn, `${name}*`)
     proto[`${name}*`] = forcedFn
 
     return {
@@ -79,6 +79,11 @@ function createValueHandler<V>(initializer?: () => V): IAtomHandler<V, *> {
 
 let isForced = false
 
+function setFunctionName(fn: Function, name: string) {
+    Object.defineProperty(fn, 'name', {value: name, writable: false})
+    fn.displayName = name
+}
+
 function memProp<V, P: Object>(
     proto: P,
     name: string,
@@ -90,9 +95,14 @@ function memProp<V, P: Object>(
         return (undefined: any)
     }
 
-    proto[handlerKey] = descr.get === undefined && descr.set === undefined
+    if (descr.initializer) setFunctionName(descr.initializer, name)
+    if (descr.get) setFunctionName(descr.get, `get#${name}`)
+    if (descr.set) setFunctionName(descr.set, `set#${name}`)
+    const handler = proto[handlerKey] = descr.get === undefined && descr.set === undefined
         ? createValueHandler(descr.initializer)
         : createGetSetHandler(descr.get, descr.set)
+
+    setFunctionName(handler, `${name}()`)
 
     const hostAtoms: WeakMap<Object, IAtom<V>> = new WeakMap()
 
@@ -175,7 +185,7 @@ function memKeyMethod<V, K, P: Object>(
     const forcedFn = function (rawKey: K, next?: V | Error, force?: boolean) {
         return this[name](rawKey, next, force === undefined ? true : force)
     }
-    forcedFn.displayName = `${name}*`
+    setFunctionName(forcedFn, `${name}*`)
     proto[`${name}*`] = forcedFn
 
     return {
@@ -304,7 +314,7 @@ function createActionMethod(t: Object, hk: string, context: IContext): (...args:
 
         return result
     }
-    action.displayName = hk
+    setFunctionName(action, hk)
 
     return action
 }
@@ -326,7 +336,7 @@ function createActionFn<F: Function>(fn: F, name?: string, context: IContext): F
 
         return result
     }
-    action.displayName = name || fn.displayName || fn.name
+    setFunctionName(action, name || fn.displayName || fn.name)
 
     return (action: any)
 }
