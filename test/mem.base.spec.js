@@ -8,8 +8,8 @@ import {defaultContext} from '../src/Context'
 
 describe('mem base', () => {
     function sync() {
-        defaultContext.beginTransaction()
-        defaultContext.endTransaction()
+        defaultContext.beginTransaction('$')
+        defaultContext.endTransaction('$')
     }
 
     it('mem by key', () => {

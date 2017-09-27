@@ -7,8 +7,8 @@ import {defaultContext} from '../src/Context'
 
 describe('mem.destroy must be deferred destroyed when no longer referenced', () => {
     function sync() {
-        defaultContext.beginTransaction()
-        defaultContext.endTransaction()
+        defaultContext.beginTransaction('$')
+        defaultContext.endTransaction('$')
     }
 
     it('any property in host object', () => {
