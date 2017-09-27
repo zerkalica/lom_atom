@@ -298,45 +298,53 @@ type IMemProp<V, P: Object> = (
 ) => TypedPropertyDescriptor<IAtomHandler<V>>
 
 function createActionMethod(t: Object, hk: string, context: IContext): (...args: any[]) => any {
+    const name = `${t.displayName || t.constructor.displayName || t.constructor.name}.${hk}`
     function action() {
         let result: mixed | void
-        context.beginTransaction()
-        switch (arguments.length) {
-            case 0: result = t[hk](); break
-            case 1: result = t[hk](arguments[0]); break
-            case 2: result = t[hk](arguments[0], arguments[1]); break
-            case 3: result = t[hk](arguments[0], arguments[1], arguments[2]); break
-            case 4: result = t[hk](arguments[0], arguments[1], arguments[2], arguments[3]); break
-            case 5: result = t[hk](arguments[0], arguments[1], arguments[2], arguments[3], arguments[4]); break
-            default: result = t[hk].apply(t, arguments)
+        const oldNamespace = context.beginTransaction(name)
+        try {
+            switch (arguments.length) {
+                case 0: result = t[hk](); break
+                case 1: result = t[hk](arguments[0]); break
+                case 2: result = t[hk](arguments[0], arguments[1]); break
+                case 3: result = t[hk](arguments[0], arguments[1], arguments[2]); break
+                case 4: result = t[hk](arguments[0], arguments[1], arguments[2], arguments[3]); break
+                case 5: result = t[hk](arguments[0], arguments[1], arguments[2], arguments[3], arguments[4]); break
+                default: result = t[hk].apply(t, arguments)
+            }
+        } finally {
+            context.endTransaction(oldNamespace)
         }
-        context.endTransaction()
 
         return result
     }
-    setFunctionName(action, hk)
+    setFunctionName(action, name)
 
     return action
 }
 
-function createActionFn<F: Function>(fn: F, name?: string, context: IContext): F {
+function createActionFn<F: Function>(fn: F, rawName?: string, context: IContext): F {
+    const name = rawName || fn.displayName || fn.name
     function action(): any {
         let result: mixed | void
-        context.beginTransaction()
-        switch (arguments.length) {
-            case 0: result = fn(); break
-            case 1: result = fn(arguments[0]); break
-            case 2: result = fn(arguments[0], arguments[1]); break
-            case 3: result = fn(arguments[0], arguments[1], arguments[2]); break
-            case 4: result = fn(arguments[0], arguments[1], arguments[2], arguments[3]); break
-            case 5: result = fn(arguments[0], arguments[1], arguments[2], arguments[3], arguments[4]); break
-            default: result = fn.apply(null, arguments)
+        const oldNamespace = context.beginTransaction(name)
+        try {
+            switch (arguments.length) {
+                case 0: result = fn(); break
+                case 1: result = fn(arguments[0]); break
+                case 2: result = fn(arguments[0], arguments[1]); break
+                case 3: result = fn(arguments[0], arguments[1], arguments[2]); break
+                case 4: result = fn(arguments[0], arguments[1], arguments[2], arguments[3]); break
+                case 5: result = fn(arguments[0], arguments[1], arguments[2], arguments[3], arguments[4]); break
+                default: result = fn.apply(null, arguments)
+            }
+        } finally {
+            context.endTransaction(oldNamespace)
         }
-        context.endTransaction()
 
         return result
     }
-    setFunctionName(action, name || fn.displayName || fn.name)
+    setFunctionName(action, name)
 
     return (action: any)
 }

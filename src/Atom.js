@@ -114,12 +114,6 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
     }
 
     get(force?: boolean): V {
-        if (force) {
-            this._pullPush(undefined, true)
-        } else {
-            this.actualize()
-        }
-
         const slave = this._context.last
         if (slave && (!slave.isComponent || !this.isComponent)) {
             let slaves = this._slaves
@@ -129,6 +123,12 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
             }
             slaves.add(slave)
             slave.addMaster(this)
+        }
+
+        if (force) {
+            this._pullPush(undefined, true)
+        } else {
+            this.actualize()
         }
 
         return (this.value: any)
@@ -163,6 +163,9 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
     }
 
     actualize(proposedValue?: V): void {
+        if (this.status === ATOM_STATUS_PULLING) {
+            throw new Error(`Cyclic atom dependency of ${String(this)}`)
+        }
         if (this.status === ATOM_STATUS_ACTUAL) {
             return
         }

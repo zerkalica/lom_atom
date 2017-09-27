@@ -14,12 +14,12 @@ export interface ILogger {
      * @param field string property name
      * @param key mixed | void for dictionary atoms - dictionary key
      */
-    create<V>(host: Object, field: string, key?: mixed): V | void;
+    create<V>(host: Object, field: string, key?: mixed, namespace: string): V | void;
 
     /**
      * After atom destroy
      */
-    destroy(atom: IAtom<*>): void;
+    destroy(atom: IAtom<*>, namespace: string): void;
 
     /**
      * Atom status changes
@@ -27,18 +27,18 @@ export interface ILogger {
          - 'proposeToReap' - atom probably will be destroyed on next tick
          - 'proposeToPull' - atom will be actualized on next tick
      */
-    status(status: ILoggerStatus, atom: IAtom<*>): void;
+    status(status: ILoggerStatus, atom: IAtom<*>, namespace: string): void;
 
     /**
      * Error while actualizing atom
      */
-    error<V>(atom: IAtom<V>, err: Error): void;
+    error<V>(atom: IAtom<V>, err: Error, namespace: string): void;
 
     /**
      * Atom value changed
      * @param isActualize bool if true - atom handler invoked, if false - only atom.cache value getted/setted
      */
-    newValue<V>(atom: IAtom<V>, from?: V | Error, to: V, isActualize?: boolean): void;
+    newValue<V>(atom: IAtom<V>, from?: V | Error, to: V, isActualize?: boolean, namespace: string): void;
 }
 
 export interface IContext {
@@ -50,8 +50,8 @@ export interface IContext {
     proposeToPull(atom: IAtomInt): void;
     proposeToReap(atom: IAtomInt): void;
     unreap(atom: IAtomInt): void;
-    beginTransaction(): void;
-    endTransaction(): void;
+    beginTransaction(namespace: string): string;
+    endTransaction(oldNamespace: string): void;
 }
 
 export const ATOM_STATUS_DESTROYED = 0

@@ -24,24 +24,24 @@ function reap(atom: IAtomInt, key: IAtomInt, reaping: Set<IAtomInt>) {
 }
 
 export class BaseLogger implements ILogger {
-    create<V>(host: Object, field: string, key?: mixed): V | void {}
-    destroy(atom: IAtom<*>): void {}
-    status(status: ILoggerStatus, atom: IAtom<*>): void {}
-    error<V>(atom: IAtom<V>, err: Error): void {}
-    newValue<V>(atom: IAtom<any>, from?: V | Error, to: V, isActualize?: boolean): void {}
+    create<V>(host: Object, field: string, key?: mixed, namespace: string): V | void {}
+    destroy(atom: IAtom<*>, namespace: string): void {}
+    status(status: ILoggerStatus, atom: IAtom<*>, namespace: string): void {}
+    error<V>(atom: IAtom<V>, err: Error, namespace: string): void {}
+    newValue<V>(atom: IAtom<any>, from?: V | Error, to: V, isActualize?: boolean, namespace: string): void {}
 }
 
 export class ConsoleLogger extends BaseLogger {
-    status(status: ILoggerStatus, atom: IAtom<*>): void {
-        console.log(status, atom.displayName)
+    status(status: ILoggerStatus, atom: IAtom<*>, namespace: string): void {
+        console.log(namespace, status, atom.displayName)
     }
 
-    error<V>(atom: IAtom<V>, err: Error): void {
-        console.log('error', atom.displayName, err)
+    error<V>(atom: IAtom<V>, err: Error, namespace: string): void {
+        console.log(namespace, 'error', atom.displayName, err)
     }
 
-    newValue<V>(atom: IAtom<V>, from?: V | Error, to: V, isActualize?: boolean): void {
-        console.log(isActualize ? 'actualize' : 'cacheSet', atom.displayName, 'from', from, 'to', to)
+    newValue<V>(atom: IAtom<V>, from?: V | Error, to: V, isActualize?: boolean, namespace: string): void {
+        console.log(namespace, isActualize ? 'actualize' : 'cacheSet', atom.displayName, 'from', from, 'to', to)
     }
 }
 
@@ -52,16 +52,17 @@ export default class Context implements IContext {
     _updating: IAtomInt[] = []
     _reaping: Set<IAtomInt> = new Set()
     _scheduled = false
+    _namespace: string = '$'
 
     create<V>(host: Object, field: string, key?: mixed): V | void {
         if (this._logger !== undefined) {
-            return this._logger.create(host, field, key)
+            return this._logger.create(host, field, key, this._namespace)
         }
     }
 
     destroyHost(atom: IAtomInt) {
         if (this._logger !== undefined) {
-            this._logger.destroy(atom)
+            this._logger.destroy(atom, this._namespace)
         }
     }
 
@@ -72,18 +73,18 @@ export default class Context implements IContext {
     newValue<V>(atom: IAtom<V>, from?: V | Error, to: V | Error, isActualize?: boolean) {
         if (this._logger !== undefined) {
             if (to instanceof AtomWait) {
-                this._logger.status('waiting', atom)
+                this._logger.status('waiting', atom, this._namespace)
             } else if (to instanceof Error) {
-                this._logger.error(atom, to)
+                this._logger.error(atom, to, this._namespace)
             } else {
-                this._logger.newValue(atom, from, to, isActualize)
+                this._logger.newValue(atom, from, to, isActualize, this._namespace)
             }
         }
     }
 
     proposeToPull(atom: IAtomInt) {
         if (this._logger !== undefined) {
-            this._logger.status('proposeToPull', atom)
+            this._logger.status('proposeToPull', atom, this._namespace)
         }
         this._updating.push(atom)
         this._schedule()
@@ -91,7 +92,7 @@ export default class Context implements IContext {
 
     proposeToReap(atom: IAtomInt) {
         if (this._logger !== undefined) {
-            this._logger.status('proposeToReap', atom)
+            this._logger.status('proposeToReap', atom, this._namespace)
         }
         this._reaping.add(atom)
         this._schedule()
@@ -147,11 +148,15 @@ export default class Context implements IContext {
 
     _pendCount = 0
 
-    beginTransaction() {
+    beginTransaction(namespace: string): string {
+        const result = this._namespace
+        this._namespace = namespace
         this._pendCount++
+        return result
     }
 
-    endTransaction() {
+    endTransaction(prev: string) {
+        this._namespace = prev
         if (this._pendCount === 1) {
             this._run()
         } else {
