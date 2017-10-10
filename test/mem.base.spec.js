@@ -2,7 +2,7 @@
 /* eslint-env mocha */
 
 import assert from 'assert'
-import mem, {action, memkey} from '../src/mem'
+import mem, {action, force, memkey} from '../src/mem'
 import {AtomWait} from '../src/utils'
 import {defaultContext} from '../src/Context'
 
@@ -205,11 +205,12 @@ describe('mem base', () => {
         let testResolve: ?() => void
 
         class Test {
+            @force $: Test
             @mem
             source(next?: string): string {
                 new Promise((resolve: () => void) => {
                     testResolve = () => {
-                        this.source('Jin')
+                        this.$.source('Jin')
                         resolve()
                     }
                 })

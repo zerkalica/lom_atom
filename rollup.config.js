@@ -12,7 +12,18 @@ const commonConf = {
     sourcemap: true,
     plugins: [
         babel(babelrc())
-    ].concat(process.env.UGLIFY === '1' ? [uglify({}, minify)] : []),
+    ].concat(process.env.UGLIFY === '1' ? [uglify({
+        warnings: true,
+        compress: {
+            dead_code: true,
+            unused: true,
+            toplevel: true,
+            warnings: true
+        },
+        mangle: {
+            toplevel: true
+        }
+    }, minify)] : []),
     output: [
         {file: pkg.module, format: 'es'},
     ]

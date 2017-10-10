@@ -58,13 +58,13 @@
     "babel-register": "^7.0.0-alpha.17",
     "babelrc-rollup": "^3.0.0",
     "chokidar-cli": "^1.2.0",
-    "flow-bin": "^0.54.0",
-    "mocha": "^3.5.0",
-    "rimraf": "^2.6.1",
-    "rollup": "^0.48.0",
+    "flow-bin": "^0.56.0",
+    "mocha": "^4.0.1",
+    "rimraf": "^2.6.2",
+    "rollup": "^0.48.2",
     "rollup-plugin-babel": "=3.0.0-alpha.17",
     "rollup-plugin-uglify": "^2.0.1",
     "standard-version": "^4.2.0",
-    "uglify-es": "^3.0.28"
+    "uglify-es": "^3.1.3"
   }
 }

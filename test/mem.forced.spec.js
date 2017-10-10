@@ -59,11 +59,11 @@ describe('mem forced', () => {
 
         fooCalled = false
         x.foo = 2
-        assert(fooCalled === false)
+        assert(fooCalled === true)
 
         fooCalled = false
         x.force.foo = 1
-        assert(fooCalled === true)
+        assert(fooCalled === false)
     })
 
 
@@ -90,7 +90,7 @@ describe('mem forced', () => {
 
         fooCalled = ''
         x.force.foo = x.foo + 1
-        assert(fooCalled === 'S')
+        assert(fooCalled === '')
     })
 
     it('increment property', () => {
@@ -116,7 +116,7 @@ describe('mem forced', () => {
 
         fooCalled = ''
         x.force.foo++
-        assert(fooCalled === 'GS')
+        assert(fooCalled === 'G')
     })
 
     it('method call', () => {
@@ -141,6 +141,6 @@ describe('mem forced', () => {
         const v = x.foo()
         fooCalled = ''
         x.force.foo(v + 1)
-        assert(fooCalled === 'S')
+        assert(fooCalled === '')
     })
 })

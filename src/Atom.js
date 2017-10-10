@@ -143,7 +143,7 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         if (normalized === undefined) {
             return (oldValue: any)
         }
-        if (!force || normalized instanceof Error) {
+        if (force || normalized instanceof Error) {
             this.status = ATOM_STATUS_ACTUAL
 
             this.value = normalized instanceof Error
