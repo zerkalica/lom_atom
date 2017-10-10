@@ -1,6 +1,6 @@
 {
   "name": "lom_atom",
-  "version": "1.1.4",
+  "version": "2.0.0",
   "description": "Alternative implementation of eigenmethod mol_atom state management library",
   "publishConfig": {
     "registry": "https://registry.npmjs.org"
@@ -13,6 +13,7 @@
   "main": "dist/lom_atom.js",
   "umd:main": "dist/lom_atom.umd.js",
   "scripts": {
+    "release.major": "npm test && npm run build && standard-version -r major && git push --follow-tags origin master && npm publish",
     "release.minor": "npm test && npm run build && standard-version -r minor && git push --follow-tags origin master && npm publish",
     "release": "npm test && npm run build && standard-version && git push --follow-tags origin master && npm publish",
     "build": "rimraf dist && rollup -c && cp index.js.flow.tpl $npm_package_main.flow && cp index.js.flow.tpl $npm_package_module.flow",

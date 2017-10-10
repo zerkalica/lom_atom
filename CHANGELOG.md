@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+<a name="2.0.0"></a>
+# [2.0.0](https://github.com/zerkalica/lom_atom/compare/v1.1.4...v2.0.0) (2017-10-10)
+
+
+
 <a name="1.1.4"></a>
 ## [1.1.4](https://github.com/zerkalica/lom_atom/compare/v1.1.3...v1.1.4) (2017-09-27)
 
