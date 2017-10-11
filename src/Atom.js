@@ -2,7 +2,8 @@
 
 import {
     catchedId,
-    ATOM_STATUS_DESTROYED, ATOM_STATUS_OBSOLETE, ATOM_STATUS_CHECKING, ATOM_STATUS_PULLING, ATOM_STATUS_ACTUAL
+    ATOM_STATUS_DESTROYED,
+    ATOM_STATUS_OBSOLETE, ATOM_STATUS_CHECKING, ATOM_STATUS_PULLING, ATOM_STATUS_ACTUAL
 } from './interfaces'
 
 import type {
@@ -12,7 +13,7 @@ import type {
     IAtomStatus,
     IContext,
     IAtomHandler,
-    IAtomHost
+    IAtomOwner
 } from './interfaces'
 
 import {defaultNormalize, createMock, AtomWait} from './utils'
@@ -38,7 +39,7 @@ function actualizeMaster(master: IAtomInt) {
 export default class Atom<V> implements IAtom<V>, IAtomInt {
     status: IAtomStatus
     field: string
-    host: IAtomHost
+    owner: IAtomOwner
     value: V | void
     key: mixed | void
     isComponent: boolean
@@ -47,22 +48,28 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
     _slaves: ?Set<IAtomInt> = null
     _context: IContext
     _normalize: INormalize<V>
+    _hostAtoms: WeakMap<Object, IAtom<*>> | Map<string, IAtom<*>>
+    _keyHash: string | void
 
     constructor(
         field: string,
-        host: IAtomHost,
+        owner: IAtomOwner,
         context: IContext,
+        hostAtoms: WeakMap<Object, IAtom<*>> | Map<string, IAtom<*>>,
         normalize?: INormalize<V>,
         key?: mixed,
-        isComponent?: boolean
+        keyHash?: string,
+        isComponent?: boolean,
     ) {
+        this._keyHash = keyHash
         this.key = key
         this.field = field
-        this.host = host
+        this.owner = owner
         this.isComponent = isComponent || false
         this._normalize = normalize || defaultNormalize
         this._context = context
-        this.value = context.create(host, field, key)
+        this.value = context.create(this)
+        this._hostAtoms = hostAtoms
         this.status = this.value === undefined ? ATOM_STATUS_OBSOLETE : ATOM_STATUS_ACTUAL
     }
 
@@ -71,12 +78,10 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
     }
 
     toString() {
-        const hc = this.host.constructor
+        const hc = this.owner.constructor
         const k = this.key
 
-        return (this.host.displayName || (hc ? String(hc.displayName || hc.name) : ''))
-            + '.'
-            + this.field
+        return this.field
             + (k
                 ? ('(' + (typeof k === 'function' ? (k.displayName || k.name) : String(k)) + ')')
                 : ''
@@ -87,30 +92,22 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         return this.value
     }
 
-    destroyed(isDestroyed?: boolean): boolean {
-        if (isDestroyed === undefined) {
-            return this.status === ATOM_STATUS_DESTROYED
+    destructor(): void {
+        if (this.status === ATOM_STATUS_DESTROYED) return
+        if (this._masters) {
+            this._masters.forEach(disleadThis, this)
+            this._masters = null
         }
-
-        if (isDestroyed) {
-            if (this.status !== ATOM_STATUS_DESTROYED) {
-                if (this._masters) {
-                    this._masters.forEach(disleadThis, this)
-                    this._masters = null
-                }
-                this._checkSlaves()
-                if (this.host.destroy !== undefined) {
-                    this.host.destroy(this.value, this.field, this.key)
-                }
-                this._context.destroyHost(this)
-                this.value = undefined
-                this.status = ATOM_STATUS_DESTROYED
-            }
-
-            return true
+        this._checkSlaves()
+        const hostAtoms = this._hostAtoms
+        if (hostAtoms instanceof WeakMap) {
+            hostAtoms.delete(this.owner)
+        } else if (this._keyHash) {
+            hostAtoms.delete(this._keyHash)
         }
-
-        return false
+        this._context.destroyHost(this)
+        this.value = undefined
+        this.status = ATOM_STATUS_DESTROYED
     }
 
     get(force?: boolean): V {
@@ -200,8 +197,8 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         try {
             newValue = this._normalize(
                 this.key === undefined
-                    ? (this.host: any)[this.field + '$'](proposedValue, force, value)
-                    : (this.host: any)[this.field + '$'](this.key, proposedValue, force, value),
+                    ? (this.owner: any)[this.field + '$'](proposedValue, force, value)
+                    : (this.owner: any)[this.field + '$'](this.key, proposedValue, force, value),
                 value
             )
         } catch (error) {

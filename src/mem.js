@@ -1,6 +1,6 @@
 // @flow
 
-import type {IAtom, IAtomHandler, IAtomHost, INormalize, IContext} from './interfaces'
+import type {IAtom, IAtomHandler, INormalize, IContext} from './interfaces'
 import {defaultContext} from './Context'
 import {AtomWait} from './utils'
 import Atom from './Atom'
@@ -15,13 +15,18 @@ type TypedPropertyDescriptor<T> = {
     set?: (value: T | Error) => void;
 }
 
+function getId(t: Object, hk: string): string {
+    return `${t.constructor.displayName || t.constructor.name}.${hk}`
+}
+
 function memMethod<V, P: Object>(
     proto: P,
-    name: string,
+    rname: string,
     descr: TypedPropertyDescriptor<*>,
     normalize?: INormalize<V>,
     isComponent?: boolean
 ): TypedPropertyDescriptor<*> {
+    const name = getId(proto, rname)
     if (descr.value === undefined) {
         throw new TypeError(`${name} is not an function (next?: V)`)
     }
@@ -34,10 +39,10 @@ function memMethod<V, P: Object>(
         }
     })
     const forcedFn = function (next?: V | Error, force?: boolean) {
-        return this[name](next, force === undefined ? true : force)
+        return this[rname](next, force === undefined ? true : force)
     }
     setFunctionName(forcedFn, `${name}*`)
-    proto[`${name}*`] = forcedFn
+    proto[`${rname}*`] = forcedFn
 
     return {
         enumerable: descr.enumerable,
@@ -45,7 +50,7 @@ function memMethod<V, P: Object>(
         value(next?: V | Error, force?: boolean): V {
             let atom: IAtom<V> | void = hostAtoms.get(this)
             if (atom === undefined) {
-                atom = new Atom(name, this, defaultContext, normalize, undefined, isComponent)
+                atom = new Atom(name, this, defaultContext, hostAtoms, normalize, undefined, undefined, isComponent)
                 hostAtoms.set(this, atom)
             }
 
@@ -86,10 +91,11 @@ function setFunctionName(fn: Function, name: string) {
 
 function memProp<V, P: Object>(
     proto: P,
-    name: string,
+    rname: string,
     descr: TypedPropertyDescriptor<V>,
     normalize?: INormalize<V>
 ): TypedPropertyDescriptor<V> {
+    const name = getId(proto, rname)
     const handlerKey = `${name}$`
     if (proto[handlerKey] !== undefined) {
         return (undefined: any)
@@ -118,7 +124,7 @@ function memProp<V, P: Object>(
         get() {
             let atom: IAtom<V> | void = hostAtoms.get(this)
             if (atom === undefined) {
-                atom = new Atom(name, this, defaultContext, normalize)
+                atom = new Atom(name, this, defaultContext, hostAtoms, normalize)
                 hostAtoms.set(this, atom)
             }
             if (isForced) {
@@ -130,7 +136,7 @@ function memProp<V, P: Object>(
         set(val: V | Error) {
             let atom: IAtom<V> | void = hostAtoms.get(this)
             if (atom === undefined) {
-                atom = new Atom(name, this, defaultContext, normalize)
+                atom = new Atom(name, this, defaultContext, hostAtoms, normalize)
                 hostAtoms.set(this, atom)
             }
             if (isForced) {
@@ -167,10 +173,11 @@ function getKey(params: any): string {
 
 function memKeyMethod<V, K, P: Object>(
     proto: P,
-    name: string,
+    rname: string,
     descr: TypedPropertyDescriptor<IAtomHandler<V, K>>,
     normalize?: INormalize<V>
 ): TypedPropertyDescriptor<IAtomHandler<V, K>> {
+    const name = getId(proto, rname)
     const handler = descr.value
     if (handler === undefined) {
         throw new TypeError(`${name} is not an function (rawKey: K, next?: V)`)
@@ -183,10 +190,10 @@ function memKeyMethod<V, K, P: Object>(
         }
     })
     const forcedFn = function (rawKey: K, next?: V | Error, force?: boolean) {
-        return this[name](rawKey, next, force === undefined ? true : force)
+        return this[rname](rawKey, next, force === undefined ? true : force)
     }
     setFunctionName(forcedFn, `${name}*`)
-    proto[`${name}*`] = forcedFn
+    proto[`${rname}*`] = forcedFn
 
     return {
         enumerable: descr.enumerable,
@@ -200,7 +207,7 @@ function memKeyMethod<V, K, P: Object>(
             const key = getKey(rawKey)
             let atom: IAtom<V> | void = atomMap.get(key)
             if (atom === undefined) {
-                atom = new Atom(name, this, defaultContext, normalize, rawKey)
+                atom = new Atom(name, this, defaultContext, atomMap, normalize, rawKey, key)
                 atomMap.set(key, atom)
             }
 
@@ -298,7 +305,7 @@ type IMemProp<V, P: Object> = (
 ) => TypedPropertyDescriptor<IAtomHandler<V>>
 
 function createActionMethod(t: Object, hk: string, context: IContext): (...args: any[]) => any {
-    const name = `${t.displayName || t.constructor.displayName || t.constructor.name}.${hk}`
+    const name = getId(t, hk)
     function action() {
         let result: mixed | void
         const oldNamespace = context.beginTransaction(name)

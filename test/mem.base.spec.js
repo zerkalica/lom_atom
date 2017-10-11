@@ -30,6 +30,7 @@ describe('mem base', () => {
         }
         class UserService implements IUserService {
             @mem currentUserId: number = 1
+            @force $: UserService
 
             @memkey
             userById(id: number, next?: IUser): IUser {
@@ -37,7 +38,7 @@ describe('mem base', () => {
                 if (next !== undefined) return next
 
                 setTimeout(() => {
-                    this.userById(id, {
+                    this.$.userById(id, {
                         name: 'test' + id,
                         email: 'test' + id + '@t.t'
                     })
@@ -46,12 +47,10 @@ describe('mem base', () => {
                 throw new AtomWait()
             }
 
-            @mem
-            get currentUser(): IUser {
+            @mem get currentUser(): IUser {
                 return this.userById(this.currentUserId)
             }
-
-            set currentUser(next: IUser) {}
+            @mem set currentUser(next: IUser) {}
 
             get fullName(): string {
                 const {name, email} = this.currentUser
@@ -61,6 +60,7 @@ describe('mem base', () => {
 
         const x = new UserService()
         const user1 = x.userById(1)
+        assert(userByIdCalled === true)
 
         userByIdCalled = false
         x.userById(1)
@@ -73,13 +73,14 @@ describe('mem base', () => {
         userByIdCalled = false
         x.userById(2)
         assert(userByIdCalled === false)
-
         assert(user1 === x.currentUser)
         x.currentUser = {
             name: 'test2',
             email: 'test2@t.t'
         }
+        sync()
         assert(x.fullName === 'test2 <test2@t.t>')
+
     })
 
     it('auto sync of properties', () => {

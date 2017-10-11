@@ -10,16 +10,16 @@ export interface ILogger {
     /**
      * Invokes before atom creating
      *
-     * @param host Object Object with atom
+     * @param owner Object Object with atom
      * @param field string property name
      * @param key mixed | void for dictionary atoms - dictionary key
      */
-    create<V>(host: Object, field: string, key?: mixed, namespace: string): V | void;
+    create<V>(owner: Object, field: string, key?: mixed, namespace: string): V | void;
 
     /**
-     * After atom destroy
+     * After atom destructor
      */
-    destroy(atom: IAtom<*>, namespace: string): void;
+    onDestruct(atom: IAtom<*>, namespace: string): void;
 
     /**
      * Atom status changes
@@ -43,7 +43,7 @@ export interface ILogger {
 
 export interface IContext {
     last: ?IAtomInt;
-    create<V>(host: Object, field: string, key?: mixed): V | void;
+    create<V>(atom: IAtomInt): V | void;
     destroyHost(atom: IAtomInt): void;
     newValue<V>(t: IAtom<V>, from?: V | Error, to: V | Error, isActualize?: boolean): void;
     setLogger(logger: ILogger): void;
@@ -53,7 +53,6 @@ export interface IContext {
     beginTransaction(namespace: string): string;
     endTransaction(oldNamespace: string): void;
 }
-
 export const ATOM_STATUS_DESTROYED = 0
 export const ATOM_STATUS_OBSOLETE = 1
 export const ATOM_STATUS_CHECKING = 2
@@ -62,7 +61,7 @@ export const ATOM_STATUS_ACTUAL = 4
 
 export const catchedId = Symbol('lom_atom_catched')
 
-export type IAtomStatus = typeof ATOM_STATUS_DESTROYED | typeof ATOM_STATUS_OBSOLETE
+export type IAtomStatus = typeof ATOM_STATUS_OBSOLETE
     | typeof ATOM_STATUS_CHECKING | typeof ATOM_STATUS_PULLING | typeof ATOM_STATUS_ACTUAL
 
 export interface IAtom<V> {
@@ -72,13 +71,13 @@ export interface IAtom<V> {
     +displayName: string;
     get(force?: boolean): V;
     set(v: V | Error, force?: boolean): V;
-    destroyed(isDestroyed?: boolean): boolean;
+    destructor(): void;
 }
 
 export interface IAtomInt extends IAtom<*> {
     isComponent: boolean;
     key: mixed | void;
-    host: IAtomHost;
+    owner: IAtomOwner;
 
     actualize(): void;
     check(): void;
@@ -92,8 +91,8 @@ export type IAtomHandler<V, K> = (key: K, next?: V | Error, force?: boolean, old
 
 export type INormalize<V> = (next: V, prev?: V) => V
 
-export interface IAtomHost {
+export interface IAtomOwner {
     displayName?: string;
     [key: string]: IAtomHandler<*, *>;
-    destroy?: (value: mixed, field: string, key?: mixed) => void;
+    destructor?: (value: mixed, field: string, key?: mixed) => void;
 }

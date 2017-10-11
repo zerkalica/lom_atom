@@ -9,6 +9,7 @@ import type {
     ILogger,
     ILoggerStatus
 } from './interfaces'
+import {ATOM_STATUS_DESTROYED, ATOM_STATUS_ACTUAL} from './interfaces'
 import {AtomWait} from './utils'
 import Atom from './Atom'
 
@@ -19,13 +20,13 @@ const scheduleNative: (handler: () => void) => number = typeof requestAnimationF
 function reap(atom: IAtomInt, key: IAtomInt, reaping: Set<IAtomInt>) {
     reaping.delete(atom)
     if (!atom.slaves) {
-        atom.destroyed(true)
+        atom.destructor()
     }
 }
 
 export class BaseLogger implements ILogger {
-    create<V>(host: Object, field: string, key?: mixed, namespace: string): V | void {}
-    destroy(atom: IAtom<*>, namespace: string): void {}
+    create<V>(owner: Object, field: string, key?: mixed, namespace: string): V | void {}
+    onDestruct(atom: IAtom<*>, namespace: string): void {}
     status(status: ILoggerStatus, atom: IAtom<*>, namespace: string): void {}
     error<V>(atom: IAtom<V>, err: Error, namespace: string): void {}
     newValue<V>(atom: IAtom<any>, from?: V | Error, to: V, isActualize?: boolean, namespace: string): void {}
@@ -53,16 +54,29 @@ export default class Context implements IContext {
     _reaping: Set<IAtomInt> = new Set()
     _scheduled = false
     _namespace: string = '$'
+    _owners: WeakMap<Object, Object> = new WeakMap()
 
-    create<V>(host: Object, field: string, key?: mixed): V | void {
+    create<V>(atom: IAtomInt): V | void {
+        this._owners.set(atom, atom.owner)
         if (this._logger !== undefined) {
-            return this._logger.create(host, field, key, this._namespace)
+            return this._logger.create(atom.owner, atom.field, atom.key, this._namespace)
         }
     }
 
     destroyHost(atom: IAtomInt) {
+        const from = atom.value
+        if (
+            from
+            && !(from instanceof Error)
+            && typeof from === 'object'
+            && typeof from.destructor === 'function'
+            && this._owners.get(from) === atom
+        ) {
+            from.destructor()
+            this._owners.delete(from)
+        }
         if (this._logger !== undefined) {
-            this._logger.destroy(atom, this._namespace)
+            this._logger.onDestruct(atom, this._namespace)
         }
     }
 
@@ -71,6 +85,24 @@ export default class Context implements IContext {
     }
 
     newValue<V>(atom: IAtom<V>, from?: V | Error, to: V | Error, isActualize?: boolean) {
+        if (
+            from
+            && !(from instanceof Error)
+            && typeof from === 'object'
+            && typeof from.destructor === 'function'
+            && this._owners.get(from) === atom
+        ) {
+            from.destructor()
+            this._owners.delete(from)
+        }
+        if (
+            to
+            && !(to instanceof Error)
+            && typeof to === 'object'
+            && typeof to.destructor === 'function'
+        ) {
+            this._owners.set(to, atom)
+        }
         if (this._logger !== undefined) {
             if (to instanceof AtomWait) {
                 this._logger.status('waiting', atom, this._namespace)
@@ -129,7 +161,7 @@ export default class Context implements IContext {
             for (let i = start; i < end; i++) {
                 this._start = i // save progress, atom.actualize or destroyed can throw exception
                 const atom: IAtomInt = updating[i]
-                if (!reaping.has(atom) && !atom.destroyed()) {
+                if (!reaping.has(atom) && atom.status !== ATOM_STATUS_DESTROYED) {
                     atom.actualize()
                 }
             }

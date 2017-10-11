@@ -10,7 +10,7 @@ import {IAtom, catchedId, ATOM_STATUS_OBSOLETE, ATOM_STATUS_ACTUAL} from '../src
 describe('Atom', () => {
     function atom<V>(key: string, fn: Function): IAtom<V> {
         const host: {[id: string]: any} = {[key + '$']: fn}
-        return new Atom(key, host, defaultContext)
+        return new Atom(key, host, defaultContext, new Map())
     }
 
     function sync() {
@@ -100,7 +100,8 @@ describe('Atom', () => {
         sync()
         assert(s.get() === 2)
         assert(b.status === ATOM_STATUS_ACTUAL)
-        assert(a.destroyed() === true)
+        a.destructor()
+        assert(a.value === undefined)
     })
 
     // it('automatic deferred restart', () => {

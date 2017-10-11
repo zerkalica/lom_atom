@@ -12,22 +12,22 @@ describe('mem.destroy must be deferred destroyed when no longer referenced', () 
     }
 
     it('any property in host object', () => {
-        let destroyed: string = ''
+        let destroyed = false
 
         class A {
             @mem
             foo(): number {
-                destroyed = ''
+                destroyed = false
                 return 1
             }
 
-            destroy(value?: number, key: string) {
-                destroyed = key
+            destructor() {
+                destroyed = true
             }
         }
 
         class B {
-            _a = new A()
+            @mem _a = new A()
 
             @mem
             showing(next?: boolean): boolean {
@@ -47,16 +47,16 @@ describe('mem.destroy must be deferred destroyed when no longer referenced', () 
         const b = new B()
         assert(b.bar() === 1)
 
+        assert(destroyed === false)
         b.showing(false)
         b.bar()
         sync()
 
-        assert(destroyed === 'foo')
-
+        assert(destroyed === true)
         b.showing(true)
         sync()
 
-        assert(destroyed === '')
+        assert(destroyed === false)
     })
 
     it('all properties in host object', () => {
@@ -69,13 +69,13 @@ describe('mem.destroy must be deferred destroyed when no longer referenced', () 
                 return 1
             }
 
-            destroy() {
+            destructor() {
                 destroyed = true
             }
         }
 
         class B {
-            _a = new A()
+            @mem _a = new A()
 
             @mem
             showing(next?: boolean): boolean {
