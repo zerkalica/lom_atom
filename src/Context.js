@@ -1,7 +1,6 @@
 // @flow
 
 import type {
-    INormalize,
     IAtomHandler,
     IAtomInt,
     IAtom,
@@ -27,12 +26,17 @@ function reap(atom: IAtomInt, key: IAtomInt, reaping: Set<IAtomInt>) {
 export class BaseLogger implements ILogger {
     create<V>(owner: Object, field: string, key?: mixed, namespace: string): V | void {}
     onDestruct(atom: IAtom<*>, namespace: string): void {}
+    sync() {}
     status(status: ILoggerStatus, atom: IAtom<*>, namespace: string): void {}
     error<V>(atom: IAtom<V>, err: Error, namespace: string): void {}
     newValue<V>(atom: IAtom<any>, from?: V | Error, to: V, isActualize?: boolean, namespace: string): void {}
 }
 
 export class ConsoleLogger extends BaseLogger {
+    sync() {
+        console.log('sync')
+    }
+
     status(status: ILoggerStatus, atom: IAtom<*>, namespace: string): void {
         console.log(namespace, status, atom.displayName)
     }
@@ -63,8 +67,7 @@ export default class Context implements IContext {
         }
     }
 
-    destroyHost(atom: IAtomInt) {
-        const from = atom.value
+    _destroyValue<V>(atom: IAtom<V>, from?: V | Error) {
         if (
             from
             && !(from instanceof Error)
@@ -75,6 +78,10 @@ export default class Context implements IContext {
             from.destructor()
             this._owners.delete(from)
         }
+    }
+
+    destroyHost(atom: IAtomInt) {
+        this._destroyValue(atom, atom.value)
         if (this._logger !== undefined) {
             this._logger.onDestruct(atom, this._namespace)
         }
@@ -85,16 +92,7 @@ export default class Context implements IContext {
     }
 
     newValue<V>(atom: IAtom<V>, from?: V | Error, to: V | Error, isActualize?: boolean) {
-        if (
-            from
-            && !(from instanceof Error)
-            && typeof from === 'object'
-            && typeof from.destructor === 'function'
-            && this._owners.get(from) === atom
-        ) {
-            from.destructor()
-            this._owners.delete(from)
-        }
+        this._destroyValue(atom, (from: any))
         if (
             to
             && !(to instanceof Error)
@@ -109,7 +107,7 @@ export default class Context implements IContext {
             } else if (to instanceof Error) {
                 this._logger.error(atom, to, this._namespace)
             } else {
-                this._logger.newValue(atom, from, to, isActualize, this._namespace)
+                this._logger.newValue(atom, from instanceof Error ? undefined : from, to, isActualize, this._namespace)
             }
         }
     }
@@ -155,6 +153,9 @@ export default class Context implements IContext {
         const reaping = this._reaping
         const updating = this._updating
         let start = this._start
+        if (this._logger !== undefined) {
+            this._logger.sync()
+        }
         do {
             const end = updating.length
 

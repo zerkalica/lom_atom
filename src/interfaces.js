@@ -7,6 +7,8 @@ export type NamesOf<F> = {+[id: $Keys<ResultOf<F>>]: string}
 export type ILoggerStatus = 'waiting' | 'proposeToReap' | 'proposeToPull'
 
 export interface ILogger {
+    sync(): void;
+
     /**
      * Invokes before atom creating
      *
@@ -66,7 +68,7 @@ export type IAtomStatus = typeof ATOM_STATUS_OBSOLETE
 
 export interface IAtom<V> {
     status: IAtomStatus;
-    value: V | void;
+    value: V | Error | void;
     +field: string;
     +displayName: string;
     get(force?: boolean): V;
@@ -88,8 +90,6 @@ export interface IAtomInt extends IAtom<*> {
 //  | Error
 export type IAtomHandler<V, K> = (key: K, next?: V | Error, force?: boolean, oldValue?: V) => V
     | (next?: V | Error, force?: boolean, oldValue?: V) => V
-
-export type INormalize<V> = (next: V, prev?: V) => V
 
 export interface IAtomOwner {
     displayName?: string;

@@ -8,7 +8,6 @@ import {
 
 import type {
     IAtom,
-    INormalize,
     IAtomInt,
     IAtomStatus,
     IContext,
@@ -16,7 +15,8 @@ import type {
     IAtomOwner
 } from './interfaces'
 
-import {defaultNormalize, createMock, AtomWait} from './utils'
+import {createMock, AtomWait} from './utils'
+import conform from './conform'
 
 function checkSlave(slave: IAtomInt) {
     slave.check()
@@ -27,27 +27,31 @@ function obsoleteSlave(slave: IAtomInt) {
 }
 
 function disleadThis(master: IAtomInt) {
+    (this: Atom<*>);
     master.dislead(this)
 }
 
 function actualizeMaster(master: IAtomInt) {
+    (this: Atom<*>);
     if (this.status === ATOM_STATUS_CHECKING) {
         master.actualize()
     }
 }
-
 export default class Atom<V> implements IAtom<V>, IAtomInt {
     status: IAtomStatus
     field: string
     owner: IAtomOwner
-    value: V | void
+
+    value: V | Error | void
+    _next: V | Error | void
+    _ignore: V | Error | void
+
     key: mixed | void
     isComponent: boolean
 
     _masters: ?Set<IAtomInt> = null
     _slaves: ?Set<IAtomInt> = null
     _context: IContext
-    _normalize: INormalize<V>
     _hostAtoms: WeakMap<Object, IAtom<*>> | Map<string, IAtom<*>>
     _keyHash: string | void
 
@@ -56,7 +60,6 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         owner: IAtomOwner,
         context: IContext,
         hostAtoms: WeakMap<Object, IAtom<*>> | Map<string, IAtom<*>>,
-        normalize?: INormalize<V>,
         key?: mixed,
         keyHash?: string,
         isComponent?: boolean,
@@ -66,9 +69,10 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         this.field = field
         this.owner = owner
         this.isComponent = isComponent || false
-        this._normalize = normalize || defaultNormalize
         this._context = context
         this.value = context.create(this)
+        this._next = undefined
+        this._ignore = undefined
         this._hostAtoms = hostAtoms
         this.status = this.value === undefined ? ATOM_STATUS_OBSOLETE : ATOM_STATUS_ACTUAL
     }
@@ -99,15 +103,15 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
             this._masters = null
         }
         this._checkSlaves()
-        const hostAtoms = this._hostAtoms
-        if (hostAtoms instanceof WeakMap) {
-            hostAtoms.delete(this.owner)
-        } else if (this._keyHash) {
-            hostAtoms.delete(this._keyHash)
-        }
+        this._hostAtoms.delete(((this._keyHash || this.owner): any))
         this._context.destroyHost(this)
         this.value = undefined
+        this._next = undefined
+        this._ignore = undefined
         this.status = ATOM_STATUS_DESTROYED
+        this._hostAtoms = (undefined: any)
+        this.key = undefined
+        this._keyHash = undefined
     }
 
     get(force?: boolean): V {
@@ -123,7 +127,7 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         }
 
         if (force) {
-            this._pullPush(undefined, true)
+            this._push(this._pull(true))
         } else {
             this.actualize()
         }
@@ -131,41 +135,29 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         return (this.value: any)
     }
 
-    set(v: V | Error, force?: boolean): V {
-        let oldValue = this.value
-        const normalized: V = this._normalize((v: any), oldValue)
-        if (oldValue === normalized) {
-            return normalized
-        }
-        if (normalized === undefined) {
-            return (oldValue: any)
-        }
-        if (force || normalized instanceof Error) {
-            this.status = ATOM_STATUS_ACTUAL
+    set(next: V | Error, force?: boolean): V {
+        if (force) return this._push(next)
 
-            this.value = normalized instanceof Error
-                ? createMock(normalized)
-                : normalized
-
-            this._context.newValue(this, oldValue, normalized)
-            if (this._slaves) {
-                this._slaves.forEach(obsoleteSlave)
-            }
-        } else {
-            this.obsolete()
-            this.actualize(normalized)
+        let normalized: V | Error = conform(next, this._ignore)
+        if (normalized === this._ignore) {
+            return (this.value: any)
         }
+
+        normalized = conform(next, this.value)
+        if (normalized === this.value) return (this.value: any)
+
+        this._ignore = this._next = normalized
+        this.obsolete()
+        this.actualize()
 
         return (this.value: any)
     }
 
-    actualize(proposedValue?: V): void {
+    actualize(): void {
         if (this.status === ATOM_STATUS_PULLING) {
             throw new Error(`Cyclic atom dependency of ${String(this)}`)
         }
-        if (this.status === ATOM_STATUS_ACTUAL) {
-            return
-        }
+        if (this.status === ATOM_STATUS_ACTUAL) return
 
         if (this.status === ATOM_STATUS_CHECKING) {
             if (this._masters) {
@@ -178,48 +170,58 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         }
 
         if (this.status !== ATOM_STATUS_ACTUAL) {
-            this._pullPush(proposedValue)
+            this._push(this._pull())
         }
     }
 
-    _pullPush(proposedValue?: V, force?: boolean): void {
+    _push(nextRaw: V | Error): V {
+        this.status = ATOM_STATUS_ACTUAL
+        if (!(nextRaw instanceof AtomWait)) {
+            this._ignore = this._next
+            this._next = undefined
+        }
+        const prev = this.value
+        if (nextRaw === undefined) return (prev: any)
+        const next: V | Error = nextRaw instanceof Error
+            ? createMock(nextRaw)
+            : (prev instanceof Error ? nextRaw : conform(nextRaw, prev))
+
+        if (prev !== next) {
+            this.value = next
+            this._context.newValue(this, prev, next, true)
+            if (this._slaves) {
+                this._slaves.forEach(obsoleteSlave)
+            }
+        }
+
+        return (next: any)
+    }
+
+    _pull(force?: boolean): V | Error {
         if (this._masters) {
             this._masters.forEach(disleadThis, this)
         }
-        let newValue: V
+        let newValue: V | Error
 
         this.status = ATOM_STATUS_PULLING
 
         const context = this._context
         const slave = context.last
         context.last = this
-        const value = this.value
         try {
-            newValue = this._normalize(
-                this.key === undefined
-                    ? (this.owner: any)[this.field + '$'](proposedValue, force, value)
-                    : (this.owner: any)[this.field + '$'](this.key, proposedValue, force, value),
-                value
-            )
+            newValue = this.key === undefined
+                ? (this.owner: any)[this.field + '$'](this._next, force, this.value)
+                : (this.owner: any)[this.field + '$'](this.key, this._next, force, this.value)
         } catch (error) {
             if (error[catchedId] === undefined) {
                 error[catchedId] = true
                 console.error(error.stack || error)
             }
-            newValue = createMock(error)
+            newValue = error instanceof Error ? error : new Error(error.stack || error)
         }
-
         context.last = slave
 
-        this.status = ATOM_STATUS_ACTUAL
-
-        if (newValue !== undefined && value !== newValue) {
-            this.value = newValue
-            this._context.newValue(this, value, newValue, true)
-            if (this._slaves) {
-                this._slaves.forEach(obsoleteSlave)
-            }
-        }
+        return newValue
     }
 
     dislead(slave: IAtomInt) {
