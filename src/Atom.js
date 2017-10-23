@@ -138,12 +138,12 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
     set(next: V | Error, force?: boolean): V {
         if (force) return this._push(next)
 
-        let normalized: V | Error = conform(next, this._ignore)
+        let normalized: V | Error = conform(next, this._ignore, this.isComponent)
         if (normalized === this._ignore) {
             return (this.value: any)
         }
 
-        normalized = conform(next, this.value)
+        normalized = conform(next, this.value, this.isComponent)
         if (normalized === this.value) return (this.value: any)
 
         this._ignore = this._next = normalized
@@ -184,7 +184,7 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         if (nextRaw === undefined) return (prev: any)
         const next: V | Error = nextRaw instanceof Error
             ? createMock(nextRaw)
-            : (prev instanceof Error ? nextRaw : conform(nextRaw, prev))
+            : (prev instanceof Error ? nextRaw : conform(nextRaw, prev, this.isComponent))
 
         if (prev !== next) {
             this.value = next

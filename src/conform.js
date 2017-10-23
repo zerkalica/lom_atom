@@ -7,7 +7,7 @@ export const handlers: Map<any, Function> = new Map([
             let equal = target.length === source.length
 
             for(let i = 0; i < target.length; ++i) {
-                const conformed = target[i] = conform(target[i], source[i], stack)
+                const conformed = target[i] = conform(target[i], source[i], false, stack)
                 if (equal && conformed !== source[i]) equal = false
             }
 
@@ -21,7 +21,7 @@ export const handlers: Map<any, Function> = new Map([
             let equal = true
 
             for (let key in target) {
-                const conformed = target[key] = conform(target[key], source[key], stack)
+                const conformed = target[key] = conform(target[key], source[key], false, stack)
                 if (equal && conformed !== source[key]) equal = false
                 ++count
             }
@@ -45,18 +45,20 @@ export const handlers: Map<any, Function> = new Map([
     ]
 ])
 
-export default function conform<Target, Source>(target: Target, source: Source, stack: any[] = []): Target {
+export default function conform<Target, Source>(target: Target, source: Source, isComponent: boolean, stack: any[] = []): Target {
     if (target === source) return (source: any)
 
-    if (!target || typeof target !== 'object' ) return target
-    if (!source || typeof source !== 'object' ) return target
-
-    if( target.constructor !== source.constructor ) return target
+    if (
+        isComponent
+        || !target || typeof target !== 'object'
+        || !source || typeof source !== 'object'
+        || target.constructor !== source.constructor
+    ) return target
 
     const conformHandler = handlers.get(target.constructor)
     if (!conformHandler) return target
 
-    if (stack.indexOf( target ) !== -1) return target
+    if (stack.indexOf(target) !== -1) return target
     stack.push(target)
     const res = conformHandler(target, source, stack)
     stack.pop()
