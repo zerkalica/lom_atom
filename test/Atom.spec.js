@@ -21,7 +21,7 @@ describe('Atom', () => {
     it('caching', () => {
         let random = atom('random', () => Math.random())
 
-        assert(random.get() === random.get())
+        assert(random.value() === random.value())
     })
 
     it('lazyness', () => {
@@ -34,31 +34,31 @@ describe('Atom', () => {
 
     it('instant actualization', () => {
         let source = atom('source', (next?: number) => next || 1)
-        let middle = atom('middle', () => source.get() + 1)
-        let target = atom('target', () => middle.get() + 1)
+        let middle = atom('middle', () => source.value() + 1)
+        let target = atom('target', () => middle.value() + 1)
 
-        assert(target.get() === 3)
+        assert(target.value() === 3)
 
-        source.set(2)
+        source.value(2)
 
-        assert(target.get() === 4)
+        assert(target.value() === 4)
     })
 
     it('do not actualize when masters not changed', () => {
         let targetUpdates = 0
 
         let source = atom('source', (next? : number) => next || 1)
-        let middle = atom('middle', () => Math.abs(source.get()))
+        let middle = atom('middle', () => Math.abs(source.value()))
         let target = atom('target', () => {
             ++ targetUpdates
-            return middle.get()
+            return middle.value()
         })
 
-        target.get()
+        target.value()
         assert(targetUpdates === 1)
 
-        source.set(-1)
-        target.get()
+        source.value(-1)
+        target.value()
 
         assert(targetUpdates === 1)
     })
@@ -70,18 +70,18 @@ describe('Atom', () => {
         let source = atom('source', (next?: number) => next || 1)
         let middle = atom('middle', () => {
             actualizations += 'M'
-            return source.get()
+            return source.value()
         })
         let target = atom('target', () => {
             actualizations += 'T'
-            source.get()
-            return middle.get()
+            source.value()
+            return middle.value()
         })
 
-        target.get()
+        target.value()
         assert(actualizations === 'TM')
 
-        source.set(2)
+        source.value(2)
         sync()
 
         assert(actualizations, 'TMTM')
@@ -91,27 +91,27 @@ describe('Atom', () => {
         let c = atom('c', (next?: number = 1) => next)
         let a = atom('a', () => 1)
         let b = atom('b', () => 2)
-        let s = atom('s', () => c.get() === 0 ? b.get() : a.get())
+        let s = atom('s', () => c.value() === 0 ? b.value() : a.value())
 
-        assert(s.get() === 1)
+        assert(s.value() === 1)
         assert(b.status === ATOM_STATUS_OBSOLETE)
         assert(a.status === ATOM_STATUS_ACTUAL)
-        c.set(0)
+        c.value(0)
         sync()
-        assert(s.get() === 2)
+        assert(s.value() === 2)
         assert(b.status === ATOM_STATUS_ACTUAL)
         a.destructor()
-        assert(a.value === undefined)
+        assert(a.current === undefined)
     })
 
     // it('automatic deferred restart', () => {
     //     let targetValue: number = 0
     //     let source = atom('source', (next?: number) => next || 1)
-    //     let middle = atom('middle', () => source.get() + 1)
-    //     let target = atom('target', () => targetValue = middle.get() + 1)
-    //     target.get()
+    //     let middle = atom('middle', () => source.value() + 1)
+    //     let target = atom('target', () => targetValue = middle.value() + 1)
+    //     target.value()
     //     assert(targetValue === 3)
-    //     source.set(2)
+    //     source.value(2)
     //     assert(targetValue === 3)
     //     sync()
     //     assert(targetValue === 4)
@@ -129,7 +129,7 @@ describe('Atom', () => {
             }
 
             setTimeout(() => {
-                source.set(1)
+                source.value(1)
                 setTimeout(() => resolve(), 30)
                 // resolve()
             }, 0)
@@ -137,12 +137,12 @@ describe('Atom', () => {
         })
 
         let middle = atom('middle', () => {
-            targetValue = source.get() + 1
+            targetValue = source.value() + 1
             return targetValue
         })
 
         assert.throws(() => {
-            middle.get().valueOf()
+            middle.value().valueOf()
         })
 
         return promise
@@ -157,11 +157,11 @@ describe('Atom', () => {
         let source = atom('source', (next?: number) => {
             throw error
         })
-        let middle = atom('middle', () => source.get() + 1)
-        let target = atom('target', () => middle.get() + 1)
+        let middle = atom('middle', () => source.value() + 1)
+        let target = atom('target', () => middle.value() + 1)
 
         assert.throws(() => {
-            target.get().valueOf()
+            target.value().valueOf()
         })
     })
 })

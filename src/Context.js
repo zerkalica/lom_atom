@@ -2,13 +2,14 @@
 
 import type {
     IAtomHandler,
+    IAtomForce,
     IAtomInt,
     IAtom,
     IContext,
     ILogger,
     ILoggerStatus
 } from './interfaces'
-import {ATOM_STATUS_DESTROYED, ATOM_STATUS_ACTUAL} from './interfaces'
+import {ATOM_FORCE_NONE, ATOM_STATUS_DESTROYED, ATOM_STATUS_ACTUAL} from './interfaces'
 import {AtomWait} from './utils'
 import Atom from './Atom'
 
@@ -81,7 +82,7 @@ export default class Context implements IContext {
     }
 
     destroyHost(atom: IAtomInt) {
-        this._destroyValue(atom, atom.value)
+        this._destroyValue(atom, atom.current)
         if (this._logger !== undefined) {
             this._logger.onDestruct(atom, this._namespace)
         }

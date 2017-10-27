@@ -2,12 +2,17 @@
 
 import {
     catchedId,
+    ATOM_FORCE_NONE,
+    ATOM_FORCE_CACHE,
+    ATOM_FORCE_UPDATE,
+
     ATOM_STATUS_DESTROYED,
     ATOM_STATUS_OBSOLETE, ATOM_STATUS_CHECKING, ATOM_STATUS_PULLING, ATOM_STATUS_ACTUAL
 } from './interfaces'
 
 import type {
     IAtom,
+    IAtomForce,
     IAtomInt,
     IAtomStatus,
     IContext,
@@ -42,9 +47,9 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
     field: string
     owner: IAtomOwner
 
-    value: V | Error | void
+    current: V | Error | void
     _next: V | Error | void
-    _ignore: V | Error | void
+    _suggested: V | Error | void
 
     key: mixed | void
     isComponent: boolean
@@ -70,11 +75,11 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         this.owner = owner
         this.isComponent = isComponent || false
         this._context = context
-        this.value = context.create(this)
+        this.current = context.create(this)
         this._next = undefined
-        this._ignore = undefined
+        this._suggested = undefined
         this._hostAtoms = hostAtoms
-        this.status = this.value === undefined ? ATOM_STATUS_OBSOLETE : ATOM_STATUS_ACTUAL
+        this.status = this.current === undefined ? ATOM_STATUS_OBSOLETE : ATOM_STATUS_ACTUAL
     }
 
     get displayName(): string {
@@ -93,7 +98,7 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
     }
 
     toJSON() {
-        return this.value
+        return this.current
     }
 
     destructor(): void {
@@ -105,16 +110,16 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         this._checkSlaves()
         this._hostAtoms.delete(((this._keyHash || this.owner): any))
         this._context.destroyHost(this)
-        this.value = undefined
+        this.current = undefined
         this._next = undefined
-        this._ignore = undefined
+        this._suggested = undefined
         this.status = ATOM_STATUS_DESTROYED
         this._hostAtoms = (undefined: any)
         this.key = undefined
         this._keyHash = undefined
     }
 
-    get(force?: boolean): V {
+    _get(force?: IAtomForce): V {
         const slave = this._context.last
         if (slave && (!slave.isComponent || !this.isComponent)) {
             let slaves = this._slaves
@@ -127,30 +132,29 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         }
 
         if (force) {
-            this._push(this._pull(true))
+            this._push(this._pull(force))
         } else {
             this.actualize()
         }
 
-        return (this.value: any)
+        return (this.current: any)
     }
 
-    set(next: V | Error, force?: boolean): V {
-        if (force) return this._push(next)
+    value(next?: V | Error, force?: IAtomForce): V {
+        if (next === undefined) return this._get(force)
+        if (force === ATOM_FORCE_CACHE) return this._push(next)
 
-        let normalized: V | Error = conform(next, this._ignore, this.isComponent)
-        if (normalized === this._ignore) {
-            return (this.value: any)
+        let normalized: V | Error = conform(next, this._suggested, this.isComponent)
+        if (normalized === this._suggested) return this._get(force)
+
+        if (!(this.current instanceof Error)) {
+            normalized = conform(next, this.current, this.isComponent)
+            if (normalized === this.current) return this._get(force)
         }
 
-        normalized = conform(next, this.value, this.isComponent)
-        if (normalized === this.value) return (this.value: any)
+        this._suggested = this._next = normalized
 
-        this._ignore = this._next = normalized
-        this.obsolete()
-        this.actualize()
-
-        return (this.value: any)
+        return this._push(this._pull(ATOM_FORCE_UPDATE))
     }
 
     actualize(): void {
@@ -177,17 +181,17 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
     _push(nextRaw: V | Error): V {
         this.status = ATOM_STATUS_ACTUAL
         if (!(nextRaw instanceof AtomWait)) {
-            this._ignore = this._next
+            this._suggested = this._next
             this._next = undefined
         }
-        const prev = this.value
+        const prev = this.current
         if (nextRaw === undefined) return (prev: any)
         const next: V | Error = nextRaw instanceof Error
             ? createMock(nextRaw)
             : (prev instanceof Error ? nextRaw : conform(nextRaw, prev, this.isComponent))
 
         if (prev !== next) {
-            this.value = next
+            this.current = next
             this._context.newValue(this, prev, next, true)
             if (this._slaves) {
                 this._slaves.forEach(obsoleteSlave)
@@ -197,7 +201,7 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         return (next: any)
     }
 
-    _pull(force?: boolean): V | Error {
+    _pull(force?: IAtomForce): V | Error {
         if (this._masters) {
             this._masters.forEach(disleadThis, this)
         }
@@ -210,8 +214,8 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         context.last = this
         try {
             newValue = this.key === undefined
-                ? (this.owner: any)[this.field + '$'](this._next, force, this.value)
-                : (this.owner: any)[this.field + '$'](this.key, this._next, force, this.value)
+                ? (this.owner: any)[this.field + '$'](this._next, force, this.current)
+                : (this.owner: any)[this.field + '$'](this.key, this._next, force, this.current)
         } catch (error) {
             if (error[catchedId] === undefined) {
                 error[catchedId] = true

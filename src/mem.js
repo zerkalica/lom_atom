@@ -1,6 +1,6 @@
 // @flow
-
-import type {IAtom, IAtomHandler, IContext} from './interfaces'
+import {ATOM_FORCE_CACHE, ATOM_FORCE_NONE, ATOM_FORCE_UPDATE} from './interfaces'
+import type {IAtom, IAtomHandler, IAtomForce, IContext} from './interfaces'
 import {defaultContext} from './Context'
 import {AtomWait} from './utils'
 import Atom from './Atom'
@@ -37,8 +37,8 @@ function memMethod<V, P: Object>(
             return hostAtoms.get(this)
         }
     })
-    const forcedFn = function (next?: V | Error, force?: boolean) {
-        return this[rname](next, force === undefined ? true : force)
+    const forcedFn = function (next?: V | Error, force?: IAtomForce) {
+        return this[rname](next, force === undefined ? ATOM_FORCE_CACHE : force)
     }
     setFunctionName(forcedFn, `${name}*`)
     proto[`${rname}*`] = forcedFn
@@ -46,16 +46,14 @@ function memMethod<V, P: Object>(
     return {
         enumerable: descr.enumerable,
         configurable: descr.configurable,
-        value(next?: V | Error, force?: boolean): V {
+        value(next?: V | Error, force?: IAtomForce): V {
             let atom: IAtom<V> | void = hostAtoms.get(this)
             if (atom === undefined) {
                 atom = new Atom(name, this, defaultContext, hostAtoms, undefined, undefined, isComponent)
                 hostAtoms.set(this, atom)
             }
 
-            return next === undefined
-                ? (atom: IAtom<V>).get(force)
-                : (atom: IAtom<V>).set(next, force)
+            return (atom: IAtom<V>).value(next, force)
         }
     }
 }
@@ -81,13 +79,12 @@ function createValueHandler<V>(initializer?: () => V): IAtomHandler<V, *> {
     }
 }
 
-let isForced = false
-
 function setFunctionName(fn: Function, name: string) {
     Object.defineProperty(fn, 'name', {value: name, writable: false})
     fn.displayName = name
 }
 
+let propForced: IAtomForce = ATOM_FORCE_NONE
 function memProp<V, P: Object>(
     proto: P,
     rname: string,
@@ -125,11 +122,9 @@ function memProp<V, P: Object>(
                 atom = new Atom(name, this, defaultContext, hostAtoms)
                 hostAtoms.set(this, atom)
             }
-            if (isForced) {
-                isForced = false
-                return atom.get(true)
-            }
-            return atom.get()
+            const forced = propForced
+            propForced = ATOM_FORCE_NONE
+            return atom.value(undefined, forced)
         },
         set(val: V | Error) {
             let atom: IAtom<V> | void = hostAtoms.get(this)
@@ -137,12 +132,9 @@ function memProp<V, P: Object>(
                 atom = new Atom(name, this, defaultContext, hostAtoms)
                 hostAtoms.set(this, atom)
             }
-            if (isForced) {
-                isForced = false
-                ;(atom: IAtom<V>).set(val, true)
-                return
-            }
-            ;(atom: IAtom<V>).set(val)
+            const forced = propForced
+            propForced = ATOM_FORCE_NONE
+            ;(atom: IAtom<V>).value(val, forced)
         }
     }
 }
@@ -186,8 +178,8 @@ function memKeyMethod<V, K, P: Object>(
             return hostAtoms.get(this)
         }
     })
-    const forcedFn = function (rawKey: K, next?: V | Error, force?: boolean) {
-        return this[rname](rawKey, next, force === undefined ? true : force)
+    const forcedFn = function (rawKey: K, next?: V | Error, force?: IAtomForce) {
+        return this[rname](rawKey, next, force === undefined ? ATOM_FORCE_CACHE : force)
     }
     setFunctionName(forcedFn, `${name}*`)
     proto[`${rname}*`] = forcedFn
@@ -195,7 +187,7 @@ function memKeyMethod<V, K, P: Object>(
     return {
         enumerable: descr.enumerable,
         configurable: descr.configurable,
-        value(rawKey: K, next?: V | Error, force?: boolean) {
+        value(rawKey: K, next?: V | Error, force?: IAtomForce) {
             let atomMap: Map<string, IAtom<V>> | void = hostAtoms.get(this)
             if (atomMap === undefined) {
                 atomMap = new Map()
@@ -208,7 +200,7 @@ function memKeyMethod<V, K, P: Object>(
                 atomMap.set(key, atom)
             }
 
-            return next === undefined ? (atom: IAtom<V>).get(force) : (atom: IAtom<V>).set(next, force)
+            return (atom: IAtom<V>).value(next, force)
         }
     }
 }
@@ -243,18 +235,18 @@ export function memkey() {
 const forceProxyOpts = {
     get(t: Object, name: string) {
         const forceFn = t[`${name}*`]
-        // is property or get/set magic ?
         if (forceFn === undefined) {
-            isForced = true
+            // get/set handler
+            propForced = ATOM_FORCE_CACHE
             return t[name]
         }
 
         return forceFn.bind(t)
     },
     set(t: Object, name: string, val: mixed) {
-        // is property or get/set magic ?
         if (t[`${name}*`] === undefined) {
-            isForced = true
+            // get/set handler
+            propForced = ATOM_FORCE_CACHE
             t[name] = val
             return true
         }

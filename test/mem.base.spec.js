@@ -5,6 +5,8 @@ import assert from 'assert'
 import mem, {action, force, memkey} from '../src/mem'
 import {AtomWait} from '../src/utils'
 import {defaultContext, ConsoleLogger} from '../src/Context'
+import type {IAtomForce} from '../src/interfaces'
+import {ATOM_FORCE_CACHE, ATOM_FORCE_UPDATE} from '../src/interfaces'
 
 describe('mem base', () => {
     function sync() {
@@ -255,7 +257,7 @@ describe('mem base', () => {
         let val = { foo : [777] }
         class A {
             @force $: A
-            @mem foo(next?: Object, force?: boolean): Object {
+            @mem foo(next?: Object, force?: IAtomForce): Object {
                 return next || val
             }
         }
@@ -268,12 +270,38 @@ describe('mem base', () => {
         assert(v2 !== v3)
     })
 
+    it('async setting equal to last setted are ignored until changed', () => {
+        let val = { foo : [777] }
+        let called = 0
+        let run: Function = () => {}
+        class A {
+            @force $: A
+            @mem foo(next?: Object): Object {
+                called++
+                run = () => {
+                    this.$.foo()
+                }
+                return val
+            }
+        }
+
+        const a = new A()
+        a.foo()
+        assert(called === 1)
+
+        a.foo({foo: [666]})
+        assert(called === 2)
+
+        a.foo({foo: [666]})
+        assert(called === 2)
+    })
+
     it('setting equal to last setted are ignored until changed', () => {
         let val = { foo : [777] }
         let called = 0
         class A {
             @force $: A
-            @mem foo(next?: Object, force?: boolean): Object {
+            @mem foo(next?: Object, force?: IAtomForce): Object {
                 called++
                 return val
             }
@@ -288,23 +316,26 @@ describe('mem base', () => {
 
         a.foo({foo: [666]})
         assert(called === 2)
+        a.foo({foo: [666]}, ATOM_FORCE_UPDATE)
+
+        assert(called === 3)
 
         a.$.foo({foo: [777]})
 
         a.foo({ foo : [666] })
-        assert(called === 3)
+        assert(called === 4)
 
         a.foo({foo: [555]})
-        assert(called === 4)
+        assert(called === 5)
     })
 
     it('next remains after restart', () => {
         let run
         class A {
             @force $: A
-            @mem foo(next?: Object, force?: boolean): Object {
+            @mem foo(next?: Object, force?: IAtomForce): Object {
                 run = () => {
-                    this.foo({}, true)
+                    this.foo({}, ATOM_FORCE_CACHE)
                 }
                 throw new mem.Wait()
             }

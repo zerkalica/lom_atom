@@ -55,6 +55,13 @@ export interface IContext {
     beginTransaction(namespace: string): string;
     endTransaction(oldNamespace: string): void;
 }
+
+export const ATOM_FORCE_NONE = 0
+export const ATOM_FORCE_CACHE = 1
+export const ATOM_FORCE_UPDATE = 2
+
+export type IAtomForce = typeof ATOM_FORCE_CACHE | typeof ATOM_FORCE_UPDATE | typeof ATOM_FORCE_NONE
+
 export const ATOM_STATUS_DESTROYED = 0
 export const ATOM_STATUS_OBSOLETE = 1
 export const ATOM_STATUS_CHECKING = 2
@@ -68,11 +75,10 @@ export type IAtomStatus = typeof ATOM_STATUS_OBSOLETE
 
 export interface IAtom<V> {
     status: IAtomStatus;
-    value: V | Error | void;
+    current: V | Error | void;
     +field: string;
     +displayName: string;
-    get(force?: boolean): V;
-    set(v: V | Error, force?: boolean): V;
+    value(v?: V | Error, force?: IAtomForce): V;
     destructor(): void;
 }
 
@@ -88,11 +94,10 @@ export interface IAtomInt extends IAtom<*> {
     addMaster(master: IAtomInt): void;
 }
 //  | Error
-export type IAtomHandler<V, K> = (key: K, next?: V | Error, force?: boolean, oldValue?: V) => V
-    | (next?: V | Error, force?: boolean, oldValue?: V) => V
+export type IAtomHandler<V, K> = (key: K, next?: V | Error, force?: IAtomForce, oldValue?: V) => V
+    | (next?: V | Error, force?: IAtomForce, oldValue?: V) => V
 
 export interface IAtomOwner {
     displayName?: string;
     [key: string]: IAtomHandler<*, *>;
-    destructor?: (value: mixed, field: string, key?: mixed) => void;
 }

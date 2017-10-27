@@ -141,6 +141,7 @@ describe('mem forced', () => {
         const v = x.foo()
         fooCalled = ''
         x.force.foo(v + 1)
+        console.log(fooCalled)
         assert(fooCalled === '')
     })
 })
