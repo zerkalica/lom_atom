@@ -93,11 +93,23 @@ export interface IAtomInt extends IAtom<*> {
     dislead(slave: IAtomInt): void;
     addMaster(master: IAtomInt): void;
 }
+export type IAtomPropHandler<V> = (next?: V | Error, force?: IAtomForce, oldValue?: V) => V
+
 //  | Error
 export type IAtomHandler<V, K> = (key: K, next?: V | Error, force?: IAtomForce, oldValue?: V) => V
-    | (next?: V | Error, force?: IAtomForce, oldValue?: V) => V
+    | IAtomPropHandler<V>
 
 export interface IAtomOwner {
     displayName?: string;
     [key: string]: IAtomHandler<*, *>;
+}
+
+export type TypedPropertyDescriptor<T> = {
+    enumerable?: boolean;
+    configurable?: boolean;
+    writable?: boolean;
+    value?: T;
+    initializer?: () => T;
+    get?: () => T;
+    set?: (value: T | Error) => void;
 }

@@ -1,19 +1,9 @@
 // @flow
 import {ATOM_FORCE_CACHE, ATOM_FORCE_NONE, ATOM_FORCE_UPDATE} from './interfaces'
-import type {IAtom, IAtomHandler, IAtomForce, IContext} from './interfaces'
+import type {TypedPropertyDescriptor, IAtom, IAtomPropHandler, IAtomHandler, IAtomForce, IContext} from './interfaces'
 import {defaultContext} from './Context'
 import {AtomWait} from './utils'
 import Atom from './Atom'
-
-type TypedPropertyDescriptor<T> = {
-    enumerable?: boolean;
-    configurable?: boolean;
-    writable?: boolean;
-    value?: T;
-    initializer?: () => T;
-    get?: () => T;
-    set?: (value: T | Error) => void;
-}
 
 function getId(t: Object, hk: string): string {
     return `${t.constructor.displayName || t.constructor.name}.${hk}`
@@ -31,8 +21,7 @@ function memMethod<V, P: Object>(
     }
     proto[`${name}$`] = descr.value
     const hostAtoms: WeakMap<Object, IAtom<V>> = new WeakMap()
-
-    Object.defineProperty(proto, `${name}()`, {
+    Object.defineProperty(proto, `${rname}()`, {
         get() {
             return hostAtoms.get(this)
         }
@@ -173,7 +162,7 @@ function memKeyMethod<V, K, P: Object>(
     }
     proto[`${name}$`] = handler
     const hostAtoms: WeakMap<Object, Map<string, IAtom<V>>> = new WeakMap()
-    Object.defineProperty(proto, `${name}()`, {
+    Object.defineProperty(proto, `${rname}()`, {
         get() {
             return hostAtoms.get(this)
         }
@@ -275,11 +264,11 @@ export function force<V>(
     }
 }
 
-export function detached<P: Object, V, K>(
+export function detached<P: Object, V>(
     proto: P,
     name: string,
-    descr: TypedPropertyDescriptor<*>
-): TypedPropertyDescriptor<any> | void {
+    descr: TypedPropertyDescriptor<IAtomPropHandler<V>>
+): TypedPropertyDescriptor<IAtomPropHandler<V>> {
     return memMethod(proto, name, descr, true)
 }
 

@@ -45,6 +45,8 @@ export const handlers: Map<any, Function> = new Map([
     ]
 ])
 
+const done = Symbol('lom_conform_done')
+
 export default function conform<Target, Source>(target: Target, source: Source, isComponent: boolean, stack: any[] = []): Target {
     if (target === source) return (source: any)
 
@@ -52,8 +54,13 @@ export default function conform<Target, Source>(target: Target, source: Source, 
         isComponent
         || !target || typeof target !== 'object'
         || !source || typeof source !== 'object'
+        || target instanceof Error
+        || source instanceof Error
         || target.constructor !== source.constructor
+        || (target: Object)[done] !== undefined
     ) return target
+
+    ;(target: Object)[done] = true
 
     const conformHandler = handlers.get(target.constructor)
     if (!conformHandler) return target

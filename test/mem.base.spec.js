@@ -2,7 +2,7 @@
 /* eslint-env mocha */
 
 import assert from 'assert'
-import mem, {action, force, memkey} from '../src/mem'
+import mem, {detached, action, force, memkey} from '../src/mem'
 import {AtomWait} from '../src/utils'
 import {defaultContext, ConsoleLogger} from '../src/Context'
 import type {IAtomForce} from '../src/interfaces'
@@ -253,6 +253,21 @@ describe('mem base', () => {
         assert(a === t)
     })
 
+    it('detached can access atom via prop', () => {
+        class A {
+            getAtom() {
+                return (this: Object)['foo()']
+            }
+            @detached foo() {
+                return 123
+            }
+        }
+        const a = new A()
+        assert(a.getAtom() === undefined)
+        a.foo()
+        assert(a.getAtom().field === 'A.foo')
+    })
+
     it('setting equal state are ignored', () => {
         let val = { foo : [777] }
         class A {
@@ -269,6 +284,7 @@ describe('mem base', () => {
         assert(v1 === v3)
         assert(v2 !== v3)
     })
+
 
     it('async setting equal to last setted are ignored until changed', () => {
         let val = { foo : [777] }

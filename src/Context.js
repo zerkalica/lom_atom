@@ -76,7 +76,12 @@ export default class Context implements IContext {
             && typeof from.destructor === 'function'
             && this._owners.get(from) === atom
         ) {
-            from.destructor()
+            try {
+                from.destructor()
+            } catch(e) {
+                console.error(e)
+                if (this._logger) this._logger.error(atom, e, this._namespace)
+            }
             this._owners.delete(from)
         }
     }

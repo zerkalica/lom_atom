@@ -188,7 +188,7 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         if (nextRaw === undefined) return (prev: any)
         const next: V | Error = nextRaw instanceof Error
             ? createMock(nextRaw)
-            : (prev instanceof Error ? nextRaw : conform(nextRaw, prev, this.isComponent))
+            : conform(nextRaw, prev, this.isComponent)
 
         if (prev !== next) {
             this.current = next
