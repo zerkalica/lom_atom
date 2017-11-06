@@ -3,7 +3,7 @@
 import {catchedId} from './interfaces'
 
 const throwOnAccess = {
-    get(target: Error) {
+    get<V: Object>(target: Error): V {
         throw target.valueOf()
     },
     ownKeys(target: Error) {

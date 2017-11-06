@@ -59,7 +59,7 @@ export default class Context implements IContext {
     _reaping: Set<IAtomInt> = new Set()
     _scheduled = false
     _namespace: string = '$'
-    _owners: WeakMap<Object, Object> = new WeakMap()
+    _owners: WeakMap<?Object, Object> = new WeakMap()
 
     create<V>(atom: IAtomInt): V | void {
         this._owners.set(atom, atom.owner)
@@ -68,16 +68,13 @@ export default class Context implements IContext {
         }
     }
 
-    _destroyValue<V>(atom: IAtom<V>, from?: V | Error) {
+    _destroyValue<V>(atom: IAtom<V>, from?: mixed) {
         if (
-            from
-            && !(from instanceof Error)
-            && typeof from === 'object'
-            && typeof from.destructor === 'function'
+            typeof from === 'object'
             && this._owners.get(from) === atom
         ) {
             try {
-                from.destructor()
+                ;(from: any).destructor()
             } catch(e) {
                 console.error(e)
                 if (this._logger) this._logger.error(atom, e, this._namespace)
@@ -98,11 +95,11 @@ export default class Context implements IContext {
     }
 
     newValue<V>(atom: IAtom<V>, from?: V | Error, to: V | Error, isActualize?: boolean) {
-        this._destroyValue(atom, (from: any))
+        this._destroyValue(atom, from)
         if (
             to
-            && !(to instanceof Error)
             && typeof to === 'object'
+            && !(to instanceof Error)
             && typeof to.destructor === 'function'
         ) {
             this._owners.set(to, atom)

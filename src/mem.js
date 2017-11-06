@@ -208,8 +208,9 @@ declare function memkey<V, K, P: Object>(
 ): TypedPropertyDescriptor<IAtomHandler<V, K>>
 
 export function memkey() {
-    if (arguments.length === 3) {
-        return memKeyMethod(arguments[0], arguments[1], arguments[2])
+    const args = arguments
+    if (args.length === 3) {
+        return memKeyMethod(args[0], args[1], args[2])
     }
 
     return function (
@@ -283,15 +284,16 @@ function createActionMethod(t: Object, hk: string, context: IContext): (...args:
     function action() {
         let result: mixed | void
         const oldNamespace = context.beginTransaction(name)
+        const args = arguments
         try {
-            switch (arguments.length) {
+            switch (args.length) {
                 case 0: result = t[hk](); break
-                case 1: result = t[hk](arguments[0]); break
-                case 2: result = t[hk](arguments[0], arguments[1]); break
-                case 3: result = t[hk](arguments[0], arguments[1], arguments[2]); break
-                case 4: result = t[hk](arguments[0], arguments[1], arguments[2], arguments[3]); break
-                case 5: result = t[hk](arguments[0], arguments[1], arguments[2], arguments[3], arguments[4]); break
-                default: result = t[hk].apply(t, arguments)
+                case 1: result = t[hk](args[0]); break
+                case 2: result = t[hk](args[0], args[1]); break
+                case 3: result = t[hk](args[0], args[1], args[2]); break
+                case 4: result = t[hk](args[0], args[1], args[2], args[3]); break
+                case 5: result = t[hk](args[0], args[1], args[2], args[3], args[4]); break
+                default: result = t[hk].apply(t, args)
             }
         } finally {
             context.endTransaction(oldNamespace)
@@ -309,15 +311,16 @@ function createActionFn<F: Function>(fn: F, rawName?: string, context: IContext)
     function action(): any {
         let result: mixed | void
         const oldNamespace = context.beginTransaction(name)
+        const args = arguments
         try {
-            switch (arguments.length) {
+            switch (args.length) {
                 case 0: result = fn(); break
-                case 1: result = fn(arguments[0]); break
-                case 2: result = fn(arguments[0], arguments[1]); break
-                case 3: result = fn(arguments[0], arguments[1], arguments[2]); break
-                case 4: result = fn(arguments[0], arguments[1], arguments[2], arguments[3]); break
-                case 5: result = fn(arguments[0], arguments[1], arguments[2], arguments[3], arguments[4]); break
-                default: result = fn.apply(null, arguments)
+                case 1: result = fn(args[0]); break
+                case 2: result = fn(args[0], args[1]); break
+                case 3: result = fn(args[0], args[1], args[2]); break
+                case 4: result = fn(args[0], args[1], args[2], args[3]); break
+                case 5: result = fn(args[0], args[1], args[2], args[3], args[4]); break
+                default: result = fn.apply(null, args)
             }
         } finally {
             context.endTransaction(oldNamespace)
@@ -371,11 +374,12 @@ declare function action(
 ): TypedPropertyDescriptor<*>
 
 export function action() {
-    if (arguments.length === 3) {
-        return actionMethod(arguments[0], arguments[1], arguments[2], defaultContext)
+    const args = arguments
+    if (args.length === 3) {
+        return actionMethod(args[0], args[1], args[2], defaultContext)
     }
 
-    return createActionFn(arguments[0], arguments[1], defaultContext)
+    return createActionFn(args[0], args[1], defaultContext)
 }
 
 declare function mem<V, P: Object>(): () => IMemProp<V, P>
@@ -386,10 +390,11 @@ declare function mem<V, P: Object>(
 ): TypedPropertyDescriptor<*>
 
 export default function mem() {
-    if (arguments.length === 3) {
-        return arguments[2].value === undefined
-            ? memProp(arguments[0], arguments[1], arguments[2])
-            : memMethod(arguments[0], arguments[1], arguments[2])
+    const args = arguments
+    if (args.length === 3) {
+        return args[2].value === undefined
+            ? memProp(args[0], args[1], args[2])
+            : memMethod(args[0], args[1], args[2])
     }
 
     return function (
