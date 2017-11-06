@@ -13,7 +13,7 @@ import {ATOM_FORCE_NONE, ATOM_STATUS_DESTROYED, ATOM_STATUS_ACTUAL} from './inte
 import {AtomWait} from './utils'
 import Atom from './Atom'
 
-const scheduleNative: (handler: () => void) => number = typeof requestAnimationFrame == 'function'
+const scheduleNative: (handler: () => void) => number = typeof requestAnimationFrame === 'function'
     ? (handler: () => void) => requestAnimationFrame(handler)
     : (handler: () => void) => setTimeout(handler, 16)
 
@@ -62,19 +62,15 @@ export default class Context implements IContext {
     _owners: WeakMap<?Object, Object> = new WeakMap()
 
     create<V>(atom: IAtomInt): V | void {
-        this._owners.set(atom, atom.owner)
         if (this._logger !== undefined) {
             return this._logger.create(atom.owner, atom.field, atom.key, this._namespace)
         }
     }
 
-    _destroyValue<V>(atom: IAtom<V>, from?: mixed) {
-        if (
-            typeof from === 'object'
-            && this._owners.get(from) === atom
-        ) {
+    _destroyValue<V>(atom: IAtom<V>, from: any) {
+        if (this._owners.get(from) === atom) {
             try {
-                ;(from: any).destructor()
+                from.destructor()
             } catch(e) {
                 console.error(e)
                 if (this._logger) this._logger.error(atom, e, this._namespace)
