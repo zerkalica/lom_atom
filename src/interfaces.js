@@ -7,8 +7,6 @@ export type NamesOf<F> = {+[id: $Keys<ResultOf<F>>]: string}
 export type ILoggerStatus = 'waiting' | 'proposeToReap' | 'proposeToPull'
 
 export interface ILogger {
-    sync(): void;
-
     /**
      * Invokes before atom creating
      *
@@ -16,31 +14,26 @@ export interface ILogger {
      * @param field string property name
      * @param key mixed | void for dictionary atoms - dictionary key
      */
-    create<V>(owner: Object, field: string, key?: mixed, namespace: string): V | void;
+    create<V>(owner: Object, field: string, key?: mixed): V | void;
+
+    beginGroup(name: string): void;
+    endGroup(): void;
 
     /**
      * After atom destructor
      */
-    onDestruct(atom: IAtom<*>, namespace: string): void;
-
-    /**
-     * Atom status changes
-         - 'waiting' - atom fetching from server (mem.Wait throwed)
-         - 'proposeToReap' - atom probably will be destroyed on next tick
-         - 'proposeToPull' - atom will be actualized on next tick
-     */
-    status(status: ILoggerStatus, atom: IAtom<*>, namespace: string): void;
+    onDestruct<V>(atom: IAtom<V>): void;
 
     /**
      * Error while actualizing atom
      */
-    error<V>(atom: IAtom<V>, err: Error, namespace: string): void;
+    error<V>(atom: IAtom<V>, err: Error): void;
 
     /**
      * Atom value changed
      * @param isActualize bool if true - atom handler invoked, if false - only atom.cache value getted/setted
      */
-    newValue<V>(atom: IAtom<V>, from?: V | Error, to: V, isActualize?: boolean, namespace: string): void;
+    newValue<V>(atom: IAtom<V>, from?: V | Error, to: V | Error, isActualize?: boolean): void;
 }
 
 export interface IContext {
@@ -69,7 +62,7 @@ export const ATOM_STATUS_PULLING = 3
 export const ATOM_STATUS_ACTUAL = 4
 
 export const catchedId = Symbol('lom_atom_catched')
-
+export const origId = Symbol('orig_error')
 export type IAtomStatus = typeof ATOM_STATUS_OBSOLETE
     | typeof ATOM_STATUS_CHECKING | typeof ATOM_STATUS_PULLING | typeof ATOM_STATUS_ACTUAL
 

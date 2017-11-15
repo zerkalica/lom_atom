@@ -1,12 +1,13 @@
 // @flow
 
-import {catchedId} from './interfaces'
+import {catchedId, origId} from './interfaces'
 
 const throwOnAccess = {
-    get<V: Object>(target: Error): V {
+    get<V: Object>(target: Error, key: string): V {
+        if (key === origId) return (target: Object).valueOf()
         throw target.valueOf()
     },
-    ownKeys(target: Error) {
+    ownKeys(target: Error): string[] {
         throw target.valueOf()
     }
 }

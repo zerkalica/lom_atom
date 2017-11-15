@@ -4,7 +4,7 @@
 import assert from 'assert'
 import mem, {detached, action, force, memkey} from '../src/mem'
 import {AtomWait} from '../src/utils'
-import {defaultContext, ConsoleLogger} from '../src/Context'
+import {defaultContext} from '../src/Context'
 import type {IAtomForce} from '../src/interfaces'
 import {ATOM_FORCE_CACHE, ATOM_FORCE_UPDATE} from '../src/interfaces'
 
@@ -265,7 +265,7 @@ describe('mem base', () => {
         const a = new A()
         assert(a.getAtom() === undefined)
         a.foo()
-        assert(a.getAtom().field === 'A.foo')
+        assert(a.getAtom().field === 'foo')
     })
 
     it('setting equal state are ignored', () => {

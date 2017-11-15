@@ -45,7 +45,7 @@ export const handlers: Map<any, Function> = new Map([
     ]
 ])
 
-const done = Symbol('lom_conform_done')
+const processed: WeakMap<Object, boolean> = new WeakMap()
 
 export default function conform<Target, Source>(target: Target, source: Source, isComponent: boolean, stack: any[] = []): Target {
     if (target === source) return (source: any)
@@ -57,10 +57,9 @@ export default function conform<Target, Source>(target: Target, source: Source, 
         || target instanceof Error
         || source instanceof Error
         || target.constructor !== source.constructor
-        || (target: Object)[done] !== undefined
+        || processed.has(target)
     ) return target
-
-    ;(target: Object)[done] = true
+    processed.set(target, true)
 
     const conformHandler = handlers.get(target.constructor)
     if (!conformHandler) return target

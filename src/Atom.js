@@ -32,13 +32,11 @@ function obsoleteSlave(slave: IAtomInt) {
 }
 
 function disleadThis(master: IAtomInt) {
-    (this: Atom<*>);
-    master.dislead(this)
+    master.dislead((this: Atom<*>))
 }
 
 function actualizeMaster(master: IAtomInt) {
-    (this: Atom<*>);
-    if (this.status === ATOM_STATUS_CHECKING) {
+    if ((this: Atom<*>).status === ATOM_STATUS_CHECKING) {
         master.actualize()
     }
 }
@@ -87,10 +85,11 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
     }
 
     toString() {
-        const hc = this.owner.constructor
         const k = this.key
+        const owner = this.owner
+        const parent = owner.displayName || owner.constructor.displayName || owner.constructor.name
 
-        return this.field
+        return `${String(parent)}.${this.field}`
             + (k
                 ? ('(' + (typeof k === 'function' ? (k.displayName || k.name) : String(k)) + ')')
                 : ''

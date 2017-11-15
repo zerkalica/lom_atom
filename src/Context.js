@@ -9,7 +9,7 @@ import type {
     ILogger,
     ILoggerStatus
 } from './interfaces'
-import {ATOM_FORCE_NONE, ATOM_STATUS_DESTROYED, ATOM_STATUS_ACTUAL} from './interfaces'
+import {origId, ATOM_FORCE_NONE, ATOM_STATUS_DESTROYED, ATOM_STATUS_ACTUAL} from './interfaces'
 import {AtomWait} from './utils'
 import Atom from './Atom'
 
@@ -21,33 +21,6 @@ function reap(atom: IAtomInt, key: IAtomInt, reaping: Set<IAtomInt>) {
     reaping.delete(atom)
     if (!atom.slaves) {
         atom.destructor()
-    }
-}
-
-export class BaseLogger implements ILogger {
-    create<V>(owner: Object, field: string, key?: mixed, namespace: string): V | void {}
-    onDestruct(atom: IAtom<*>, namespace: string): void {}
-    sync() {}
-    status(status: ILoggerStatus, atom: IAtom<*>, namespace: string): void {}
-    error<V>(atom: IAtom<V>, err: Error, namespace: string): void {}
-    newValue<V>(atom: IAtom<any>, from?: V | Error, to: V, isActualize?: boolean, namespace: string): void {}
-}
-
-export class ConsoleLogger extends BaseLogger {
-    sync() {
-        console.log('sync')
-    }
-
-    status(status: ILoggerStatus, atom: IAtom<*>, namespace: string): void {
-        console.log(namespace, status, atom.displayName)
-    }
-
-    error<V>(atom: IAtom<V>, err: Error, namespace: string): void {
-        console.log(namespace, 'error', atom.displayName, err)
-    }
-
-    newValue<V>(atom: IAtom<V>, from?: V | Error, to: V, isActualize?: boolean, namespace: string): void {
-        console.log(namespace, isActualize ? 'actualize' : 'cacheSet', atom.displayName, 'from', from, 'to', to)
     }
 }
 
@@ -63,7 +36,7 @@ export default class Context implements IContext {
 
     create<V>(atom: IAtomInt): V | void {
         if (this._logger !== undefined) {
-            return this._logger.create(atom.owner, atom.field, atom.key, this._namespace)
+            return this._logger.create(atom.owner, atom.field, atom.key)
         }
     }
 
@@ -73,7 +46,7 @@ export default class Context implements IContext {
                 from.destructor()
             } catch(e) {
                 console.error(e)
-                if (this._logger) this._logger.error(atom, e, this._namespace)
+                if (this._logger) this._logger.error(atom, e)
             }
             this._owners.delete(from)
         }
@@ -82,7 +55,7 @@ export default class Context implements IContext {
     destroyHost(atom: IAtomInt) {
         this._destroyValue(atom, atom.current)
         if (this._logger !== undefined) {
-            this._logger.onDestruct(atom, this._namespace)
+            this._logger.onDestruct(atom)
         }
     }
 
@@ -100,29 +73,31 @@ export default class Context implements IContext {
         ) {
             this._owners.set(to, atom)
         }
-        if (this._logger !== undefined) {
-            if (to instanceof AtomWait) {
-                this._logger.status('waiting', atom, this._namespace)
-            } else if (to instanceof Error) {
-                this._logger.error(atom, to, this._namespace)
-            } else {
-                this._logger.newValue(atom, from instanceof Error ? undefined : from, to, isActualize, this._namespace)
+        const logger = this._logger
+        if (logger !== undefined) {
+            try {
+                if (!this._scheduled && this._logger !== undefined) {
+                    this._logger.beginGroup(this._namespace)
+                }
+                logger.newValue(
+                    atom,
+                    from instanceof Error && (from: Object)[origId] ? (from: Object)[origId] : from,
+                    to instanceof Error && (to: Object)[origId] ? (to: Object)[origId] : to,
+                    isActualize
+                )
+            } catch (error) {
+                console.error(error)
+                logger.error(atom, error)
             }
         }
     }
 
     proposeToPull(atom: IAtomInt) {
-        if (this._logger !== undefined) {
-            this._logger.status('proposeToPull', atom, this._namespace)
-        }
         this._updating.push(atom)
         this._schedule()
     }
 
     proposeToReap(atom: IAtomInt) {
-        if (this._logger !== undefined) {
-            this._logger.status('proposeToReap', atom, this._namespace)
-        }
         this._reaping.add(atom)
         this._schedule()
     }
@@ -152,9 +127,6 @@ export default class Context implements IContext {
         const reaping = this._reaping
         const updating = this._updating
         let start = this._start
-        if (this._logger !== undefined) {
-            this._logger.sync()
-        }
         do {
             const end = updating.length
 
@@ -173,6 +145,9 @@ export default class Context implements IContext {
 
         while (reaping.size > 0) {
             reaping.forEach(reap)
+        }
+        if (this._logger !== undefined) {
+            this._logger.endGroup()
         }
         this._scheduled = false
         this._pendCount = 0

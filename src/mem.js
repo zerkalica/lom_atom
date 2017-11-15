@@ -11,26 +11,26 @@ function getId(t: Object, hk: string): string {
 
 function memMethod<V, P: Object>(
     proto: P,
-    rname: string,
+    name: string,
     descr: TypedPropertyDescriptor<*>,
     isComponent?: boolean
 ): TypedPropertyDescriptor<*> {
-    const name = getId(proto, rname)
+    const longName = getId(proto, name)
     if (descr.value === undefined) {
-        throw new TypeError(`${name} is not an function (next?: V)`)
+        throw new TypeError(`${longName} is not an function (next?: V)`)
     }
     proto[`${name}$`] = descr.value
     const hostAtoms: WeakMap<Object, IAtom<V>> = new WeakMap()
-    Object.defineProperty(proto, `${rname}()`, {
+    Object.defineProperty(proto, `${name}()`, {
         get() {
             return hostAtoms.get(this)
         }
     })
     const forcedFn = function (next?: V | Error, force?: IAtomForce) {
-        return this[rname](next, force === undefined ? ATOM_FORCE_CACHE : force)
+        return this[name](next, force === undefined ? ATOM_FORCE_CACHE : force)
     }
-    setFunctionName(forcedFn, `${name}*`)
-    proto[`${rname}*`] = forcedFn
+    setFunctionName(forcedFn, `${longName}*`)
+    proto[`${name}*`] = forcedFn
 
     return {
         enumerable: descr.enumerable,
@@ -74,25 +74,26 @@ function setFunctionName(fn: Function, name: string) {
 }
 
 let propForced: IAtomForce = ATOM_FORCE_NONE
+
 function memProp<V, P: Object>(
     proto: P,
-    rname: string,
+    name: string,
     descr: TypedPropertyDescriptor<V>
 ): TypedPropertyDescriptor<V> {
-    const name = getId(proto, rname)
     const handlerKey = `${name}$`
     if (proto[handlerKey] !== undefined) {
         return (undefined: any)
     }
 
-    if (descr.initializer) setFunctionName(descr.initializer, name)
-    if (descr.get) setFunctionName(descr.get, `get#${name}`)
-    if (descr.set) setFunctionName(descr.set, `set#${name}`)
+    const longName = getId(proto, name)
+    if (descr.initializer) setFunctionName(descr.initializer, longName)
+    if (descr.get) setFunctionName(descr.get, `get#${longName}`)
+    if (descr.set) setFunctionName(descr.set, `set#${longName}`)
     const handler = proto[handlerKey] = descr.get === undefined && descr.set === undefined
         ? createValueHandler(descr.initializer)
         : createGetSetHandler(descr.get, descr.set)
 
-    setFunctionName(handler, `${name}()`)
+    setFunctionName(handler, `${longName}()`)
 
     const hostAtoms: WeakMap<Object, IAtom<V>> = new WeakMap()
 
@@ -152,26 +153,26 @@ function getKey(params: any): string {
 
 function memKeyMethod<V, K, P: Object>(
     proto: P,
-    rname: string,
+    name: string,
     descr: TypedPropertyDescriptor<IAtomHandler<V, K>>
 ): TypedPropertyDescriptor<IAtomHandler<V, K>> {
-    const name = getId(proto, rname)
+    const longName = getId(proto, name)
     const handler = descr.value
     if (handler === undefined) {
-        throw new TypeError(`${name} is not an function (rawKey: K, next?: V)`)
+        throw new TypeError(`${longName} is not an function (rawKey: K, next?: V)`)
     }
     proto[`${name}$`] = handler
     const hostAtoms: WeakMap<Object, Map<string, IAtom<V>>> = new WeakMap()
-    Object.defineProperty(proto, `${rname}()`, {
+    Object.defineProperty(proto, `${name}()`, {
         get() {
             return hostAtoms.get(this)
         }
     })
     const forcedFn = function (rawKey: K, next?: V | Error, force?: IAtomForce) {
-        return this[rname](rawKey, next, force === undefined ? ATOM_FORCE_CACHE : force)
+        return this[name](rawKey, next, force === undefined ? ATOM_FORCE_CACHE : force)
     }
-    setFunctionName(forcedFn, `${name}*`)
-    proto[`${rname}*`] = forcedFn
+    setFunctionName(forcedFn, `${longName}*`)
+    proto[`${name}*`] = forcedFn
 
     return {
         enumerable: descr.enumerable,
@@ -279,21 +280,21 @@ type IMemProp<V, P: Object> = (
     descr: TypedPropertyDescriptor<IAtomHandler<V>>
 ) => TypedPropertyDescriptor<IAtomHandler<V>>
 
-function createActionMethod(t: Object, hk: string, context: IContext): (...args: any[]) => any {
-    const name = getId(t, hk)
+function createActionMethod(t: Object, name: string, context: IContext): (...args: any[]) => any {
+    const longName = getId(t, name)
     function action() {
         let result: mixed | void
-        const oldNamespace = context.beginTransaction(name)
+        const oldNamespace = context.beginTransaction(longName)
         const args = arguments
         try {
             switch (args.length) {
-                case 0: result = t[hk](); break
-                case 1: result = t[hk](args[0]); break
-                case 2: result = t[hk](args[0], args[1]); break
-                case 3: result = t[hk](args[0], args[1], args[2]); break
-                case 4: result = t[hk](args[0], args[1], args[2], args[3]); break
-                case 5: result = t[hk](args[0], args[1], args[2], args[3], args[4]); break
-                default: result = t[hk].apply(t, args)
+                case 0: result = t[name](); break
+                case 1: result = t[name](args[0]); break
+                case 2: result = t[name](args[0], args[1]); break
+                case 3: result = t[name](args[0], args[1], args[2]); break
+                case 4: result = t[name](args[0], args[1], args[2], args[3]); break
+                case 5: result = t[name](args[0], args[1], args[2], args[3], args[4]); break
+                default: result = t[name].apply(t, args)
             }
         } finally {
             context.endTransaction(oldNamespace)
@@ -301,7 +302,7 @@ function createActionMethod(t: Object, hk: string, context: IContext): (...args:
 
         return result
     }
-    setFunctionName(action, name)
+    setFunctionName(action, longName)
 
     return action
 }
@@ -335,13 +336,13 @@ function createActionFn<F: Function>(fn: F, rawName?: string, context: IContext)
 
 function actionMethod<V, P: Object>(
     proto: P,
-    field: string,
+    name: string,
     descr: TypedPropertyDescriptor<*>,
     context: IContext
 ): TypedPropertyDescriptor<*> {
-    const hk = `${field}$`
+    const hk = `${name}$`
     if (descr.value === undefined) {
-        throw new TypeError(`${field} is not an function (next?: V)`)
+        throw new TypeError(`${getId(proto, name)} is not an function (next?: V)`)
     }
     proto[hk] = descr.value
     let definingProperty = false
@@ -355,7 +356,7 @@ function actionMethod<V, P: Object>(
             }
             definingProperty = true
             const actionFn = createActionMethod(this, hk, context)
-            Object.defineProperty(this, field, {
+            Object.defineProperty(this, name, {
                 configurable: true,
                 value: actionFn
             })
