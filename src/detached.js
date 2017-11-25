@@ -1,7 +1,7 @@
 // @flow
 
 import type {IAtom, TypedPropertyDescriptor} from './interfaces'
-import {ATOM_FORCE_NONE, ATOM_FORCE_CACHE} from './interfaces'
+import {ATOM_FORCE_NONE, ATOM_FORCE_CACHE, ATOM_FORCE_UPDATE} from './interfaces'
 import Atom from './Atom'
 import {defaultContext} from './Context'
 
@@ -29,10 +29,10 @@ export default function detached<P: Object, V>(
             }
             if (force) {
                 defaultContext.prevForce = defaultContext.force
-                defaultContext.force = ATOM_FORCE_CACHE
+                defaultContext.force = ATOM_FORCE_UPDATE
             }
 
-            return (atom: IAtom<V>).value()
+            return atom.value()
         }
     }
 }
