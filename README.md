@@ -108,10 +108,9 @@ const list = new TodoList()
 | ``` store.todos ```                 | Try to get value from cache, if empty - fetch upstream | If cache is empty or upstream changed | ``` get todos (): Todo[] {} ```      |
 | ``` store.todos = mem.force() ```   | Reset cache and force load from upstream               | Always                                | ``` get todos (): Todo[] {} ```      |
 | ``` store.todos = [] ```            | Set value to upstream                                  | If value is differs from cache        | ``` set todos (todos: Todo[]) {} ``` |
-| ``` store.todos = mem.force([]) ``` | Force set value to upstream                            | Always                                | ``` set todos (todos: Todo[]) {} ``` |
+| ``` store.todos = mem.force([]) ``` | Force set value to upstream                            | If value is differs from cache        | ``` set todos (todos: Todo[]) {} ``` |
 | ``` store.todos = mem.cache() ```   | Reset cache, but not fetch from upstream               | Never                                 | No                                   |
 | ``` store.todos = mem.cache([]) ``` | Save async answer from upstream to cache               | Never                                 | No                                   |
-
 ## Key-value
 
 Basic dictionary support. First argument is an key of any type. See eigenmethod [mol_mem](https://github.com/eigenmethod/mol/tree/master/mem).
