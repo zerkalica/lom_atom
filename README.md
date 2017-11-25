@@ -17,7 +17,7 @@ Install ``` npm install --save lom_atom ```
 
 - [Observable property](#observable-property)
 - [Observable get/set](#observable-getset)
-- [Force mode cache management](#force-mode-cache-management)
+- [Controlling cache](#controlling-cache)
 - [Method-style properties](#method-style-properties)
 - [Computed values](#computed-values)
 - [Side effects](#side-effects)
@@ -53,70 +53,6 @@ const todo = new Todo()
 todo.title = '123'
 ```
 
-## Force mode cache management
-
-Killer feature, grabbed from [mol_atom](https://github.com/eigenmethod/mol). We can reset cache on get or obviously set cache value, using magic force property.
-
-On set value: force mode talk lom to pass value through set handler. On get value: invoke handler with ``` undefined, true ``` and reset cache.
-
-```js
-import {force, mem} from 'lom_atom'
-
-class TodoList {
-    @force force: TodoList
-
-    @mem set todos(todos: Todo | Error) {
-        console.log('set handler')
-    }
-
-    @mem get todos() {
-        console.log('get handler')
-        return [someTodo]
-    }
-}
-const list = new TodoList()
-
-list.todos = [someTodo] // console: set handler
-list.todos = [someTodo] // someTodo already set - no handler call
-
-list.force.todos = [someTodo] // force, console: set handler
-
-list.todos // console: get handler
-
-list.todos // return cached value
-
-list.force.todos // console: get handler
-```
-
-## Method-style properties
-
-In this form we can change value on set. Less magic, than regular properties.
-
-```js
-import {action, mem} from 'lom_atom'
-class Some {
-    @force $: Some
-    @mem name(next?: string, force?: boolean): string {
-        // if next !== undefined - set mode
-        if (next !== undefined) return next
-        return 'default value'
-    }
-}
-const some = new Some()
-some.name() === 'default value'
-
-some.name('new value') // Set value directly into atom cache, some.name() handler not called
-some.name() === 'new value'
-
-some.name('val', true) // Pass value through some.name() handler and set result into cache
-
-some.name(undefined, true) === 'default value' // Invoke some.name() handler and reset to default value
-```
-
-``` some.force.name(val) ``` alias of ``` some.name(val, true) ```
-
-And ``` some.force.name() ``` alias of ``` some.name(undefined, true) ```
-
 ## Computed values
 
 One decorator for all cases.
@@ -134,49 +70,47 @@ Like mobx, unfinishedTodos is updated automatically when a todo changed.
 
 ## Side effects
 
-Like [mobx reaction](https://mobx.js.org/refguide/reaction.html) produces a side effect for making network requests, etc. But side effects in lom are simpler.
+Lom atom memoized property can interact with upstream (server, etc). Each observable or computed property can be used in 6 cases: get, force get, set, force set, reset, push. Modifiers helps to produce and control side effects for making network requests.
 
-Listener.listen throws errors on todo list store property access, if todo list loading finished with erorr or loading in progress.
 
 ```js
-class TodoList {
-    @mem set todos(todos: Todo | Error) {}
+import {mem} from 'lom_atom'
 
-    @mem get todos() {
-        // Side effect, cached in mem
-        fetch('/todos')
-            .then((todos) => {
-                this.todos = todos
-            })
-            .catch(e => this.todos = e)
+class TodoList {
+    @mem set todos(todos: Todo) {
+        fetch({
+            url: '/todos',
+            method: 'POST',
+            body: JSON.stringify(todos)
+        })
+            .catch(error => this.todos = mem.cache(error))
+
+        console.log('set handler')
 
         throw new mem.Wait()
     }
 
-    @mem get unfinishedTodos() {
-        return this.todos.filter((todo) => !todo.finished)
+    @mem get todos() {
+        console.log('get handler')
+
+        fetch('/todos')
+            .then((data) => this.todos = mem.cache(data))
+            .catch(error => this.todos = mem.cache(error))
+
+        throw new mem.Wait()
     }
 }
-
-class Listener {
-    _list = new TodoList()
-    @mem listen() {
-        try {
-            console.log('total todos:', this._list.todos.length)
-            console.log('unfinished todos:', this._list.unfinishedTodos.length)
-        } catch (e) {
-            if (e instanceof mem.Wait) {
-                console.log('loading...')
-            } else {
-                console.error('error', e.message)
-            }
-        }
-    }
-}
-
-const listener = new Listener()
-listener.listen()
+const list = new TodoList()
 ```
+
+| Modifier usage                      | Description                                            | When call handler                     | Handler                              |
+|-------------------------------------|--------------------------------------------------------|---------------------------------------|--------------------------------------|
+| ``` store.todos ```                 | Try to get value from cache, if empty - fetch upstream | If cache is empty or upstream changed | ``` get todos (): Todo[] {} ```      |
+| ``` store.todos = mem.force() ```   | Reset cache and force load from upstream               | Always                                | ``` get todos (): Todo[] {} ```      |
+| ``` store.todos = [] ```            | Set value to upstream                                  | If value is differs from cache        | ``` set todos (todos: Todo[]) {} ``` |
+| ``` store.todos = mem.force([]) ``` | Force set value to upstream                            | Always                                | ``` set todos (todos: Todo[]) {} ``` |
+| ``` store.todos = mem.cache() ```   | Reset cache, but not fetch from upstream               | Never                                 | No                                   |
+| ``` store.todos = mem.cache([]) ``` | Save async answer from upstream to cache               | Never                                 | No                                   |
 
 ## Key-value
 
@@ -184,8 +118,9 @@ Basic dictionary support. First argument is an key of any type. See eigenmethod 
 
 ```js
 class TodoList {
-    @mem.key todo(id: string, next?: Todo, force?: boolean): Todo {
+    @mem.key todo(id: string, next?: Todo): Todo {
         if (next === undefined) {
+            // get mode
             return {}
         }
 

@@ -15,8 +15,7 @@ describe('mem.destroy must be deferred destroyed when no longer referenced', () 
         let destroyed = false
 
         class A {
-            @mem
-            foo(): number {
+            @mem foo(): number {
                 destroyed = false
                 return 1
             }
@@ -29,15 +28,13 @@ describe('mem.destroy must be deferred destroyed when no longer referenced', () 
         class B {
             @mem _a = new A()
 
-            @mem
-            showing(next?: boolean): boolean {
+            @mem showing(next?: boolean): boolean {
                 return next === undefined
                     ? true
                     : next
             }
 
-            @mem
-            bar(): ?number {
+            @mem bar(): ?number {
                 return this.showing()
                     ? this._a.foo()
                     : null
@@ -63,8 +60,7 @@ describe('mem.destroy must be deferred destroyed when no longer referenced', () 
         let destroyed = false
 
         class A {
-            @mem
-            foo(): number {
+            @mem foo(): number {
                 destroyed = false
                 return 1
             }
@@ -77,15 +73,13 @@ describe('mem.destroy must be deferred destroyed when no longer referenced', () 
         class B {
             @mem _a = new A()
 
-            @mem
-            showing(next?: boolean): boolean {
+            @mem showing(next?: boolean): boolean {
                 return next === undefined
                     ? true
                     : next
             }
 
-            @mem
-            bar(): ?number {
+            @mem bar(): ?number {
                 return this.showing()
                     ? this._a.foo()
                     : null

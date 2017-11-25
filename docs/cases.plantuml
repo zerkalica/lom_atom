@@ -1,0 +1,27 @@
+@startuml
+
+!include ./shared.plantuml
+
+() Handler
+() Cache
+
+() Get
+() Reset
+() Set
+() SetCache
+() SetForce
+
+Get --> Cache: reset
+Get ..> Handler: run
+
+SetCache --> Cache: set
+SetForce ..> Handler: run
+SetForce --> Cache: reset
+
+Reset --> Cache: reset
+Reset ..> Handler: run
+
+Set --> Cache: set
+Set ..> Handler: run
+
+@enduml

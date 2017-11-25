@@ -1,20 +1,6 @@
 // @flow
 
-import {catchedId, origId} from './interfaces'
-
-const throwOnAccess = {
-    get<V: Object>(target: Error, key: string): V {
-        if (key === origId) return (target: Object).valueOf()
-        throw target.valueOf()
-    },
-    ownKeys(target: Error): string[] {
-        throw target.valueOf()
-    }
-}
-
-export function createMock(error: Error): any {
-    return new Proxy(error, throwOnAccess)
-}
+import {catchedId} from './interfaces'
 
 export class AtomWait extends Error {
     constructor(message?: string = 'Wait...') {
@@ -23,4 +9,13 @@ export class AtomWait extends Error {
         ;(this: Object)['__proto__'] = new.target.prototype
         ;(this: Object)[catchedId] = true
     }
+}
+
+export function getId(t: Object, hk: string): string {
+    return `${t.constructor.displayName || t.constructor.name}.${hk}`
+}
+
+export function setFunctionName(fn: Function, name: string) {
+    Object.defineProperty(fn, 'name', {value: name, writable: false})
+    fn.displayName = name
 }

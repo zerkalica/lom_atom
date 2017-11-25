@@ -2,6 +2,7 @@
 
 import {
     catchedId,
+    origId,
     ATOM_FORCE_NONE,
     ATOM_FORCE_CACHE,
     ATOM_FORCE_UPDATE,
@@ -20,8 +21,19 @@ import type {
     IAtomOwner
 } from './interfaces'
 
-import {createMock, AtomWait} from './utils'
+import {AtomWait} from './utils'
 import conform from './conform'
+
+const throwOnAccess = {
+    get<V: Object>(target: Error, key: string): V {
+        if (key === origId) return (target: Object).valueOf()
+        throw target.valueOf()
+    },
+    ownKeys(target: Error): string[] {
+        throw target.valueOf()
+    }
+}
+
 
 function checkSlave(slave: IAtomInt) {
     slave.check()
@@ -73,7 +85,7 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         this.owner = owner
         this.isComponent = isComponent || false
         this._context = context
-        this.current = context.create(this)
+        this.current = undefined
         this._next = undefined
         this._suggested = undefined
         this._hostAtoms = hostAtoms
@@ -118,42 +130,46 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         this._keyHash = undefined
     }
 
-    _get(force?: IAtomForce): V {
-        const slave = this._context.last
-        if (slave && (!slave.isComponent || !this.isComponent)) {
-            let slaves = this._slaves
-            if (!slaves) {
-                this._context.unreap(this)
-                slaves = this._slaves = new Set()
+    value(next?: V | Error): V {
+        const context = this._context
+        const prevForce = context.prevForce
+        if (context.force === ATOM_FORCE_CACHE) {
+            this._push(next)
+        } else {
+            let normalized: V | Error
+            if (
+                next !== undefined
+                && (normalized = conform(next, this._suggested, this.isComponent)) !== this._suggested
+                && (
+                    this.current instanceof Error
+                    || (normalized = conform(next, this.current, this.isComponent)) !== this.current
+                )
+            ) {
+                this._suggested = this._next = normalized
+                context.force = ATOM_FORCE_UPDATE
             }
-            slaves.add(slave)
-            slave.addMaster(this)
+
+            const slave = context.current
+            if (slave && (!slave.isComponent || !this.isComponent)) {
+                let slaves = this._slaves
+                if (!slaves) {
+                    context.unreap(this)
+                    slaves = this._slaves = new Set()
+                }
+                slaves.add(slave)
+                slave.addMaster(this)
+            }
+
+            if (context.force === ATOM_FORCE_UPDATE) {
+                this._push(this._pull())
+            } else {
+                this.actualize()
+            }
         }
 
-        if (force) {
-            this._push(this._pull(force))
-        } else {
-            this.actualize()
-        }
+        context.force = prevForce
 
         return (this.current: any)
-    }
-
-    value(next?: V | Error, force?: IAtomForce): V {
-        if (next === undefined) return this._get(force)
-        if (force === ATOM_FORCE_CACHE) return this._push(next)
-
-        let normalized: V | Error = conform(next, this._suggested, this.isComponent)
-        if (normalized === this._suggested) return this._get(force)
-
-        if (!(this.current instanceof Error)) {
-            normalized = conform(next, this.current, this.isComponent)
-            if (normalized === this.current) return this._get(force)
-        }
-
-        this._suggested = this._next = normalized
-
-        return this._push(this._pull(ATOM_FORCE_UPDATE))
     }
 
     actualize(): void {
@@ -177,30 +193,31 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         }
     }
 
-    _push(nextRaw: V | Error): V {
-        this.status = ATOM_STATUS_ACTUAL
+    _push(nextRaw?: V | Error): void {
         if (!(nextRaw instanceof AtomWait)) {
             this._suggested = this._next
             this._next = undefined
         }
         const prev = this.current
-        if (nextRaw === undefined) return (prev: any)
+        if (nextRaw === undefined) {
+            this.status = ATOM_STATUS_OBSOLETE
+            return (prev: any)
+        }
+        this.status = ATOM_STATUS_ACTUAL
         const next: V | Error = nextRaw instanceof Error
-            ? createMock(nextRaw)
+            ? new Proxy(nextRaw, throwOnAccess)
             : conform(nextRaw, prev, this.isComponent)
 
         if (prev !== next) {
             this.current = next
-            this._context.newValue(this, prev, next, true)
+            this._context.newValue(this, prev, next)
             if (this._slaves) {
                 this._slaves.forEach(obsoleteSlave)
             }
         }
-
-        return (next: any)
     }
 
-    _pull(force?: IAtomForce): V | Error {
+    _pull(): V | Error {
         if (this._masters) {
             this._masters.forEach(disleadThis, this)
         }
@@ -209,20 +226,22 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         this.status = ATOM_STATUS_PULLING
 
         const context = this._context
-        const slave = context.last
-        context.last = this
+        const slave = context.current
+        context.current = this
         try {
             newValue = this.key === undefined
-                ? (this.owner: any)[this.field + '$'](this._next, force, this.current)
-                : (this.owner: any)[this.field + '$'](this.key, this._next, force, this.current)
+                ? (this.owner: any)[this.field + '$'](this._next)
+                : (this.owner: any)[this.field + '$'](this.key, this._next)
         } catch (error) {
             if (error[catchedId] === undefined) {
                 error[catchedId] = true
                 console.error(error.stack || error)
             }
-            newValue = error instanceof Error ? error : new Error(error.stack || error)
+            newValue = error instanceof Error
+                ? error
+                : new Error(error.stack || error)
         }
-        context.last = slave
+        context.current = slave
 
         return newValue
     }

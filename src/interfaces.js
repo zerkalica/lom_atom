@@ -1,21 +1,8 @@
 // @flow
 
-type _ResultOf<V, F: (...x: any[]) => V> = V // eslint-disable-line
-export type ResultOf<F> = _ResultOf<*, F>
-export type NamesOf<F> = {+[id: $Keys<ResultOf<F>>]: string}
-
 export type ILoggerStatus = 'waiting' | 'proposeToReap' | 'proposeToPull'
 
 export interface ILogger {
-    /**
-     * Invokes before atom creating
-     *
-     * @param owner Object Object with atom
-     * @param field string property name
-     * @param key mixed | void for dictionary atoms - dictionary key
-     */
-    create<V>(owner: Object, field: string, key?: mixed): V | void;
-
     beginGroup(name: string): void;
     endGroup(): void;
 
@@ -31,16 +18,16 @@ export interface ILogger {
 
     /**
      * Atom value changed
-     * @param isActualize bool if true - atom handler invoked, if false - only atom.cache value getted/setted
      */
-    newValue<V>(atom: IAtom<V>, from?: V | Error, to: V | Error, isActualize?: boolean): void;
+    newValue<V>(atom: IAtom<V>, from?: V | Error, to: V | Error): void;
 }
 
 export interface IContext {
-    last: ?IAtomInt;
-    create<V>(atom: IAtomInt): V | void;
+    current: ?IAtomInt;
+    force: IAtomForce;
+    prevForce: IAtomForce;
     destroyHost(atom: IAtomInt): void;
-    newValue<V>(t: IAtom<V>, from?: V | Error, to: V | Error, isActualize?: boolean): void;
+    newValue<V>(t: IAtom<V>, from?: V | Error, to: V | Error): void;
     setLogger(logger: ILogger): void;
     proposeToPull(atom: IAtomInt): void;
     proposeToReap(atom: IAtomInt): void;
@@ -71,7 +58,7 @@ export interface IAtom<V> {
     current: V | Error | void;
     +field: string;
     +displayName: string;
-    value(v?: V | Error, force?: IAtomForce): V;
+    value(v?: V | Error): V;
     destructor(): void;
 }
 
@@ -86,11 +73,9 @@ export interface IAtomInt extends IAtom<*> {
     dislead(slave: IAtomInt): void;
     addMaster(master: IAtomInt): void;
 }
-export type IAtomPropHandler<V> = (next?: V | Error, force?: IAtomForce, oldValue?: V) => V
 
-//  | Error
-export type IAtomHandler<V, K> = (key: K, next?: V | Error, force?: IAtomForce, oldValue?: V) => V
-    | IAtomPropHandler<V>
+export type IAtomHandler<V, K> = (key: K, next?: V | Error) => V
+    | (next?: V | Error) => V
 
 export interface IAtomOwner {
     displayName?: string;
@@ -104,5 +89,5 @@ export type TypedPropertyDescriptor<T> = {
     value?: T;
     initializer?: () => T;
     get?: () => T;
-    set?: (value: T | Error) => void;
+    set?: (value: T) => void;
 }

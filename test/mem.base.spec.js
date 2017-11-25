@@ -2,13 +2,15 @@
 /* eslint-env mocha */
 
 import assert from 'assert'
-import mem, {detached, action, force, memkey} from '../src/mem'
+import mem from '../src/mem'
+import detached from '../src/detached'
+import action from '../src/action'
 import {AtomWait} from '../src/utils'
 import {defaultContext} from '../src/Context'
-import type {IAtomForce} from '../src/interfaces'
-import {ATOM_FORCE_CACHE, ATOM_FORCE_UPDATE} from '../src/interfaces'
+// import ConsoleLogger from '../src/ConsoleLogger'
 
 describe('mem base', () => {
+    // defaultContext.setLogger(new ConsoleLogger({useColors: false}))
     function sync() {
         defaultContext.beginTransaction('$')
         defaultContext.endTransaction('$')
@@ -24,18 +26,16 @@ describe('mem base', () => {
         let run: ?() => void
         class UserService {
             @mem currentUserId: number = 1
-            @force $: UserService
 
-            @memkey
-            userById(id: number, next?: IUser): IUser {
+            @mem.key userById(id: number, next?: IUser): IUser {
                 called++
                 if (next !== undefined) return next
 
                 run = () => {
-                    this.$.userById(id, {
+                    this.userById(id, mem.cache({
                         name: 'test' + id,
                         email: 'test' + id + '@t.t'
-                    })
+                    }))
                 }
 
                 throw new AtomWait()
@@ -43,7 +43,7 @@ describe('mem base', () => {
 
             @mem get currentUser(): IUser {
                 return this.userById(this.currentUserId)
-           }
+            }
             @mem set currentUser(next: IUser) {}
 
             get fullName(): string {
@@ -78,18 +78,15 @@ describe('mem base', () => {
 
     it('auto sync of properties', () => {
         class X {
-            @mem
-            foo(next?: number): number {
+            @mem foo(next?: number): number {
                 return next || 1
             }
 
-            @mem
-            bar(): number {
+            @mem bar(): number {
                 return this.foo() + 1
             }
 
-            @mem
-            xxx(): number {
+            @mem xxx(): number {
                 return this.bar() + 1
             }
         }
@@ -109,14 +106,12 @@ describe('mem base', () => {
             @mem foo = 1
             @mem bar = 1
 
-            @action
-            some() {
+            @action some() {
                 this.foo++
                 this.bar++
             }
 
-            @mem
-            computed() {
+            @mem computed() {
                 callCount++
                 return this.foo + this.bar
             }
@@ -139,8 +134,7 @@ describe('mem base', () => {
                 this.bar++
             }
 
-            @mem
-            computed() {
+            @mem computed() {
                 callCount++
                 return this.foo + this.bar
             }
@@ -155,15 +149,12 @@ describe('mem base', () => {
 
     it('getset property', () => {
         class X {
-            @mem
-            get foo() {
+            @mem get foo() {
                 return 1
             }
-            @mem
-            set foo(v: number) {}
+            @mem set foo(v: number) {}
 
-            @mem
-            bar(): number {
+            @mem bar(): number {
                 return this.foo + 1
             }
         }
@@ -178,11 +169,9 @@ describe('mem base', () => {
 
     it('regular property', () => {
         class X {
-            @mem
-            foo: number = 1
+            @mem foo: number = 1
 
-            @mem
-            bar(): number {
+            @mem bar(): number {
                 return this.foo + 1
             }
         }
@@ -199,12 +188,10 @@ describe('mem base', () => {
         let testResolve: ?() => void
 
         class Test {
-            @force $: Test
-            @mem
-            source(next?: string): string {
+            @mem source(next?: string): string {
                 new Promise((resolve: () => void) => {
                     testResolve = () => {
-                        this.$.source('Jin')
+                        this.source(mem.cache('Jin'))
                         resolve()
                     }
                 })
@@ -212,13 +199,11 @@ describe('mem base', () => {
                 throw new AtomWait()
             }
 
-            @mem
-            middle() {
+            @mem middle() {
                 return this.source()
             }
 
-            @mem
-            target() {
+            @mem target() {
                 return this.middle()
             }
         }
@@ -240,8 +225,7 @@ describe('mem base', () => {
         let t: A
 
         class A {
-            @mem
-            foo(): number {
+            @mem foo(): number {
                 t = this
                 return 1
             }
@@ -271,8 +255,7 @@ describe('mem base', () => {
     it('setting equal state are ignored', () => {
         let val = { foo : [777] }
         class A {
-            @force $: A
-            @mem foo(next?: Object, force?: IAtomForce): Object {
+            @mem foo(next?: Object): Object {
                 return next || val
             }
         }
@@ -291,11 +274,10 @@ describe('mem base', () => {
         let called = 0
         let run: Function = () => {}
         class A {
-            @force $: A
             @mem foo(next?: Object): Object {
                 called++
                 run = () => {
-                    this.$.foo()
+                    this.foo(mem.cache())
                 }
                 return val
             }
@@ -316,8 +298,7 @@ describe('mem base', () => {
         let val = { foo : [777] }
         let called = 0
         class A {
-            @force $: A
-            @mem foo(next?: Object, force?: IAtomForce): Object {
+            @mem foo(next?: Object): Object {
                 called++
                 return val
             }
@@ -332,11 +313,11 @@ describe('mem base', () => {
 
         a.foo({foo: [666]})
         assert(called === 2)
-        a.foo({foo: [666]}, ATOM_FORCE_UPDATE)
+        a.foo(mem.force({foo: [666]}))
 
         assert(called === 3)
 
-        a.$.foo({foo: [777]})
+        a.foo(mem.cache({foo: [777]}))
 
         a.foo({ foo : [666] })
         assert(called === 4)
@@ -348,10 +329,9 @@ describe('mem base', () => {
     it('next remains after restart', () => {
         let run
         class A {
-            @force $: A
-            @mem foo(next?: Object, force?: IAtomForce): Object {
+            @mem foo(next?: Object): Object {
                 run = () => {
-                    this.foo({}, ATOM_FORCE_CACHE)
+                    this.foo(mem.cache({}))
                 }
                 throw new mem.Wait()
             }

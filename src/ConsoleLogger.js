@@ -25,8 +25,6 @@ export default class ConsoleLogger implements ILogger {
         this._filter = opts ? opts.filter : undefined
     }
 
-    create<V>(owner: Object, field: string, key?: mixed): V | void {}
-
     beginGroup(name: string) {
         console.group(name, 'sync')
     }
@@ -41,7 +39,7 @@ export default class ConsoleLogger implements ILogger {
 
     error<V>(atom: IAtom<V>, err: Error): void {}
 
-    newValue<V>(atom: IAtom<V>, from?: V | Error, to: V | Error, isActualize?: boolean): void {
+    newValue<V>(atom: IAtom<V>, from?: V | Error, to: V | Error): void {
         const name = atom.displayName
         const filter = this._filter
         if (filter && !filter.test(name)) return
@@ -57,7 +55,7 @@ export default class ConsoleLogger implements ILogger {
                 useColors ? '%c' + name : name,
                 useColors ? stringToColor(name) : '',
                 from instanceof Error ? from.message : from,
-                isActualize ? '➔' : '‣',
+                '➔',
                 to instanceof Error ? to.message : to
             )
         }

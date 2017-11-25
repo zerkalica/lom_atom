@@ -1,0 +1,34 @@
+skinparam interface {
+  BackgroundColor<<Source>> 7AFF7F
+  BackgroundColor<<Status>> FFEF7A
+  BackgroundColor<<Component>> FF7A7A
+  BackgroundColor<<Computed>> D1DAFF
+  BackgroundColor<<Hook>> 7AFFFF
+  BackgroundColor<<Action>> FF7AFF
+  BorderColor 7A3A7A
+  ArrowColor 7A7A7A
+  FontColor 333333
+  FontSize 11
+  StereotypeFontColor 000033
+  StereotypeFontSize 14
+}
+
+skinparam object {
+  BackgroundColor<<Source>> 7AFF7F
+  BackgroundColor<<Status>> FFEF7A
+  BackgroundColor<<Component>> FF7A7A
+  BackgroundColor<<Computed>> D1DAFF
+  BackgroundColor<<Hook>> 7AFFFF
+  BackgroundColor<<Action>> FF7AFF
+  BorderColor 7A3A7A
+  ArrowColor 7A7A7A
+  FontColor 333333
+  StereotypeFontColor 000033
+  StereotypeFontSize 14
+}
+
+skinparam component {
+  ArrowFontColor #333333
+  ArrowColor 7A7A7A
+  ArrowFontSize 11
+}

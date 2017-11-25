@@ -1,9 +1,9 @@
 // @flow
 
-export const handlers: Map<any, Function> = new Map([
+export const handlers: Map<mixed, Function> = new Map([
     [
         Array,
-        function arrayHandler<Target: Array<any>, Source: Array<any>>(target: Target, source: Source, stack: any[]) {
+        function arrayHandler<Target: mixed[], Source: mixed[]>(target: Target, source: Source, stack: mixed[]) {
             let equal = target.length === source.length
 
             for(let i = 0; i < target.length; ++i) {
@@ -16,7 +16,7 @@ export const handlers: Map<any, Function> = new Map([
     ],
     [
         Object,
-        function objectHandler<Target: Object, Source: Object>(target: Target, source: Source, stack: any[]) {
+        function objectHandler<Target: Object, Source: Object>(target: Target, source: Source, stack: mixed[]) {
             let count = 0
             let equal = true
 
@@ -47,7 +47,12 @@ export const handlers: Map<any, Function> = new Map([
 
 const processed: WeakMap<Object, boolean> = new WeakMap()
 
-export default function conform<Target, Source>(target: Target, source: Source, isComponent: boolean, stack: any[] = []): Target {
+export default function conform<Target, Source>(
+    target: Target,
+    source: Source,
+    isComponent: boolean,
+    stack: mixed[] = []
+): Target {
     if (target === source) return (source: any)
 
     if (

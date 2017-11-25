@@ -1,17 +1,13 @@
 // @flow
 
 import type {
-    IAtomHandler,
     IAtomForce,
     IAtomInt,
     IAtom,
     IContext,
     ILogger,
-    ILoggerStatus
 } from './interfaces'
-import {origId, ATOM_FORCE_NONE, ATOM_STATUS_DESTROYED, ATOM_STATUS_ACTUAL} from './interfaces'
-import {AtomWait} from './utils'
-import Atom from './Atom'
+import {origId, ATOM_FORCE_NONE, ATOM_STATUS_DESTROYED} from './interfaces'
 
 const scheduleNative: (handler: () => void) => number = typeof requestAnimationFrame === 'function'
     ? (handler: () => void) => requestAnimationFrame(handler)
@@ -25,7 +21,9 @@ function reap(atom: IAtomInt, key: IAtomInt, reaping: Set<IAtomInt>) {
 }
 
 export default class Context implements IContext {
-    last: ?IAtomInt = null
+    current: ?IAtomInt = null
+    force: IAtomForce = ATOM_FORCE_NONE
+    prevForce: IAtomForce = ATOM_FORCE_NONE
 
     _logger: ILogger | void = undefined
     _updating: IAtomInt[] = []
@@ -33,12 +31,6 @@ export default class Context implements IContext {
     _scheduled = false
     _namespace: string = '$'
     _owners: WeakMap<?Object, Object> = new WeakMap()
-
-    create<V>(atom: IAtomInt): V | void {
-        if (this._logger !== undefined) {
-            return this._logger.create(atom.owner, atom.field, atom.key)
-        }
-    }
 
     _destroyValue<V>(atom: IAtom<V>, from: any) {
         if (this._owners.get(from) === atom) {
@@ -63,7 +55,7 @@ export default class Context implements IContext {
         this._logger = logger
     }
 
-    newValue<V>(atom: IAtom<V>, from?: V | Error, to: V | Error, isActualize?: boolean) {
+    newValue<V>(atom: IAtom<V>, from?: V | Error, to: V | Error) {
         this._destroyValue(atom, from)
         if (
             to
@@ -76,14 +68,13 @@ export default class Context implements IContext {
         const logger = this._logger
         if (logger !== undefined) {
             try {
-                if (!this._scheduled && this._logger !== undefined) {
-                    this._logger.beginGroup(this._namespace)
-                }
+                // if (!this._scheduled && this._logger !== undefined) {
+                //     this._logger.beginGroup(this._namespace)
+                // }
                 logger.newValue(
                     atom,
                     from instanceof Error && (from: Object)[origId] ? (from: Object)[origId] : from,
-                    to instanceof Error && (to: Object)[origId] ? (to: Object)[origId] : to,
-                    isActualize
+                    to instanceof Error && (to: Object)[origId] ? (to: Object)[origId] : to
                 )
             } catch (error) {
                 console.error(error)
@@ -146,9 +137,9 @@ export default class Context implements IContext {
         while (reaping.size > 0) {
             reaping.forEach(reap)
         }
-        if (this._logger !== undefined) {
-            this._logger.endGroup()
-        }
+        // if (this._logger !== undefined) {
+        //     this._logger.endGroup()
+        // }
         this._scheduled = false
         this._pendCount = 0
     }
