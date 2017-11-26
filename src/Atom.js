@@ -133,7 +133,6 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
     value(next?: V | Error): V {
         const context = this._context
         let force = context.force
-        context.force = context.prevForce
         if (force === ATOM_FORCE_CACHE) {
             this._push(next)
         } else {
@@ -147,7 +146,7 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
                 )
             ) {
                 this._suggested = this._next = normalized
-                force = ATOM_FORCE_UPDATE
+                context.force = force = ATOM_FORCE_UPDATE
             }
 
             const slave = context.current
@@ -160,12 +159,15 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
                 slaves.add(slave)
                 slave.addMaster(this)
             }
+            // if (this.isComponent)    
+            context.force = context.prevForce
             if (force === ATOM_FORCE_UPDATE) {
                 this._push(this._pull())
             } else {
                 this.actualize()
             }
         }
+        context.force = context.prevForce
 
         return (this.current: any)
     }
