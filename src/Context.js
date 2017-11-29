@@ -1,13 +1,12 @@
 // @flow
 
 import type {
-    IAtomForce,
     IAtomInt,
     IAtom,
     IContext,
     ILogger,
 } from './interfaces'
-import {origId, ATOM_FORCE_NONE, ATOM_STATUS_DESTROYED} from './interfaces'
+import {origId, ATOM_STATUS_DESTROYED} from './interfaces'
 
 const scheduleNative: (handler: () => void) => number = typeof requestAnimationFrame === 'function'
     ? (handler: () => void) => requestAnimationFrame(handler)
@@ -22,8 +21,8 @@ function reap(atom: IAtomInt, key: IAtomInt, reaping: Set<IAtomInt>) {
 
 export default class Context implements IContext {
     current: ?IAtomInt = null
-    force: IAtomForce = ATOM_FORCE_NONE
-    prevForce: IAtomForce = ATOM_FORCE_NONE
+    isCacheForce: boolean = false
+    isDeepReset: boolean = false
 
     _logger: ILogger | void = undefined
     _updating: IAtomInt[] = []

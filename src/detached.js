@@ -1,7 +1,6 @@
 // @flow
 
 import type {IAtom, TypedPropertyDescriptor} from './interfaces'
-import {ATOM_FORCE_NONE, ATOM_FORCE_CACHE, ATOM_FORCE_UPDATE} from './interfaces'
 import Atom from './Atom'
 import {defaultContext} from './Context'
 
@@ -24,12 +23,11 @@ export default function detached<P: Object, V>(
         value(force: boolean): V {
             let atom: IAtom<V> | void = hostAtoms.get(this)
             if (atom === undefined) {
-                atom = new Atom(name, this, defaultContext, hostAtoms, undefined, undefined, true)
+                atom = new Atom(name, this, defaultContext, hostAtoms, false, undefined, undefined, true)
                 hostAtoms.set(this, atom)
             }
             if (force) {
-                defaultContext.prevForce = defaultContext.force
-                defaultContext.force = ATOM_FORCE_UPDATE
+                atom.reset()
             }
 
             return atom.value()

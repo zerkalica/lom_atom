@@ -3,17 +3,13 @@
 import {
     catchedId,
     origId,
-    ATOM_FORCE_NONE,
-    ATOM_FORCE_CACHE,
-    ATOM_FORCE_UPDATE,
-
     ATOM_STATUS_DESTROYED,
+    ATOM_STATUS_DEEP_RESET,
     ATOM_STATUS_OBSOLETE, ATOM_STATUS_CHECKING, ATOM_STATUS_PULLING, ATOM_STATUS_ACTUAL
 } from './interfaces'
 
 import type {
     IAtom,
-    IAtomForce,
     IAtomInt,
     IAtomStatus,
     IContext,
@@ -44,11 +40,11 @@ function obsoleteSlave(slave: IAtomInt) {
 }
 
 function disleadThis(master: IAtomInt) {
-    master.dislead((this: Atom<*>))
+    master.dislead((this: IAtomInt))
 }
 
 function actualizeMaster(master: IAtomInt) {
-    if ((this: Atom<*>).status === ATOM_STATUS_CHECKING) {
+    if ((this: IAtom<*>).status === ATOM_STATUS_CHECKING) {
         master.actualize()
     }
 }
@@ -70,26 +66,30 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
     _hostAtoms: WeakMap<Object, IAtom<*>> | Map<string, IAtom<*>>
     _keyHash: string | void
 
+    manualReset: boolean
+
     constructor(
         field: string,
         owner: IAtomOwner,
         context: IContext,
         hostAtoms: WeakMap<Object, IAtom<*>> | Map<string, IAtom<*>>,
+        manualReset?: boolean,
         key?: mixed,
         keyHash?: string,
-        isComponent?: boolean,
+        isComponent?: boolean
     ) {
         this._keyHash = keyHash
         this.key = key
         this.field = field
         this.owner = owner
         this.isComponent = isComponent || false
+        this.manualReset = manualReset || false
         this._context = context
         this.current = undefined
         this._next = undefined
         this._suggested = undefined
         this._hostAtoms = hostAtoms
-        this.status = this.current === undefined ? ATOM_STATUS_OBSOLETE : ATOM_STATUS_ACTUAL
+        this.status = ATOM_STATUS_OBSOLETE
     }
 
     get displayName(): string {
@@ -130,25 +130,26 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         this._keyHash = undefined
     }
 
-    value(next?: V | Error): V {
-        const context = this._context
-        let force = context.force
-        if (force === ATOM_FORCE_CACHE) {
-            this._push(next)
-        } else {
-            let normalized: V | Error
-            if (
-                next !== undefined
-                && (normalized = conform(next, this._suggested, this.isComponent)) !== this._suggested
-                && (
-                    this.current instanceof Error
-                    || (normalized = conform(next, this.current, this.isComponent)) !== this.current
-                )
-            ) {
-                this._suggested = this._next = normalized
-                context.force = force = ATOM_FORCE_UPDATE
-            }
+    reset() {
+        this._suggested = this._next
+        this._next = undefined
+        this.status = ATOM_STATUS_DEEP_RESET
+    }
 
+    static isDeepReset = false
+
+    value(next?: V | Error, forceCache?: boolean): V {
+        const context = this._context
+        if (forceCache === true) {
+            if (next === undefined) {
+                this.reset()
+                if (this._slaves) {
+                    this._slaves.forEach(obsoleteSlave)
+                }
+            } else {
+                this._push(next)
+            }
+        } else {
             const slave = context.current
             if (slave && (!slave.isComponent || !this.isComponent)) {
                 let slaves = this._slaves
@@ -159,15 +160,21 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
                 slaves.add(slave)
                 slave.addMaster(this)
             }
-            // if (this.isComponent)    
-            context.force = context.prevForce
-            if (force === ATOM_FORCE_UPDATE) {
-                this._push(this._pull())
-            } else {
-                this.actualize()
+
+            let normalized: V | Error
+            if (
+                next !== undefined
+                && (normalized = conform(next, this._suggested, this.isComponent)) !== this._suggested
+                && (
+                    this.current instanceof Error
+                    || (normalized = conform(next, this.current, this.isComponent)) !== this.current
+                )
+            ) {
+                this._suggested = this._next = normalized
+                this.status = ATOM_STATUS_DEEP_RESET
             }
+            this.actualize()
         }
-        context.force = context.prevForce
 
         return (this.current: any)
     }
@@ -176,7 +183,6 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         if (this.status === ATOM_STATUS_PULLING) {
             throw new Error(`Cyclic atom dependency of ${String(this)}`)
         }
-        if (this.status === ATOM_STATUS_ACTUAL) return
 
         if (this.status === ATOM_STATUS_CHECKING) {
             if (this._masters) {
@@ -188,22 +194,26 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
             }
         }
 
-        if (this.status !== ATOM_STATUS_ACTUAL) {
+        if (this.status === ATOM_STATUS_DEEP_RESET) {
+            const isDeepReset = Atom.isDeepReset
+            Atom.isDeepReset = true
+            this._push(this._pull())
+            Atom.isDeepReset = isDeepReset
+        } else if (
+            this.status !== ATOM_STATUS_ACTUAL
+            || (Atom.isDeepReset && !this.manualReset)
+        ) {
             this._push(this._pull())
         }
     }
 
-    _push(nextRaw?: V | Error): void {
+    _push(nextRaw: V | Error): void {
         if (!(nextRaw instanceof AtomWait)) {
             this._suggested = this._next
             this._next = undefined
         }
-        const prev = this.current
-        if (nextRaw === undefined) {
-            this.status = ATOM_STATUS_OBSOLETE
-            return
-        }
         this.status = ATOM_STATUS_ACTUAL
+        const prev = this.current
         const next: V | Error = nextRaw instanceof Error
             ? new Proxy(nextRaw, throwOnAccess)
             : conform(nextRaw, prev, this.isComponent)
@@ -284,6 +294,7 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         if (!this._masters) {
             this._masters = new Set()
         }
+        if (master.manualReset) this.manualReset = true
         this._masters.add(master)
     }
 }

@@ -8,7 +8,7 @@ import {defaultContext} from '../src/Context'
 import {IAtom, catchedId, ATOM_STATUS_OBSOLETE, ATOM_STATUS_ACTUAL} from '../src/interfaces'
 
 describe('Atom', () => {
-    function atom<V>(key: string, fn: Function): IAtom<V> {
+    function atom<V>(key: string, fn: (v?: V) => V): IAtom<V> {
         const host: {[id: string]: any} = {[key + '$']: fn}
         return new Atom(key, host, defaultContext, new Map())
     }
@@ -38,9 +38,7 @@ describe('Atom', () => {
         let target = atom('target', () => middle.value() + 1)
 
         assert(target.value() === 3)
-
         source.value(2)
-
         assert(target.value() === 4)
     })
 
@@ -154,7 +152,7 @@ describe('Atom', () => {
     it('error handling', () => {
         const error = new Error('Test error')
         ;(error: Object)[catchedId] = true
-        let source = atom('source', (next?: number) => {
+        let source = atom('source', (next?: number): number => {
             throw error
         })
         let middle = atom('middle', () => source.value() + 1)

@@ -23,7 +23,7 @@ describe('mem base', () => {
             email: string;
         }
 
-        let run: ?() => void
+        let run: ?(() => void)
         class UserService {
             @mem currentUserId: number = 1
 
@@ -277,7 +277,7 @@ describe('mem base', () => {
             @mem foo(next?: Object): Object {
                 called++
                 run = () => {
-                    this.foo(mem.cache())
+                    mem.reset(this.foo())
                 }
                 return val
             }
@@ -313,7 +313,8 @@ describe('mem base', () => {
 
         a.foo({foo: [666]})
         assert(called === 2)
-        a.foo(mem.force({foo: [666]}))
+        mem.reset(a.foo())
+        a.foo({foo: [666]})
 
         assert(called === 3)
 
@@ -327,7 +328,7 @@ describe('mem base', () => {
     })
 
     it('next remains after restart', () => {
-        let run
+        let run: ?(() => void)
         class A {
             @mem foo(next?: Object): Object {
                 run = () => {
@@ -336,9 +337,9 @@ describe('mem base', () => {
                 throw new mem.Wait()
             }
 
-            @mem task(next: any) {
+            @mem task(next?: Object): Object {
                 this.foo().valueOf()
-                return next
+                return (next: any)
             }
         }
         const value = {}

@@ -41,8 +41,8 @@ describe('mem forced', () => {
         fooCalled = false
         x.foo
         assert(fooCalled === false)
-
-        x.foo = mem.force()
+        mem.reset(x.foo)
+        x.foo
         assert(fooCalled === true)
     })
 
@@ -68,27 +68,35 @@ describe('mem forced', () => {
         assert(fooCalled === false)
     })
 
-
-    it('update property from itself', () => {
+    it('deep cache', () => {
         let fooCalled = ''
         class X {
-            @mem get foo() {
+            @mem.manual get bar() {
                 fooCalled += 'G'
                 return 1
             }
-
-            @mem set foo(v: number) {
-                fooCalled += 'S'
+            @mem get baz() {
+                fooCalled += 'E'
+                return 1
+            }
+            @mem get foo() {
+                return this.bar + this.baz
             }
         }
 
         const x = new X()
-        x.foo === 1 // cache x.foo
-        assert(fooCalled === 'G')
+        x.foo
+        fooCalled = ''
+        mem.reset(x.foo)
+        assert(fooCalled === '')
+
+        x.foo
+        assert(fooCalled === 'E')
 
         fooCalled = ''
-        x.foo = mem.force(x.foo + 1)
-        assert(fooCalled === 'S')
+        mem.reset(x.bar)
+        x.foo
+        assert(fooCalled === 'G')
     })
 
     it('method call', () => {

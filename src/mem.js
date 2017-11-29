@@ -1,6 +1,5 @@
 // @flow
-import type {IAtomForce, TypedPropertyDescriptor, IAtom} from './interfaces'
-import {ATOM_FORCE_CACHE, ATOM_FORCE_UPDATE} from './interfaces'
+import type {TypedPropertyDescriptor, IAtom} from './interfaces'
 import {defaultContext} from './Context'
 import {AtomWait, getId, setFunctionName} from './utils'
 import Atom from './Atom'
@@ -26,10 +25,13 @@ function createValueHandler<V>(initializer?: () => V): (next?: V | Error) => V {
     }
 }
 
-function mem<V, P: Object>(
-    proto: P,
+let isForceCache = false
+
+function mem<V>(
+    proto: Object,
     name: string,
-    descr: TypedPropertyDescriptor<V>
+    descr: TypedPropertyDescriptor<V>,
+    deepReset?: boolean
 ): TypedPropertyDescriptor<V> {
     const handlerKey = `${name}$`
     if (proto[handlerKey] !== undefined) return descr
@@ -45,10 +47,13 @@ function mem<V, P: Object>(
     function value(next?: V): V {
         let atom: IAtom<V> | void = hostAtoms.get(this)
         if (atom === undefined) {
-            atom = new Atom(name, this, defaultContext, hostAtoms)
+            atom = new Atom(name, this, defaultContext, hostAtoms, deepReset)
             hostAtoms.set(this, atom)
         }
-        return atom.value(next)
+        const force = isForceCache
+        isForceCache = false
+
+        return atom.value(next, force)
     }
     if (descr.value !== undefined) {
         proto[handlerKey] = descr.value
@@ -73,6 +78,14 @@ function mem<V, P: Object>(
     }
 }
 
+function memManual<V>(
+    proto: Object,
+    name: string,
+    descr: TypedPropertyDescriptor<V>
+) {
+    return mem(proto, name, descr, true)
+}
+
 function getKeyFromObj(params: Object): string {
     const keys = Object.keys(params)
         .sort()
@@ -95,10 +108,11 @@ function getKey(params: any): string {
     return '' + params
 }
 
-function memkey<V, K, P: Object>(
-    proto: P,
+function memkey<V, K>(
+    proto: Object,
     name: string,
-    descr: TypedPropertyDescriptor<(k: K, next?: V) => V>
+    descr: TypedPropertyDescriptor<(k: K, next?: V) => V>,
+    deepReset?: boolean
 ): TypedPropertyDescriptor<(k: K, next?: V) => V> {
     const longName = getId(proto, name)
     const handler = descr.value
@@ -122,17 +136,29 @@ function memkey<V, K, P: Object>(
         const key = getKey(rawKey)
         let atom: IAtom<V> | void = atomMap.get(key)
         if (atom === undefined) {
-            atom = new Atom(name, this, defaultContext, atomMap, rawKey, key)
+            atom = new Atom(name, this, defaultContext, atomMap, deepReset, rawKey, key)
             atomMap.set(key, atom)
         }
 
-        return (atom: IAtom<V>).value(next)
+        const force = isForceCache
+        isForceCache = false
+
+        return (atom: IAtom<V>).value(next, force)
     }
 
     descr.value = value
 
     return descr
 }
+
+function memkeyManual<V, K>(
+    proto: Object,
+    name: string,
+    descr: TypedPropertyDescriptor<(k: K, next?: V) => V>
+) {
+    return memkey(proto, name, descr, true)
+}
+memkey.manual = memkeyManual
 
 const proxyHandler = {
     get<V: Object, T: $Keys<V>>(obj: V, key: T): IAtom<$ElementType<V, T>> {
@@ -146,30 +172,41 @@ function toAtom<V: Object>(obj: V): $ObjMap<V, <T>(T) => IAtom<T>> {
 
 
 function cache<V>(data: V): V {
-    defaultContext.prevForce = defaultContext.force
-    defaultContext.force = ATOM_FORCE_CACHE
+    isForceCache = true
     return data
 }
 
-function force<V>(data: V): V {
-    defaultContext.prevForce = defaultContext.force
-    defaultContext.force = ATOM_FORCE_UPDATE
-    return data
-}
+function reset<V>(data: V): void {}
 
-mem.cache = cache
-mem.force = force
-mem.key = memkey
-mem.Wait = AtomWait
-mem.toAtom = toAtom
+(Object: any).defineProperties(mem, {
+    reset: {
+        get<V>(): (v: V) => void {
+            isForceCache = true
+            return reset
+        }
+    },
+    manual: { value: memManual },
+    cache: { value: cache },
+    key: { value: memkey },
+    Wait: { value: AtomWait }
+    // toAtom: {value: toAtom }
+})
+
+type IDecorator<V> = (proto: Object, name: string, descr: TypedPropertyDescriptor<V>) => TypedPropertyDescriptor<V>;
+
+type IMemKey = {
+    <V, K>(proto: Object, name: string, descr: TypedPropertyDescriptor<(k: K, next?: V) => V>): TypedPropertyDescriptor<(k: K, next?: V) => V>;
+    manual: IDecorator<<V, K>(k: K, next?: V) => V>;
+}
 
 type IMem = {
-    <V, P: Object>(proto: P, name: string, descr: TypedPropertyDescriptor<V>): TypedPropertyDescriptor<V>;
-    cache: typeof cache;
-    force: typeof force;
-    key: typeof memkey;
-    toAtom: typeof toAtom;
-    Wait: Class<AtomWait>;
-}
+    <V>(proto: Object, name: string, descr: TypedPropertyDescriptor<V>): TypedPropertyDescriptor<V>;
+    manual: IDecorator<*>;
+    cache<V>(v: V): V;
+    reset<V>(v: V): void;
 
-export default (mem: IMem)
+    key: IMemKey;
+
+    Wait: Class<Error>;
+}
+export default ((mem: any): IMem)

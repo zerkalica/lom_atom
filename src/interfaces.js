@@ -24,8 +24,6 @@ export interface ILogger {
 
 export interface IContext {
     current: ?IAtomInt;
-    force: IAtomForce;
-    prevForce: IAtomForce;
     destroyHost(atom: IAtomInt): void;
     newValue<V>(t: IAtom<V>, from?: V | Error, to: V | Error): void;
     setLogger(logger: ILogger): void;
@@ -36,17 +34,12 @@ export interface IContext {
     endTransaction(oldNamespace: string): void;
 }
 
-export const ATOM_FORCE_NONE = 0
-export const ATOM_FORCE_CACHE = 1
-export const ATOM_FORCE_UPDATE = 2
-
-export type IAtomForce = typeof ATOM_FORCE_CACHE | typeof ATOM_FORCE_UPDATE | typeof ATOM_FORCE_NONE
-
 export const ATOM_STATUS_DESTROYED = 0
 export const ATOM_STATUS_OBSOLETE = 1
 export const ATOM_STATUS_CHECKING = 2
 export const ATOM_STATUS_PULLING = 3
 export const ATOM_STATUS_ACTUAL = 4
+export const ATOM_STATUS_DEEP_RESET = 5
 
 export const catchedId = Symbol('lom_atom_catched')
 export const origId = Symbol('orig_error')
@@ -58,15 +51,17 @@ export interface IAtom<V> {
     current: V | Error | void;
     +field: string;
     +displayName: string;
-    value(v?: V | Error): V;
+    value(v?: V | Error, forceCache?: boolean): V;
+    reset(): void;
     destructor(): void;
 }
 
 export interface IAtomInt extends IAtom<*> {
     isComponent: boolean;
+    manualReset: boolean;
+
     key: mixed | void;
     owner: IAtomOwner;
-
     actualize(): void;
     check(): void;
     obsolete(): void;

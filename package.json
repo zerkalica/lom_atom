@@ -62,10 +62,10 @@
     "flow-bin": "^0.59.0",
     "mocha": "^4.0.1",
     "rimraf": "^2.6.2",
-    "rollup": "^0.51.5",
+    "rollup": "^0.52.0",
     "rollup-plugin-babel": "^4.0.0-beta.0",
     "rollup-plugin-uglify": "^2.0.1",
     "standard-version": "^4.2.0",
-    "uglify-es": "^3.1.9"
+    "uglify-es": "^3.2.0"
   }
 }
