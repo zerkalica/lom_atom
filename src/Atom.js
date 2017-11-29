@@ -194,7 +194,7 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
             }
         }
 
-        if (this.status === ATOM_STATUS_DEEP_RESET) {
+        if (this.status === ATOM_STATUS_DEEP_RESET && !this.isComponent) {
             const isDeepReset = Atom.isDeepReset
             Atom.isDeepReset = true
             this._push(this._pull())

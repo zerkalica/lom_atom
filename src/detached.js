@@ -27,7 +27,8 @@ export default function detached<P: Object, V>(
                 hostAtoms.set(this, atom)
             }
             if (force) {
-                atom.reset()
+                atom.status =5
+                // atom.reset()
             }
 
             return atom.value()
