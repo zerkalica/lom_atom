@@ -1,6 +1,6 @@
 {
   "name": "lom_atom",
-  "version": "3.0.4",
+  "version": "3.0.5",
   "description": "Alternative implementation of eigenmethod mol_atom state management library",
   "publishConfig": {
     "registry": "https://registry.npmjs.org"
