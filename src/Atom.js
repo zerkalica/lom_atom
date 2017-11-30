@@ -136,8 +136,6 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         this.status = ATOM_STATUS_DEEP_RESET
     }
 
-    static isDeepReset = false
-
     value(next?: V | Error, forceCache?: boolean): V {
         const context = this._context
         if (forceCache === true) {
@@ -179,6 +177,8 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         return (this.current: any)
     }
 
+    static deepReset: Set<IAtom<*>> | void = undefined
+
     actualize(): void {
         if (this.status === ATOM_STATUS_PULLING) {
             throw new Error(`Cyclic atom dependency of ${String(this)}`)
@@ -194,15 +194,15 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
             }
         }
 
+        const deepReset = Atom.deepReset
         if (this.status === ATOM_STATUS_DEEP_RESET && !this.isComponent) {
-            const isDeepReset = Atom.isDeepReset
-            Atom.isDeepReset = true
+            Atom.deepReset = deepReset || new Set()
             this._push(this._pull())
-            Atom.isDeepReset = isDeepReset
-        } else if (
-            this.status !== ATOM_STATUS_ACTUAL
-            || (Atom.isDeepReset && !this.manualReset)
-        ) {
+            Atom.deepReset = deepReset
+        } else if (deepReset !== undefined && !this.manualReset && !deepReset.has(this)) {
+            deepReset.add(this)
+            this._push(this._pull())
+        } else if (this.status !== ATOM_STATUS_ACTUAL) {
             this._push(this._pull())
         }
     }
@@ -294,7 +294,7 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         if (!this._masters) {
             this._masters = new Set()
         }
-        if (master.manualReset) this.manualReset = true
+        // if (master.manualReset) this.manualReset = true
         this._masters.add(master)
     }
 }

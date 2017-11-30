@@ -76,12 +76,16 @@ describe('mem forced', () => {
                 fooCalled += 'G'
                 return 1
             }
+            @mem get bar2() {
+                fooCalled += 'F'
+                return this.bar + this.baz
+            }
             @mem get baz() {
                 fooCalled += 'E'
                 return 1
             }
             @mem get foo() {
-                return this.bar + this.baz
+                return this.bar2 + this.baz
             }
         }
 
@@ -92,12 +96,12 @@ describe('mem forced', () => {
         assert(fooCalled === '')
 
         x.foo
-        assert(fooCalled === 'E')
+        assert(fooCalled === 'FE')
 
         fooCalled = ''
         mem.cache(x.bar)
         x.foo
-        assert(fooCalled === 'G')
+        assert(fooCalled === 'FG')
     })
 
     it('method call', () => {
