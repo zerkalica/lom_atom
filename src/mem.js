@@ -50,10 +50,7 @@ function mem<V>(
             atom = new Atom(name, this, defaultContext, hostAtoms, deepReset)
             hostAtoms.set(this, atom)
         }
-        const force = isForceCache
-        isForceCache = false
-
-        return atom.value(next, force)
+        return atom.value(next, isForceCache)
     }
     if (descr.value !== undefined) {
         proto[handlerKey] = descr.value
@@ -140,10 +137,7 @@ function memkey<V, K>(
             atomMap.set(key, atom)
         }
 
-        const force = isForceCache
-        isForceCache = false
-
-        return (atom: IAtom<V>).value(next, force)
+        return (atom: IAtom<V>).value(next, isForceCache)
     }
 
     descr.value = value
@@ -170,23 +164,19 @@ function toAtom<V: Object>(obj: V): $ObjMap<V, <T>(T) => IAtom<T>> {
     return new Proxy(obj, proxyHandler)
 }
 
-
 function cache<V>(data: V): V {
-    isForceCache = true
+    isForceCache = false
     return data
 }
 
-function reset<V>(data: V): void {}
-
 (Object: any).defineProperties(mem, {
-    reset: {
-        get<V>(): (v: V) => void {
+    cache: {
+        get<V>(): (v: V) => V {
             isForceCache = true
-            return reset
+            return cache
         }
     },
     manual: { value: memManual },
-    cache: { value: cache },
     key: { value: memkey },
     Wait: { value: AtomWait }
     // toAtom: {value: toAtom }
@@ -203,7 +193,6 @@ type IMem = {
     <V>(proto: Object, name: string, descr: TypedPropertyDescriptor<V>): TypedPropertyDescriptor<V>;
     manual: IDecorator<*>;
     cache<V>(v: V): V;
-    reset<V>(v: V): void;
 
     key: IMemKey;
 

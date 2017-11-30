@@ -70,47 +70,58 @@ Like mobx, unfinishedTodos is updated automatically when a todo changed.
 
 ## Side effects
 
-Lom atom memoized property can interact with upstream (server, etc). Each observable or computed property can be used in 6 cases: get, force get, set, force set, reset, push. Modifiers helps to produce and control side effects for making network requests.
+Lom atom memoized property can interact with upstream (server, etc). Each observable or computed property can be used in 4 cases: get, set, cache set, cache reset. Modifiers helps to produce and control side effects for making network requests.
 
 
 ```js
 import {mem} from 'lom_atom'
 
 class TodoList {
-    @mem set todos(todos: Todo) {
+    @mem set todos(todos: Todo | Error) {
         fetch({
             url: '/todos',
             method: 'POST',
             body: JSON.stringify(todos)
         })
-            .catch(error => this.todos = mem.cache(error))
+            .then((data) => mem.cache(this.todos = data))
+            .catch(error => mem.cache(this.todos = error))
 
         console.log('set handler')
 
         throw new mem.Wait()
     }
 
-    @mem get todos() {
+    @mem get todos(): Todos {
         console.log('get handler')
 
         fetch('/todos')
-            .then((data) => this.todos = mem.cache(data))
-            .catch(error => this.todos = mem.cache(error))
+            .then((data) => mem.cache(this.todos = data))
+            .catch(error => mem.cache(this.todos = error))
 
         throw new mem.Wait()
+    }
+
+    @mem.manual get user(): IUser {
+        fetch('/user')
+            .then((data) => mem.cache(this.user = data))
+            .catch(error => mem.cache(this.user = error))
+    }
+
+    set user(next: IUser | Error) {}
+
+    @mem todosWithUser() {
+        return {todos: this.todos, user: this.user}
     }
 }
 const list = new TodoList()
 ```
 
-| Modifier usage                      | Description                                            | When call handler                     | Handler                              |
-|-------------------------------------|--------------------------------------------------------|---------------------------------------|--------------------------------------|
-| ``` store.todos ```                 | Try to get value from cache, if empty - fetch upstream | If cache is empty or upstream changed | ``` get todos (): Todo[] {} ```      |
-| ``` store.todos = mem.force() ```   | Reset cache and force load from upstream               | Always                                | ``` get todos (): Todo[] {} ```      |
-| ``` store.todos = [] ```            | Set value to upstream                                  | If value is differs from cache        | ``` set todos (todos: Todo[]) {} ``` |
-| ``` store.todos = mem.force([]) ``` | Force set value to upstream                            | If value is differs from cache        | ``` set todos (todos: Todo[]) {} ``` |
-| ``` store.todos = mem.cache() ```   | Reset cache, but not fetch from upstream               | Never                                 | No                                   |
-| ``` store.todos = mem.cache([]) ``` | Save async answer from upstream to cache               | Never                                 | No                                   |
+* ``` this.todos ``` - get value, if cache is empty - invokes ``` get todos ``` and actualize cache.
+* ``` this.todos =  data ``` - set value, if cache empty - pass value to ``` set todos() {} ``` and actualize cache.
+* ``` mem.cache(this.todos = data) ``` - set new value or error directly into cache (push).
+* ``` mem.cache(list.todosWithUser) ``` - deep reset cache for todosWithUser all its dependencies (todos) and notify all dependants about changes.
+* ``` @mem.manual get user() {...} ``` - exclude user from deep reset. ``` mem.reset(list.todosWithUser) ``` resets todos but not user. If you want to reset user, use helper directly on user: ``` mem.cache(list.user) ```
+
 ## Key-value
 
 Basic dictionary support. First argument is an key of any type. See eigenmethod [mol_mem](https://github.com/eigenmethod/mol/tree/master/mem).

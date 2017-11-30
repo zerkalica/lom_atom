@@ -32,7 +32,7 @@ describe('mem base', () => {
                 if (next !== undefined) return next
 
                 run = () => {
-                    this.userById(id, mem.cache({
+                    mem.cache(this.userById(id, {
                         name: 'test' + id,
                         email: 'test' + id + '@t.t'
                     }))
@@ -191,7 +191,7 @@ describe('mem base', () => {
             @mem source(next?: string): string {
                 new Promise((resolve: () => void) => {
                     testResolve = () => {
-                        this.source(mem.cache('Jin'))
+                        mem.cache(this.source('Jin'))
                         resolve()
                     }
                 })
@@ -277,7 +277,7 @@ describe('mem base', () => {
             @mem foo(next?: Object): Object {
                 called++
                 run = () => {
-                    mem.reset(this.foo())
+                    mem.cache(this.foo())
                 }
                 return val
             }
@@ -313,12 +313,12 @@ describe('mem base', () => {
 
         a.foo({foo: [666]})
         assert(called === 2)
-        mem.reset(a.foo())
+        mem.cache(a.foo())
         a.foo({foo: [666]})
 
         assert(called === 3)
 
-        a.foo(mem.cache({foo: [777]}))
+        mem.cache(a.foo({foo: [777]}))
 
         a.foo({ foo : [666] })
         assert(called === 4)
@@ -329,17 +329,18 @@ describe('mem base', () => {
 
     it('next remains after restart', () => {
         let run: ?(() => void)
+        type V = {}
         class A {
-            @mem foo(next?: Object): Object {
+            @mem foo(next?: V): V {
                 run = () => {
-                    this.foo(mem.cache({}))
+                    mem.cache(this.foo({}))
                 }
                 throw new mem.Wait()
             }
 
-            @mem task(next?: Object): Object {
+            @mem task(next?: V): V {
                 this.foo().valueOf()
-                return (next: any)
+                return next || {}
             }
         }
         const value = {}

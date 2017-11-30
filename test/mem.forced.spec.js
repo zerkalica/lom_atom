@@ -11,10 +11,11 @@ describe('mem forced', () => {
         }
 
         const x = new X()
-        x.foo
-        x.foo = mem.cache()
+        x.foo++
+        assert(x.foo === 2)
+        mem.cache(x.foo)
         assert(x.foo === 1)
-        x.foo = mem.cache(2)
+        mem.cache(x.foo = 2)
         assert(x.foo === 2)
     })
 
@@ -41,7 +42,7 @@ describe('mem forced', () => {
         fooCalled = false
         x.foo
         assert(fooCalled === false)
-        mem.reset(x.foo)
+        mem.cache(x.foo)
         x.foo
         assert(fooCalled === true)
     })
@@ -64,7 +65,7 @@ describe('mem forced', () => {
         assert(fooCalled === true)
 
         fooCalled = false
-        x.foo = mem.cache(1)
+        mem.cache(x.foo = 1)
         assert(fooCalled === false)
     })
 
@@ -87,14 +88,14 @@ describe('mem forced', () => {
         const x = new X()
         x.foo
         fooCalled = ''
-        mem.reset(x.foo)
+        mem.cache(x.foo)
         assert(fooCalled === '')
 
         x.foo
         assert(fooCalled === 'E')
 
         fooCalled = ''
-        mem.reset(x.bar)
+        mem.cache(x.bar)
         x.foo
         assert(fooCalled === 'G')
     })
@@ -102,7 +103,7 @@ describe('mem forced', () => {
     it('method call', () => {
         let fooCalled = ''
         class X {
-            @mem foo(v?: number) {
+            @mem foo(v?: number): number {
                 if (v !== undefined) {
                     fooCalled += 'S'
                     return v
@@ -116,7 +117,7 @@ describe('mem forced', () => {
         // x.foo() === 1 // cache x.foo
         const v = x.foo()
         fooCalled = ''
-        x.foo(mem.cache(v + 1))
+        mem.cache(x.foo(v + 1))
         assert(fooCalled === '')
     })
 })
