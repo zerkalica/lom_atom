@@ -13,7 +13,7 @@ function createGetSetHandler<V>(
             return (get: any).call(this)
         }
         (set: any).call(this, next)
-        return (next: any)
+        return next
     }
 }
 

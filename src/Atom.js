@@ -253,7 +253,7 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         }
         context.current = slave
 
-        return newValue
+        return this.status === ATOM_STATUS_ACTUAL ? (this.current: any) : newValue
     }
 
     dislead(slave: IAtomInt) {
