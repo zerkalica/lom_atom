@@ -19,3 +19,7 @@ export function setFunctionName(fn: Function, name: string) {
     Object.defineProperty(fn, 'name', {value: name, writable: false})
     fn.displayName = name
 }
+
+export const scheduleNative: (handler: () => void) => number = typeof requestAnimationFrame === 'function'
+    ? (handler: () => void) => requestAnimationFrame(handler)
+    : (handler: () => void) => setTimeout(handler, 16)

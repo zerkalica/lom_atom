@@ -1,8 +1,8 @@
 // @flow
 
-import type {IAtom, TypedPropertyDescriptor} from './interfaces'
-import Atom from './Atom'
-import {defaultContext} from './Context'
+import type {IAtom, TypedPropertyDescriptor} from '../interfaces'
+import Atom from '../Atom'
+import {defaultContext} from '../Context'
 
 export default function detached<P: Object, V>(
     proto: P,

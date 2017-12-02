@@ -2,9 +2,9 @@
 /* eslint-env mocha */
 
 import assert from 'assert'
-import mem from '../src/mem'
-import detached from '../src/detached'
-import action from '../src/action'
+import mem from '../src/decorators/mem'
+import detached from '../src/decorators/detached'
+import action from '../src/decorators/action'
 import {AtomWait} from '../src/utils'
 import {defaultContext} from '../src/Context'
 // import ConsoleLogger from '../src/ConsoleLogger'
@@ -335,7 +335,7 @@ describe('mem base', () => {
                 run = () => {
                     mem.cache(this.foo({}))
                 }
-                throw new mem.Wait()
+                throw new AtomWait()
             }
 
             @mem task(next?: V): V {
@@ -347,7 +347,7 @@ describe('mem base', () => {
         const a = new A()
         assert.throws(() => {
             a.task(value).valueOf()
-        }, mem.Wait)
+        }, AtomWait)
         if (run) run()
         sync()
         assert(a.task() === value)

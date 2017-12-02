@@ -215,7 +215,7 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         this.status = ATOM_STATUS_ACTUAL
         const prev = this.current
         const next: V | Error = nextRaw instanceof Error
-            ? new Proxy(nextRaw, throwOnAccess)
+            ? ((nextRaw: Object)[origId] ? nextRaw : new Proxy(nextRaw, throwOnAccess))
             : conform(nextRaw, prev, this.isComponent)
 
         if (prev !== next) {
@@ -294,7 +294,6 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         if (!this._masters) {
             this._masters = new Set()
         }
-        // if (master.manualReset) this.manualReset = true
         this._masters.add(master)
     }
 }

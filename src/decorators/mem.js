@@ -1,8 +1,8 @@
 // @flow
-import type {TypedPropertyDescriptor, IAtom} from './interfaces'
-import {defaultContext} from './Context'
-import {AtomWait, getId, setFunctionName} from './utils'
-import Atom from './Atom'
+import type {TypedPropertyDescriptor, IAtom} from '../interfaces'
+import {defaultContext} from '../Context'
+import {getId, setFunctionName} from '../utils'
+import Atom from '../Atom'
 
 function createGetSetHandler<V>(
     get?: () => V,
@@ -124,7 +124,7 @@ function memkey<V, K>(
         }
     })
 
-    function value(rawKey: K, next?: V | Error): V {
+    function value(rawKey: K, next?: V): V {
         let atomMap: Map<string, IAtom<V>> | void = hostAtoms.get(this)
         if (atomMap === undefined) {
             atomMap = new Map()
@@ -137,7 +137,7 @@ function memkey<V, K>(
             atomMap.set(key, atom)
         }
 
-        return (atom: IAtom<V>).value(next, isForceCache)
+        return atom.value(next, isForceCache)
     }
 
     descr.value = value
@@ -154,35 +154,24 @@ function memkeyManual<V, K>(
 }
 memkey.manual = memkeyManual
 
-const proxyHandler = {
-    get<V: Object, T: $Keys<V>>(obj: V, key: T): IAtom<$ElementType<V, T>> {
-        return obj[key + '()']
-    }
-}
-
-function toAtom<V: Object>(obj: V): $ObjMap<V, <T>(T) => IAtom<T>> {
-    return new Proxy(obj, proxyHandler)
-}
+type IDecorator<V> = (proto: Object, name: string, descr: TypedPropertyDescriptor<V>) => TypedPropertyDescriptor<V>;
 
 function cache<V>(data: V): V {
     isForceCache = false
     return data
 }
 
-(Object: any).defineProperties(mem, {
-    cache: {
+Object.defineProperties(mem, {
+    cache: ({
         get<V>(): (v: V) => V {
             isForceCache = true
             return cache
         }
-    },
+    }: any),
     manual: { value: memManual },
-    key: { value: memkey },
-    Wait: { value: AtomWait }
-    // toAtom: {value: toAtom }
+    key: { value: memkey }
 })
 
-type IDecorator<V> = (proto: Object, name: string, descr: TypedPropertyDescriptor<V>) => TypedPropertyDescriptor<V>;
 
 type IMemKey = {
     <V, K>(proto: Object, name: string, descr: TypedPropertyDescriptor<(k: K, next?: V) => V>): TypedPropertyDescriptor<(k: K, next?: V) => V>;
@@ -195,7 +184,5 @@ type IMem = {
     cache<V>(v: V): V;
 
     key: IMemKey;
-
-    Wait: Class<Error>;
 }
 export default ((mem: any): IMem)

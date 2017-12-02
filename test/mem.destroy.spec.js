@@ -2,7 +2,7 @@
 /* eslint-env mocha */
 
 import assert from 'assert'
-import mem from '../src/mem'
+import mem from '../src/decorators/mem'
 import {defaultContext} from '../src/Context'
 
 describe('mem.destroy must be deferred destroyed when no longer referenced', () => {

@@ -7,10 +7,7 @@ import type {
     ILogger,
 } from './interfaces'
 import {origId, ATOM_STATUS_DESTROYED} from './interfaces'
-
-const scheduleNative: (handler: () => void) => number = typeof requestAnimationFrame === 'function'
-    ? (handler: () => void) => requestAnimationFrame(handler)
-    : (handler: () => void) => setTimeout(handler, 16)
+import {scheduleNative} from './utils'
 
 function reap(atom: IAtomInt, key: IAtomInt, reaping: Set<IAtomInt>) {
     reaping.delete(atom)

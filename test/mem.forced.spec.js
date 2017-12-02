@@ -2,7 +2,7 @@
 /* eslint-env mocha */
 
 import assert from 'assert'
-import mem from '../src/mem'
+import mem from '../src/decorators/mem'
 
 describe('mem forced', () => {
     it('regular prop', () => {

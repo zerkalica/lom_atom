@@ -1,11 +1,13 @@
 // @flow
 
 export {default as Atom} from './Atom'
-export {default as action} from './action'
-export {default as detached} from './detached'
-export {default as mem} from './mem'
+export {default as action} from './decorators/action'
+export {default as detached} from './decorators/detached'
+export {default as mem} from './decorators/mem'
+export {default as defer} from './decorators/defer'
 export {default as ConsoleLogger} from './ConsoleLogger'
 export {defaultContext} from './Context'
+export {AtomWait} from './utils'
 
 export type {
     IAtomHandler,

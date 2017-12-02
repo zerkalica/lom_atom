@@ -1,8 +1,8 @@
 // @flow
 
-import type {TypedPropertyDescriptor, IContext} from './interfaces'
-import {getId, setFunctionName} from './utils'
-import {defaultContext} from './Context'
+import type {TypedPropertyDescriptor, IContext} from '../interfaces'
+import {getId, setFunctionName} from '../utils'
+import {defaultContext} from '../Context'
 
 function createActionMethod(t: Object, name: string, context: IContext): (...args: any[]) => any {
     const longName = getId(t, name)
@@ -76,10 +76,10 @@ function actionMethod<V: Function>(
         configurable: descr.configurable,
         get(): V {
             if (definingProperty) {
-                return this[hk]
+                return this[hk].bind(this)
             }
-            definingProperty = true
             const actionFn: Function = createActionMethod(this, hk, context)
+            definingProperty = true
             Object.defineProperty(this, name, {
                 configurable: true,
                 value: actionFn
