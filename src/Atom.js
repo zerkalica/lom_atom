@@ -152,8 +152,8 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
             if (slave && (!slave.isComponent || !this.isComponent)) {
                 let slaves = this._slaves
                 if (!slaves) {
-                    context.unreap(this)
                     slaves = this._slaves = new Set()
+                    context.unreap(this)
                 }
                 slaves.add(slave)
                 slave.addMaster(this)
@@ -169,7 +169,7 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
                 )
             ) {
                 this._suggested = this._next = normalized
-                this.status = ATOM_STATUS_DEEP_RESET
+                this.status = ATOM_STATUS_OBSOLETE
             }
             this.actualize()
         }
@@ -259,11 +259,10 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
     dislead(slave: IAtomInt) {
         const slaves = this._slaves
         if (slaves) {
-            if (slaves.size === 1) {
+            slaves.delete(slave)
+            if (slaves.size === 0) {
                 this._slaves = null
                 this._context.proposeToReap(this)
-            } else {
-                slaves.delete(slave)
             }
         }
     }
