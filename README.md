@@ -112,6 +112,10 @@ class TodoList {
     @mem todosWithUser() {
         return {todos: this.todos, user: this.user}
     }
+
+    @mem todosWithUserParallel() {
+        return {todos: mem.async(this.todos), user: mem.async(this.user)}
+    }
 }
 const list = new TodoList()
 ```
@@ -121,6 +125,7 @@ const list = new TodoList()
 * ``` mem.cache(this.todos = data) ``` - set new value or error directly into cache (push).
 * ``` mem.cache(list.todosWithUser) ``` - deep reset cache for todosWithUser all its dependencies (todos) and notify all dependants about changes.
 * ``` @mem.manual get user() {...} ``` - exclude user from deep reset. ``` mem.reset(list.todosWithUser) ``` resets todos but not user. If you want to reset user, use helper directly on user: ``` mem.cache(list.user) ```
+* ``` mem.async(this.todos) ``` - initiate parallel loading todos and user (wrap error in proxy, do not throw error if data are fetching).
 
 ## Key-value
 

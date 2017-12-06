@@ -1,5 +1,6 @@
 // @flow
 
+import {ATOM_STATUS_OBSOLETE} from '../interfaces'
 import type {IAtom, TypedPropertyDescriptor} from '../interfaces'
 import Atom from '../Atom'
 import {defaultContext} from '../Context'
@@ -27,7 +28,7 @@ export default function detached<P: Object, V>(
                 hostAtoms.set(this, atom)
             }
             if (force) {
-                atom.status =5
+                atom.status = ATOM_STATUS_OBSOLETE
                 // atom.reset()
             }
 

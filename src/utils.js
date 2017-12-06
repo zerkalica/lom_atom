@@ -23,3 +23,20 @@ export function setFunctionName(fn: Function, name: string) {
 export const scheduleNative: (handler: () => void) => number = typeof requestAnimationFrame === 'function'
     ? (handler: () => void) => requestAnimationFrame(handler)
     : (handler: () => void) => setTimeout(handler, 16)
+
+
+export const origId = Symbol('orig_error')
+const throwOnAccess = {
+    get<V: Object>(target: Error, key: string): V {
+        if (key === origId) return (target: Object).valueOf()
+        throw target.valueOf()
+    },
+    ownKeys(target: Error): string[] {
+        throw target.valueOf()
+    }
+}
+
+
+export function proxify<V>(v: V): V {
+    return (new Proxy(v, (throwOnAccess: any)): any)
+}

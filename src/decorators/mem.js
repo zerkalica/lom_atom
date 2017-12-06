@@ -25,7 +25,7 @@ function createValueHandler<V>(initializer?: () => V): (next?: V | Error) => V {
     }
 }
 
-let isForceCache = false
+let isForceCache = 0
 
 function mem<V>(
     proto: Object,
@@ -157,14 +157,20 @@ memkey.manual = memkeyManual
 type IDecorator<V> = (proto: Object, name: string, descr: TypedPropertyDescriptor<V>) => TypedPropertyDescriptor<V>;
 
 function cache<V>(data: V): V {
-    isForceCache = false
+    isForceCache = 0
     return data
 }
 
 Object.defineProperties(mem, {
     cache: ({
         get<V>(): (v: V) => V {
-            isForceCache = true
+            isForceCache = 1
+            return cache
+        }
+    }: any),
+    async: ({
+        get<V>(): (v: V) => V {
+            isForceCache = 2
             return cache
         }
     }: any),
@@ -182,6 +188,7 @@ type IMem = {
     <V>(proto: Object, name: string, descr: TypedPropertyDescriptor<V>): TypedPropertyDescriptor<V>;
     manual: IDecorator<*>;
     cache<V>(v: V): V;
+    async<V>(v: V): V;
 
     key: IMemKey;
 }

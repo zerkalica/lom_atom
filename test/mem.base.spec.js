@@ -53,7 +53,7 @@ describe('mem base', () => {
         }
 
         const x = new UserService()
-        x.userById(1)
+        mem.async(x.userById(1))
         if (run) run()
         const user1 = x.userById(1)
         assert(called === 1)
@@ -61,7 +61,7 @@ describe('mem base', () => {
         x.userById(1)
         assert(called === 1)
 
-        x.userById(2)
+        mem.async(x.userById(2))
         if (run) run()
         assert(called === 2)
 

@@ -34,24 +34,30 @@ export interface IContext {
     endTransaction(oldNamespace: string): void;
 }
 
-export const ATOM_STATUS_DESTROYED = 0
-export const ATOM_STATUS_OBSOLETE = 1
-export const ATOM_STATUS_CHECKING = 2
-export const ATOM_STATUS_PULLING = 3
-export const ATOM_STATUS_ACTUAL = 4
-export const ATOM_STATUS_DEEP_RESET = 5
+export const ATOM_STATUS_DESTROYED: 0 = 0
+export const ATOM_STATUS_OBSOLETE: 1 = 1
+export const ATOM_STATUS_CHECKING: 2 = 2
+export const ATOM_STATUS_PULLING: 3 = 3
+export const ATOM_STATUS_ACTUAL: 4 = 4
+export const ATOM_STATUS_DEEP_RESET: 5 = 5
 
 export const catchedId = Symbol('lom_atom_catched')
-export const origId = Symbol('orig_error')
 export type IAtomStatus = typeof ATOM_STATUS_OBSOLETE
     | typeof ATOM_STATUS_CHECKING | typeof ATOM_STATUS_PULLING | typeof ATOM_STATUS_ACTUAL
+    | typeof ATOM_STATUS_DEEP_RESET | typeof ATOM_STATUS_DESTROYED
+
+export const ATOM_FORCE_NONE: 0 = 0
+export const ATOM_FORCE_CACHE: 1 = 1
+export const ATOM_FORCE_ASYNC: 2 = 2
+
+export type IAtomForce = typeof ATOM_FORCE_NONE | typeof ATOM_FORCE_CACHE | typeof ATOM_FORCE_ASYNC
 
 export interface IAtom<V> {
     status: IAtomStatus;
-    current: V | Error | void;
+    current: V | Error;
     +field: string;
     +displayName: string;
-    value(v?: V | Error, forceCache?: boolean): V;
+    value(v?: V | Error, forceCache?: IAtomForce): V;
     reset(): void;
     destructor(): void;
 }

@@ -2,13 +2,14 @@
 
 import {
     catchedId,
-    origId,
+    ATOM_FORCE_NONE, ATOM_FORCE_CACHE, ATOM_FORCE_ASYNC,
     ATOM_STATUS_DESTROYED,
     ATOM_STATUS_DEEP_RESET,
     ATOM_STATUS_OBSOLETE, ATOM_STATUS_CHECKING, ATOM_STATUS_PULLING, ATOM_STATUS_ACTUAL
 } from './interfaces'
 
 import type {
+    IAtomForce,
     IAtom,
     IAtomInt,
     IAtomStatus,
@@ -17,19 +18,8 @@ import type {
     IAtomOwner
 } from './interfaces'
 
-import {AtomWait} from './utils'
+import {AtomWait, origId, proxify} from './utils'
 import conform from './conform'
-
-const throwOnAccess = {
-    get<V: Object>(target: Error, key: string): V {
-        if (key === origId) return (target: Object).valueOf()
-        throw target.valueOf()
-    },
-    ownKeys(target: Error): string[] {
-        throw target.valueOf()
-    }
-}
-
 
 function checkSlave(slave: IAtomInt) {
     slave.check()
@@ -53,7 +43,7 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
     field: string
     owner: IAtomOwner
 
-    current: V | Error | void
+    current: V | Error
     _next: V | Error | void
     _suggested: V | Error | void
 
@@ -85,7 +75,7 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         this.isComponent = isComponent || false
         this.manualReset = manualReset || false
         this._context = context
-        this.current = undefined
+        this.current = (undefined: any)
         this._next = undefined
         this._suggested = undefined
         this._hostAtoms = hostAtoms
@@ -121,7 +111,7 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         this._checkSlaves()
         this._hostAtoms.delete(((this._keyHash || this.owner): any))
         this._context.destroyHost(this)
-        this.current = undefined
+        this.current = (undefined: any)
         this._next = undefined
         this._suggested = undefined
         this.status = ATOM_STATUS_DESTROYED
@@ -136,9 +126,9 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         this.status = ATOM_STATUS_DEEP_RESET
     }
 
-    value(next?: V | Error, forceCache?: boolean): V {
+    value(next?: V | Error, forceCache?: IAtomForce): V {
         const context = this._context
-        if (forceCache === true) {
+        if (forceCache === ATOM_FORCE_CACHE) {
             if (next === undefined) {
                 this.reset()
                 if (this._slaves) {
@@ -173,8 +163,14 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
             }
             this.actualize()
         }
+        const current: V | Error = this.current
+        if (current instanceof Error) {
+            if (forceCache === ATOM_FORCE_ASYNC) return proxify((current: any))
+            // return proxify((current: any))
+            throw current
+        }
 
-        return (this.current: any)
+        return current
     }
 
     static deepReset: Set<IAtom<*>> | void = undefined
@@ -215,7 +211,7 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         this.status = ATOM_STATUS_ACTUAL
         const prev = this.current
         const next: V | Error = nextRaw instanceof Error
-            ? ((nextRaw: Object)[origId] ? nextRaw : new Proxy(nextRaw, throwOnAccess))
+            ? (nextRaw: Object)[origId] || nextRaw
             : conform(nextRaw, prev, this.isComponent)
 
         if (prev !== next) {

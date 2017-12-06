@@ -1,7 +1,7 @@
 // @flow
 
 import type {TypedPropertyDescriptor, IContext} from '../interfaces'
-import {getId, setFunctionName} from '../utils'
+import {getId, setFunctionName, AtomWait} from '../utils'
 import {defaultContext} from '../Context'
 
 function createActionMethod(t: Object, name: string, context: IContext): (...args: any[]) => any {
@@ -20,6 +20,8 @@ function createActionMethod(t: Object, name: string, context: IContext): (...arg
                 case 5: result = t[name](args[0], args[1], args[2], args[3], args[4]); break
                 default: result = t[name].apply(t, args)
             }
+        } catch(e) {
+            if (!(e instanceof AtomWait)) throw e
         } finally {
             context.endTransaction(oldNamespace)
         }
@@ -47,6 +49,8 @@ function createActionFn<F: Function>(fn: F, rawName?: string, context: IContext)
                 case 5: result = fn(args[0], args[1], args[2], args[3], args[4]); break
                 default: result = fn.apply(null, args)
             }
+        } catch(e) {
+            if (!(e instanceof AtomWait)) throw e
         } finally {
             context.endTransaction(oldNamespace)
         }

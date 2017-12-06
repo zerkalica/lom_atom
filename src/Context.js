@@ -6,7 +6,7 @@ import type {
     IContext,
     ILogger,
 } from './interfaces'
-import {origId, ATOM_STATUS_DESTROYED} from './interfaces'
+import {ATOM_STATUS_DESTROYED} from './interfaces'
 import {scheduleNative} from './utils'
 
 function reap(atom: IAtomInt, key: IAtomInt, reaping: Set<IAtomInt>) {
@@ -18,8 +18,6 @@ function reap(atom: IAtomInt, key: IAtomInt, reaping: Set<IAtomInt>) {
 
 export default class Context implements IContext {
     current: ?IAtomInt = null
-    isCacheForce: boolean = false
-    isDeepReset: boolean = false
 
     _logger: ILogger | void = undefined
     _updating: IAtomInt[] = []
@@ -67,11 +65,7 @@ export default class Context implements IContext {
                 // if (!this._scheduled && this._logger !== undefined) {
                 //     this._logger.beginGroup(this._namespace)
                 // }
-                logger.newValue(
-                    atom,
-                    from instanceof Error && (from: Object)[origId] ? (from: Object)[origId] : from,
-                    to instanceof Error && (to: Object)[origId] ? (to: Object)[origId] : to
-                )
+                logger.newValue(atom, from, to)
             } catch (error) {
                 console.error(error)
                 logger.error(atom, error)
