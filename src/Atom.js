@@ -29,7 +29,7 @@ function obsoleteSlave(slave: IAtomInt) {
     slave.obsolete()
 }
 
-function disleadThis(master: IAtomInt) {
+function disleadSlaves(master: IAtomInt) {
     master.dislead((this: IAtomInt))
 }
 
@@ -38,6 +38,11 @@ function actualizeMaster(master: IAtomInt) {
         master.actualize()
     }
 }
+
+function deleteMasters(slave: IAtomInt) {
+    slave.removeMaster((this: IAtomInt))
+}
+
 export default class Atom<V> implements IAtom<V>, IAtomInt {
     status: IAtomStatus
     field: string
@@ -105,10 +110,14 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
     destructor(): void {
         if (this.status === ATOM_STATUS_DESTROYED) return
         if (this._masters) {
-            this._masters.forEach(disleadThis, this)
+            this._masters.forEach(disleadSlaves, this)
             this._masters = null
         }
-        this._checkSlaves()
+        if (this._slaves) {
+            this._slaves.forEach(deleteMasters, this)
+            this._slaves = null
+        }
+        // this._checkSlaves()
         this._hostAtoms.delete(((this._keyHash || this.owner): any))
         this._context.destroyHost(this)
         this.current = (undefined: any)
@@ -120,17 +129,13 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         this._keyHash = undefined
     }
 
-    reset() {
-        this._suggested = this._next
-        this._next = undefined
-        this.status = ATOM_STATUS_DEEP_RESET
-    }
-
     value(next?: V | Error, forceCache?: IAtomForce): V {
         const context = this._context
         if (forceCache === ATOM_FORCE_CACHE) {
             if (next === undefined) {
-                this.reset()
+                this._suggested = this._next
+                this._next = undefined
+                this.status = ATOM_STATUS_DEEP_RESET
                 if (this._slaves) this._slaves.forEach(obsoleteSlave)
             } else {
                 this._push(next)
@@ -190,18 +195,17 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         const deepReset = Atom.deepReset
         if (this.status === ATOM_STATUS_DEEP_RESET && !this.isComponent) {
             Atom.deepReset = deepReset || new Set()
-            this._push(this._pull())
+            this._pullPush()
             Atom.deepReset = deepReset
         } else if (deepReset !== undefined && !this.manualReset && !deepReset.has(this)) {
             deepReset.add(this)
-            this._push(this._pull())
+            this._pullPush()
         } else if (this.status !== ATOM_STATUS_ACTUAL) {
-            this._push(this._pull())
+            this._pullPush()
         }
     }
 
-    _push(nextRaw: V | Error | void): void {
-        if (nextRaw === undefined) return
+    _push(nextRaw: V | Error): void {
         if (!(nextRaw instanceof AtomWait)) {
             this._suggested = this._next
             this._next = undefined
@@ -219,9 +223,9 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         }
     }
 
-    _pull(): V | Error | void {
+    _pullPush(): void {
         if (this._masters) {
-            this._masters.forEach(disleadThis, this)
+            this._masters.forEach(disleadSlaves, this)
         }
         let newValue: V | Error
         this.status = ATOM_STATUS_PULLING
@@ -245,15 +249,15 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
                 : new Error(error.stack || error)
         }
         context.current = slave
-        if (this.status === ATOM_STATUS_DEEP_RESET) return
 
-        return newValue
+        if (this.status !== ATOM_STATUS_DEEP_RESET) this._push(newValue)
     }
 
     dislead(slave: IAtomInt) {
         const slaves = this._slaves
         if (slaves) {
             slaves.delete(slave)
+            slave.removeMaster(this)
             if (slaves.size === 0) {
                 this._slaves = null
                 this._context.proposeToReap(this)
@@ -281,6 +285,11 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
             this.status = ATOM_STATUS_OBSOLETE
             this._checkSlaves()
         }
+    }
+
+    removeMaster(master: IAtomInt) {
+        if (!this._masters) return
+        this._masters.delete(master)
     }
 
     addMaster(master: IAtomInt) {

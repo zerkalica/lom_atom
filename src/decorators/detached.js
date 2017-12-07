@@ -29,7 +29,6 @@ export default function detached<P: Object, V>(
             }
             if (force) {
                 atom.status = ATOM_STATUS_OBSOLETE
-                // atom.reset()
             }
 
             return atom.value()

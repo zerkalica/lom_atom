@@ -100,29 +100,6 @@ describe('mem base', () => {
         assert(x.xxx() === 7)
     })
 
-    it('transactional set', () => {
-        let callCount = 0
-        class X {
-            @mem foo = 1
-            @mem bar = 1
-
-            @action some() {
-                this.foo++
-                this.bar++
-            }
-
-            @mem computed() {
-                callCount++
-                return this.foo + this.bar
-            }
-        }
-
-        const x = new X()
-        x.computed()
-        x.some()
-        assert(callCount === 2)
-    })
-
     it('direct set', () => {
         let callCount = 0
         class X {

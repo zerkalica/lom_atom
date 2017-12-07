@@ -58,7 +58,6 @@ export interface IAtom<V> {
     +field: string;
     +displayName: string;
     value(v?: V | Error, forceCache?: IAtomForce): V;
-    reset(): void;
     destructor(): void;
 }
 
@@ -72,6 +71,7 @@ export interface IAtomInt extends IAtom<*> {
     check(): void;
     obsolete(): void;
     dislead(slave: IAtomInt): void;
+    removeMaster(master: IAtomInt): void;
     addMaster(master: IAtomInt): void;
 }
 
