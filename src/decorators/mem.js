@@ -1,5 +1,6 @@
 // @flow
-import type {TypedPropertyDescriptor, IAtom} from '../interfaces'
+import type {TypedPropertyDescriptor, IAtom, IAtomStatus} from '../interfaces'
+import {ATOM_STATUS_DEEP_RESET} from '../interfaces'
 import {defaultContext} from '../Context'
 import {getId, setFunctionName} from '../utils'
 import Atom from '../Atom'
@@ -12,7 +13,7 @@ function createGetSetHandler<V>(
         if (next === undefined) {
             return (get: any).call(this)
         }
-        (set: any).call(this, next)
+        ;(set: any).call(this, next)
         return next
     }
 }

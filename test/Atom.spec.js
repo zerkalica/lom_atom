@@ -36,7 +36,6 @@ describe('Atom', () => {
         let source = atom('source', (next?: number) => next || 1)
         let middle = atom('middle', () => source.value() + 1)
         let target = atom('target', () => middle.value() + 1)
-
         assert(target.value() === 3)
         source.value(2)
         assert(target.value() === 4)

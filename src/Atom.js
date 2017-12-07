@@ -131,9 +131,7 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         if (forceCache === ATOM_FORCE_CACHE) {
             if (next === undefined) {
                 this.reset()
-                if (this._slaves) {
-                    this._slaves.forEach(obsoleteSlave)
-                }
+                if (this._slaves) this._slaves.forEach(obsoleteSlave)
             } else {
                 this._push(next)
             }
@@ -165,8 +163,7 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         }
         const current: V | Error = this.current
         if (current instanceof Error) {
-            if (forceCache === ATOM_FORCE_ASYNC) return proxify((current: any))
-            // return proxify((current: any))
+            if (forceCache !== ATOM_FORCE_NONE) return proxify((current: any))
             throw current
         }
 
@@ -203,7 +200,8 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         }
     }
 
-    _push(nextRaw: V | Error): void {
+    _push(nextRaw: V | Error | void): void {
+        if (nextRaw === undefined) return
         if (!(nextRaw instanceof AtomWait)) {
             this._suggested = this._next
             this._next = undefined
@@ -217,27 +215,26 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         if (prev !== next) {
             this.current = next
             this._context.newValue(this, prev, next)
-            if (this._slaves) {
-                this._slaves.forEach(obsoleteSlave)
-            }
+            if (this._slaves) this._slaves.forEach(obsoleteSlave)
         }
     }
 
-    _pull(): V | Error {
+    _pull(): V | Error | void {
         if (this._masters) {
             this._masters.forEach(disleadThis, this)
         }
         let newValue: V | Error
-
         this.status = ATOM_STATUS_PULLING
 
         const context = this._context
         const slave = context.current
         context.current = this
+        const f = this.field + '$'
+        const next = this._next
         try {
             newValue = this.key === undefined
-                ? (this.owner: any)[this.field + '$'](this._next)
-                : (this.owner: any)[this.field + '$'](this.key, this._next)
+                ? (this.owner: any)[f](next)
+                : (this.owner: any)[f](this.key, next)
         } catch (error) {
             if (error[catchedId] === undefined) {
                 error[catchedId] = true
@@ -248,8 +245,9 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
                 : new Error(error.stack || error)
         }
         context.current = slave
+        if (this.status === ATOM_STATUS_DEEP_RESET) return
 
-        return this.status === ATOM_STATUS_ACTUAL ? (this.current: any) : newValue
+        return newValue
     }
 
     dislead(slave: IAtomInt) {
