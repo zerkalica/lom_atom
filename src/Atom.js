@@ -126,8 +126,11 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         const context = this._context
         if (forceCache === ATOM_FORCE_CACHE) {
             if (next === undefined) {
-                this._suggested = this._next
-                this._next = undefined
+                // this._suggested = this._next
+                // this._next = undefined
+                if (this.current instanceof RecoverableError) {
+                    this._next = this._suggested
+                }
                 this.status = ATOM_STATUS_DEEP_RESET
                 if (this._slaves) this._slaves.forEach(obsoleteSlave)
             } else {
