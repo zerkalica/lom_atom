@@ -39,10 +39,6 @@ function actualizeMaster(master: IAtomInt) {
     }
 }
 
-function deleteMaster(slave: IAtomInt) {
-    slave.removeMaster((this: IAtomInt))
-}
-
 export default class Atom<V> implements IAtom<V>, IAtomInt {
     status: IAtomStatus
     field: string
@@ -111,13 +107,10 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         if (this.status === ATOM_STATUS_DESTROYED) return
         if (this._masters) {
             this._masters.forEach(deleteSlave, this)
-            this._masters = null
         }
-        if (this._slaves) {
-            this._slaves.forEach(deleteMaster, this)
-            this._slaves = null
-        }
-        // this._checkSlaves()
+        if (this._slaves) this._slaves.forEach(checkSlave)
+        this._masters = null
+        this._slaves = null
         this._hostAtoms.delete(((this._keyHash || this.owner): any))
         this._context.destroyHost(this)
         this.current = (undefined: any)
@@ -224,9 +217,12 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
     }
 
     _pullPush(): void {
-        if (this._masters) {
-            this._masters.forEach(deleteSlave, this)
+        const masters = this._masters
+        if (masters) {
+            masters.forEach(deleteSlave, this)
+            this._masters = null
         }
+
         let newValue: V | Error
         this.status = ATOM_STATUS_PULLING
 
@@ -257,7 +253,6 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         const slaves = this._slaves
         if (slaves) {
             slaves.delete(slave)
-            slave.removeMaster(this)
             if (slaves.size === 0) {
                 this._slaves = null
                 this._context.proposeToReap(this)
@@ -285,13 +280,6 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
             this.status = ATOM_STATUS_OBSOLETE
             this._checkSlaves()
         }
-    }
-
-    removeMaster(master: IAtomInt) {
-        const masters = this._masters
-        if (!masters) return
-        masters.delete(master)
-        if (masters.size === 0) this._masters = null
     }
 
     addMaster(master: IAtomInt) {

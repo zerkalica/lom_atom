@@ -71,7 +71,6 @@ export interface IAtomInt extends IAtom<*> {
     check(): void;
     obsolete(): void;
     dislead(slave: IAtomInt): void;
-    removeMaster(master: IAtomInt): void;
     addMaster(master: IAtomInt): void;
 }
 
