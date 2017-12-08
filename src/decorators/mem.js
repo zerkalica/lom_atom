@@ -175,6 +175,7 @@ Object.defineProperties(mem, {
             return cache
         }
     }: any),
+    // unchanged: {value}
     manual: { value: memManual },
     key: { value: memkey }
 })

@@ -1,6 +1,7 @@
 // @flow
 
-import {catchedId} from './interfaces'
+import {ATOM_FORCE_CACHE, catchedId} from './interfaces'
+import type {IAtom} from './interfaces'
 
 export class AtomWait extends Error {
     constructor(message?: string = 'Wait...') {
@@ -8,6 +9,21 @@ export class AtomWait extends Error {
         // $FlowFixMe new.target
         ;(this: Object)['__proto__'] = new.target.prototype
         ;(this: Object)[catchedId] = true
+    }
+}
+const atomId = Symbol('lom_atom')
+export class RecoverableError<V> extends Error {
+    constructor(error: Error, atom: IAtom<V>) {
+        super(error.message || error)
+        this.stack = error.stack
+        // $FlowFixMe new.target
+        ;(this: Object)['__proto__'] = new.target.prototype
+        ;(this: Object)[catchedId] = true
+        ;(this: Object)[atomId] = atom
+    }
+
+    retry = () => {
+        ;(this: Object)[atomId].value(undefined, ATOM_FORCE_CACHE)
     }
 }
 

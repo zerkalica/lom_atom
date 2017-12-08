@@ -18,7 +18,7 @@ import type {
     IAtomOwner
 } from './interfaces'
 
-import {AtomWait, origId, proxify} from './utils'
+import {AtomWait, RecoverableError, origId, proxify} from './utils'
 import conform from './conform'
 
 function checkSlave(slave: IAtomInt) {
@@ -29,7 +29,7 @@ function obsoleteSlave(slave: IAtomInt) {
     slave.obsolete()
 }
 
-function disleadSlaves(master: IAtomInt) {
+function deleteSlave(master: IAtomInt) {
     master.dislead((this: IAtomInt))
 }
 
@@ -39,7 +39,7 @@ function actualizeMaster(master: IAtomInt) {
     }
 }
 
-function deleteMasters(slave: IAtomInt) {
+function deleteMaster(slave: IAtomInt) {
     slave.removeMaster((this: IAtomInt))
 }
 
@@ -110,11 +110,11 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
     destructor(): void {
         if (this.status === ATOM_STATUS_DESTROYED) return
         if (this._masters) {
-            this._masters.forEach(disleadSlaves, this)
+            this._masters.forEach(deleteSlave, this)
             this._masters = null
         }
         if (this._slaves) {
-            this._slaves.forEach(deleteMasters, this)
+            this._slaves.forEach(deleteMaster, this)
             this._slaves = null
         }
         // this._checkSlaves()
@@ -225,7 +225,7 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
 
     _pullPush(): void {
         if (this._masters) {
-            this._masters.forEach(disleadSlaves, this)
+            this._masters.forEach(deleteSlave, this)
         }
         let newValue: V | Error
         this.status = ATOM_STATUS_PULLING
@@ -244,9 +244,9 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
                 error[catchedId] = true
                 console.error(error.stack || error)
             }
-            newValue = error instanceof Error
+            newValue = error instanceof AtomWait || error instanceof RecoverableError
                 ? error
-                : new Error(error.stack || error)
+                : new RecoverableError(error, this)
         }
         context.current = slave
 
@@ -288,8 +288,10 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
     }
 
     removeMaster(master: IAtomInt) {
-        if (!this._masters) return
-        this._masters.delete(master)
+        const masters = this._masters
+        if (!masters) return
+        masters.delete(master)
+        if (masters.size === 0) this._masters = null
     }
 
     addMaster(master: IAtomInt) {
