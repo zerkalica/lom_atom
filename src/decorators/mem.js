@@ -1,6 +1,6 @@
 // @flow
-import type {TypedPropertyDescriptor, IAtom, IAtomStatus} from '../interfaces'
-import {ATOM_STATUS_DEEP_RESET} from '../interfaces'
+import type {TypedPropertyDescriptor, IAtom, IAtomForce, IAtomStatus} from '../interfaces'
+import {ATOM_STATUS_DEEP_RESET, ATOM_FORCE_NONE, ATOM_FORCE_RETRY, ATOM_FORCE_CACHE, ATOM_FORCE_ASYNC} from '../interfaces'
 import {defaultContext} from '../Context'
 import {getId, setFunctionName} from '../utils'
 import Atom from '../Atom'
@@ -26,7 +26,7 @@ function createValueHandler<V>(initializer?: () => V): (next?: V | Error) => V {
     }
 }
 
-let isForceCache = 0
+let forceCache: IAtomForce = ATOM_FORCE_NONE
 
 function mem<V>(
     proto: Object,
@@ -51,7 +51,7 @@ function mem<V>(
             atom = new Atom(name, this, defaultContext, hostAtoms, deepReset)
             hostAtoms.set(this, atom)
         }
-        return atom.value(next, isForceCache)
+        return forceCache === ATOM_FORCE_RETRY ? (atom: any) : atom.value(next, forceCache)
     }
     if (descr.value !== undefined) {
         proto[handlerKey] = descr.value
@@ -137,8 +137,7 @@ function memkey<V, K>(
             atom = new Atom(name, this, defaultContext, atomMap, deepReset, rawKey, key)
             atomMap.set(key, atom)
         }
-
-        return atom.value(next, isForceCache)
+        return forceCache === ATOM_FORCE_RETRY ? (atom: any) : atom.value(next, forceCache)
     }
 
     descr.value = value
@@ -158,24 +157,34 @@ memkey.manual = memkeyManual
 type IDecorator<V> = (proto: Object, name: string, descr: TypedPropertyDescriptor<V>) => TypedPropertyDescriptor<V>;
 
 function cache<V>(data: V): V {
-    isForceCache = 0
+    forceCache = ATOM_FORCE_NONE
     return data
+}
+
+function getRetryResult<V>(atom: IAtom<V>): () => void {
+    forceCache = ATOM_FORCE_NONE
+    return atom.getRetry()
 }
 
 Object.defineProperties(mem, {
     cache: ({
         get<V>(): (v: V) => V {
-            isForceCache = 1
+            forceCache = ATOM_FORCE_CACHE
             return cache
+        }
+    }: any),
+    getRetry: ({
+        get<V>(): (v: IAtom<V>) => () => void {
+            forceCache = ATOM_FORCE_RETRY
+            return getRetryResult
         }
     }: any),
     async: ({
         get<V>(): (v: V) => V {
-            isForceCache = 2
+            forceCache = ATOM_FORCE_ASYNC
             return cache
         }
     }: any),
-    // unchanged: {value}
     manual: { value: memManual },
     key: { value: memkey }
 })
@@ -191,7 +200,7 @@ type IMem = {
     manual: IDecorator<*>;
     cache<V>(v: V): V;
     async<V>(v: V): V;
-
+    getRetry<V>(v: V): () => void;
     key: IMemKey;
 }
 export default ((mem: any): IMem)

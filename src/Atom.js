@@ -1,7 +1,6 @@
 // @flow
 
 import {
-    catchedId,
     ATOM_FORCE_NONE, ATOM_FORCE_CACHE, ATOM_FORCE_ASYNC,
     ATOM_STATUS_DESTROYED,
     ATOM_STATUS_DEEP_RESET,
@@ -18,7 +17,7 @@ import type {
     IAtomOwner
 } from './interfaces'
 
-import {AtomWait, RecoverableError, origId, proxify} from './utils'
+import {AtomWait, setFunctionName, origId, catchedId, proxify} from './utils'
 import conform from './conform'
 
 function checkSlave(slave: IAtomInt) {
@@ -108,8 +107,8 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         if (this._masters) {
             this._masters.forEach(deleteSlave, this)
         }
-        if (this._slaves) this._slaves.forEach(checkSlave)
         this._masters = null
+        this._checkSlaves()
         this._slaves = null
         this._hostAtoms.delete(((this._keyHash || this.owner): any))
         this._context.destroyHost(this)
@@ -120,17 +119,16 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         this._hostAtoms = (undefined: any)
         this.key = undefined
         this._keyHash = undefined
+        this._retry = undefined
     }
 
     value(next?: V | Error, forceCache?: IAtomForce): V {
         const context = this._context
+        let current: V | Error = this.current
         if (forceCache === ATOM_FORCE_CACHE) {
             if (next === undefined) {
-                // this._suggested = this._next
-                // this._next = undefined
-                if (this.current instanceof RecoverableError) {
-                    this._next = this._suggested
-                }
+                this._suggested = this._next
+                this._next = undefined
                 this.status = ATOM_STATUS_DEEP_RESET
                 if (this._slaves) this._slaves.forEach(obsoleteSlave)
             } else {
@@ -153,8 +151,8 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
                 next !== undefined
                 && (normalized = conform(next, this._suggested, this.isComponent)) !== this._suggested
                 && (
-                    this.current instanceof Error
-                    || (normalized = conform(next, this.current, this.isComponent)) !== this.current
+                    current instanceof Error
+                    || (normalized = conform(next, current, this.isComponent)) !== current
                 )
             ) {
                 this._suggested = this._next = normalized
@@ -162,7 +160,7 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
             }
             this.actualize()
         }
-        const current: V | Error = this.current
+        current = this.current
         if (current instanceof Error) {
             if (forceCache !== ATOM_FORCE_NONE) return proxify((current: any))
             throw current
@@ -191,26 +189,28 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         const deepReset = Atom.deepReset
         if (this.status === ATOM_STATUS_DEEP_RESET && !this.isComponent) {
             Atom.deepReset = deepReset || new Set()
-            this._pullPush()
+            this.refresh()
             Atom.deepReset = deepReset
         } else if (deepReset !== undefined && !this.manualReset && !deepReset.has(this)) {
             deepReset.add(this)
-            this._pullPush()
+            this.refresh()
         } else if (this.status !== ATOM_STATUS_ACTUAL) {
-            this._pullPush()
+            this.refresh()
         }
     }
 
     _push(nextRaw: V | Error): void {
-        if (!(nextRaw instanceof AtomWait)) {
+        this.status = ATOM_STATUS_ACTUAL
+        const prev = this.current
+        let next: V | Error
+        if (nextRaw instanceof Error) {
+            if ((nextRaw: Object)[origId]) nextRaw = (nextRaw: Object)[origId]
+            next = nextRaw
+        } else {
+            next = conform(nextRaw, prev, this.isComponent)
             this._suggested = this._next
             this._next = undefined
         }
-        this.status = ATOM_STATUS_ACTUAL
-        const prev = this.current
-        const next: V | Error = nextRaw instanceof Error
-            ? (nextRaw: Object)[origId] || nextRaw
-            : conform(nextRaw, prev, this.isComponent)
 
         if (prev !== next) {
             this.current = next
@@ -219,7 +219,7 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         }
     }
 
-    _pullPush(): void {
+    refresh(): void {
         const masters = this._masters
         if (masters) {
             masters.forEach(deleteSlave, this)
@@ -243,12 +243,9 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
                 error[catchedId] = true
                 console.error(error.stack || error)
             }
-            newValue = error instanceof AtomWait || error instanceof RecoverableError
-                ? error
-                : new RecoverableError(error, this)
+            newValue = error
         }
         context.current = slave
-
         if (this.status !== ATOM_STATUS_DEEP_RESET) this._push(newValue)
     }
 
@@ -290,5 +287,17 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
             this._masters = new Set()
         }
         this._masters.add(master)
+    }
+
+    _retry: (() => void) | void
+
+    getRetry(): () => void {
+        if (this._retry === undefined) {
+            const fn = () => this.refresh()
+            setFunctionName(fn, `atom(${this.displayName}).retry()`)
+            this._retry = fn
+        }
+
+        return this._retry
     }
 }

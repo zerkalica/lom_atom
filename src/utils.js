@@ -1,29 +1,15 @@
 // @flow
 
-import {ATOM_FORCE_CACHE, catchedId} from './interfaces'
+import {ATOM_FORCE_CACHE} from './interfaces'
 import type {IAtom} from './interfaces'
 
+export const catchedId = Symbol('lom_cached')
 export class AtomWait extends Error {
     constructor(message?: string = 'Wait...') {
         super(message)
         // $FlowFixMe new.target
         ;(this: Object)['__proto__'] = new.target.prototype
         ;(this: Object)[catchedId] = true
-    }
-}
-const atomId = Symbol('lom_atom')
-export class RecoverableError<V> extends Error {
-    constructor(error: Error, atom: IAtom<V>) {
-        super(error.message || error)
-        this.stack = error.stack
-        // $FlowFixMe new.target
-        ;(this: Object)['__proto__'] = new.target.prototype
-        ;(this: Object)[catchedId] = true
-        ;(this: Object)[atomId] = atom
-    }
-
-    retry = () => {
-        ;(this: Object)[atomId].value(undefined, ATOM_FORCE_CACHE)
     }
 }
 
@@ -41,7 +27,7 @@ export const scheduleNative: (handler: () => void) => number = typeof requestAni
     : (handler: () => void) => setTimeout(handler, 16)
 
 
-export const origId = Symbol('orig_error')
+export const origId = Symbol('lom_error_orig')
 const throwOnAccess = {
     get<V: Object>(target: Error, key: string): V {
         if (key === origId) return (target: Object).valueOf()

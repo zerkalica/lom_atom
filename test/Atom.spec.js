@@ -5,7 +5,8 @@ import assert from 'assert'
 import Atom from '../src/Atom'
 import {AtomWait} from '../src/utils'
 import {defaultContext} from '../src/Context'
-import {IAtom, catchedId, ATOM_STATUS_OBSOLETE, ATOM_STATUS_ACTUAL} from '../src/interfaces'
+import {IAtom, ATOM_STATUS_OBSOLETE, ATOM_STATUS_ACTUAL} from '../src/interfaces'
+import {catchedId} from '../src/utils'
 
 describe('Atom', () => {
     function atom<V>(key: string, fn: (v?: V) => V): IAtom<V> {
