@@ -3,7 +3,6 @@
 import type {
     IAtomInt,
     IAtom,
-    IContext,
     ILogger,
 } from './interfaces'
 import {ATOM_STATUS_DESTROYED} from './interfaces'
@@ -16,14 +15,13 @@ function reap(atom: IAtomInt, key: IAtomInt, reaping: Set<IAtomInt>) {
     }
 }
 
-export default class Context implements IContext {
+export default class Context {
     current: ?IAtomInt = null
 
     _logger: ILogger | void = undefined
     _updating: IAtomInt[] = []
     _reaping: Set<IAtomInt> = new Set()
     _scheduled = false
-    _namespace: string = '$'
     _owners: WeakMap<?Object, Object> = new WeakMap()
 
     _destroyValue<V>(atom: IAtom<V>, from: any) {
@@ -62,9 +60,6 @@ export default class Context implements IContext {
         const logger = this._logger
         if (logger !== undefined) {
             try {
-                // if (!this._scheduled && this._logger !== undefined) {
-                //     this._logger.beginGroup(this._namespace)
-                // }
                 logger.newValue(atom, from, to)
             } catch (error) {
                 console.error(error)
@@ -89,21 +84,21 @@ export default class Context implements IContext {
 
     _schedule() {
         if (!this._scheduled) {
-            scheduleNative(this.__run)
+            scheduleNative(this._run)
             this._scheduled = true
         }
     }
 
-    __run = () => {
+    _run = () => {
         if (this._scheduled) {
             this._scheduled = false
-            this._run()
+            this.sync()
         }
     }
 
     _start = 0
 
-    _run() {
+    sync() {
         this._schedule()
         const reaping = this._reaping
         const updating = this._updating
@@ -127,29 +122,7 @@ export default class Context implements IContext {
         while (reaping.size > 0) {
             reaping.forEach(reap)
         }
-        // if (this._logger !== undefined) {
-        //     this._logger.endGroup()
-        // }
         this._scheduled = false
-        this._pendCount = 0
-    }
-
-    _pendCount = 0
-
-    beginTransaction(namespace: string): string {
-        const result = this._namespace
-        this._namespace = namespace
-        this._pendCount++
-        return result
-    }
-
-    endTransaction(prev: string) {
-        this._namespace = prev
-        if (this._pendCount === 1) {
-            this._run()
-        } else {
-            this._pendCount--
-        }
     }
 }
 

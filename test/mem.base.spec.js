@@ -10,10 +10,8 @@ import {defaultContext} from '../src/Context'
 // import ConsoleLogger from '../src/ConsoleLogger'
 
 describe('mem base', () => {
-    // defaultContext.setLogger(new ConsoleLogger({useColors: false}))
     function sync() {
-        defaultContext.beginTransaction('$')
-        defaultContext.endTransaction('$')
+        defaultContext.sync()
     }
 
     it('mem by key', () => {

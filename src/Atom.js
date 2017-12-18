@@ -12,11 +12,10 @@ import type {
     IAtom,
     IAtomInt,
     IAtomStatus,
-    IContext,
     IAtomHandler,
     IAtomOwner
 } from './interfaces'
-
+import Context from './Context'
 import {AtomWait, setFunctionName, origId, catchedId, proxify} from './utils'
 import conform from './conform'
 
@@ -37,6 +36,7 @@ function actualizeMaster(master: IAtomInt) {
         master.actualize()
     }
 }
+const proxyId = Symbol('lom_err_proxy')
 
 export default class Atom<V> implements IAtom<V>, IAtomInt {
     status: IAtomStatus
@@ -52,7 +52,7 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
 
     _masters: ?Set<IAtomInt> = null
     _slaves: ?Set<IAtomInt> = null
-    _context: IContext
+    _context: Context
     _hostAtoms: WeakMap<Object, IAtom<*>> | Map<string, IAtom<*>>
     _keyHash: string | void
 
@@ -61,7 +61,7 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
     constructor(
         field: string,
         owner: IAtomOwner,
-        context: IContext,
+        context: Context,
         hostAtoms: WeakMap<Object, IAtom<*>> | Map<string, IAtom<*>>,
         manualReset?: boolean,
         key?: mixed,
@@ -162,7 +162,10 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         }
         current = this.current
         if (current instanceof Error) {
-            if (forceCache !== ATOM_FORCE_NONE) return proxify((current: any))
+            if (forceCache !== ATOM_FORCE_NONE) {
+                if ((current: Object)[proxyId] === undefined) (current: Object)[proxyId] = proxify((current: any))
+                return (current: Object)[proxyId]
+            }
             throw current
         }
 
@@ -201,7 +204,7 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
 
     _push(nextRaw: V | Error): void {
         this.status = ATOM_STATUS_ACTUAL
-        const prev = this.current
+        const prev: V | Error = this.current
         let next: V | Error
         if (nextRaw instanceof Error) {
             if ((nextRaw: Object)[origId]) nextRaw = (nextRaw: Object)[origId]
@@ -214,7 +217,7 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
 
         if (prev !== next) {
             this.current = next
-            this._context.newValue(this, prev, next)
+            this._context.newValue((this: IAtomInt), prev, next)
             if (this._slaves) this._slaves.forEach(obsoleteSlave)
         }
     }
@@ -289,7 +292,7 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         this._masters.add(master)
     }
 
-    _retry: (() => void) | void
+    _retry: (() => void) | void = undefined
 
     getRetry(): () => void {
         if (this._retry === undefined) {

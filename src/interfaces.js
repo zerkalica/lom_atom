@@ -22,18 +22,6 @@ export interface ILogger {
     newValue<V>(atom: IAtom<V>, from?: V | Error, to: V | Error): void;
 }
 
-export interface IContext {
-    current: ?IAtomInt;
-    destroyHost(atom: IAtomInt): void;
-    newValue<V>(t: IAtom<V>, from?: V | Error, to: V | Error): void;
-    setLogger(logger: ILogger): void;
-    proposeToPull(atom: IAtomInt): void;
-    proposeToReap(atom: IAtomInt): void;
-    unreap(atom: IAtomInt): void;
-    beginTransaction(namespace: string): string;
-    endTransaction(oldNamespace: string): void;
-}
-
 export const ATOM_STATUS_DESTROYED: 0 = 0
 export const ATOM_STATUS_OBSOLETE: 1 = 1
 export const ATOM_STATUS_CHECKING: 2 = 2

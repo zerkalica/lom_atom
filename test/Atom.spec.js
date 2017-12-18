@@ -15,8 +15,7 @@ describe('Atom', () => {
     }
 
     function sync() {
-        defaultContext.beginTransaction('$')
-        defaultContext.endTransaction('$')
+        defaultContext.sync()
     }
 
     it('caching', () => {
