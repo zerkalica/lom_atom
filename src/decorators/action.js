@@ -6,41 +6,32 @@ import {defaultContext} from '../Context'
 
 type Handler = (...args: any[]) => void
 
-function createAction<Host: Object>(host: Host, methodName: string): (...args: any[]) => void {
+function createAction<Host: Object>(host: Host, methodName: string, sync?: boolean): (...args: any[]) => void {
     function actionFn(): void {
         const args = arguments
         try {
             switch (args.length) {
-                case 0: return host[methodName]()
-                case 1: return host[methodName](args[0])
-                case 2: return host[methodName](args[0], args[1])
-                case 3: return host[methodName](args[0], args[1], args[2])
-                case 4: return host[methodName](args[0], args[1], args[2], args[3])
-                case 5: return host[methodName](args[0], args[1], args[2], args[3], args[4])
-                default: return host[methodName].apply(host, args)
+                case 0: host[methodName](); break
+                case 1: host[methodName](args[0]); break
+                case 2: host[methodName](args[0], args[1]); break
+                case 3: host[methodName](args[0], args[1], args[2]); break
+                case 4: host[methodName](args[0], args[1], args[2], args[3]); break
+                case 5: host[methodName](args[0], args[1], args[2], args[3], args[4]); break
+                default: host[methodName].apply(host, args); break
             }
         } catch(e) {
             if (!(e instanceof AtomWait)) throw e
         }
+        if (sync) defaultContext.sync()
     }
 
     setFunctionName(actionFn, getId(host, methodName))
     return actionFn
 }
 
-function createSyncedAction(action: (args: any[]) => void) {
-    function syncedAction(...args: any[]) {
-        action(args)
-        defaultContext.sync()
-    }
-    syncedAction.displayName = `${action.displayName}_synced`
-
-    return syncedAction
-}
-
 function createDeferedAction(action: (args: any[]) => void) {
     function deferedAction(...args: any[]) {
-        scheduleNative(() => action(args))
+        scheduleNative(() => action(...args))
     }
     deferedAction.displayName = `${action.displayName}_defered`
 
@@ -67,10 +58,10 @@ function action<Host: Object, H: Handler>(
         get(): H {
             if (definingProperty) return this[hk].bind(this)
 
-            const action = createAction(this, hk)
+            const action = createAction(this, hk, sync)
             const actionFn = defer
                 ? createDeferedAction(action)
-                : (sync ? createSyncedAction(action) : action)
+                : action
 
             definingProperty = true
             Object.defineProperty(this, name, {
