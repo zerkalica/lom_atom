@@ -207,8 +207,7 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         const prev: V | Error = this.current
         let next: V | Error
         if (nextRaw instanceof Error) {
-            if ((nextRaw: Object)[origId]) nextRaw = (nextRaw: Object)[origId]
-            next = nextRaw
+            next = (nextRaw: Object)[origId] === undefined ? nextRaw : (nextRaw: Object)[origId]
         } else {
             next = conform(nextRaw, prev, this.isComponent)
             this._suggested = this._next
