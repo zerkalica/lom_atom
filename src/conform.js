@@ -1,5 +1,7 @@
 // @flow
 
+import Collection from './Collection'
+
 export const handlers: Map<mixed, Function> = new Map([
     [
         Array,

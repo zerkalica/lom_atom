@@ -4,6 +4,7 @@ import {ATOM_STATUS_DEEP_RESET, ATOM_FORCE_NONE, ATOM_FORCE_RETRY, ATOM_FORCE_CA
 import {defaultContext} from '../Context'
 import {getId, setFunctionName} from '../utils'
 import Atom from '../Atom'
+import Collection from '../Collection'
 
 function createGetSetHandler<V>(
     get?: () => V,
@@ -166,6 +167,11 @@ function getRetryResult<V>(atom: IAtom<V>): () => void {
     return atom.getRetry()
 }
 
+function getCollResult<V>(atom: IAtom<V[]>): Collection<V> {
+    forceCache = ATOM_FORCE_NONE
+    return atom.getCollection()
+}
+
 Object.defineProperties(mem, {
     cache: ({
         get<V>(): (v: V) => V {
@@ -177,6 +183,12 @@ Object.defineProperties(mem, {
         get<V>(): (v: IAtom<V>) => () => void {
             forceCache = ATOM_FORCE_RETRY
             return getRetryResult
+        }
+    }: any),
+    getColl: ({
+        get<V>(): (v: IAtom<V[]>) => Collection<V> {
+            forceCache = ATOM_FORCE_RETRY
+            return getCollResult
         }
     }: any),
     async: ({
@@ -201,6 +213,7 @@ type IMem = {
     cache<V>(v: V): V;
     async<V>(v: V): V;
     getRetry<V>(v: V): () => void;
+    getColl<V>(v: V[]): Collection<V>;
     key: IMemKey;
 }
 export default ((mem: any): IMem)

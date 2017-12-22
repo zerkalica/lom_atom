@@ -19,6 +19,8 @@ import Context from './Context'
 import {AtomWait, setFunctionName, origId, catchedId, proxify} from './utils'
 import conform from './conform'
 
+import Collection from './Collection'
+
 function checkSlave(slave: IAtomInt) {
     slave.check()
 }
@@ -43,7 +45,7 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
     field: string
     owner: IAtomOwner
 
-    current: V | Error
+    current: V
     _next: V | Error | void
     _suggested: V | Error | void
 
@@ -120,6 +122,7 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         this.key = undefined
         this._keyHash = undefined
         this._retry = undefined
+        this._coll = undefined
     }
 
     value(next?: V | Error, forceCache?: IAtomForce): V {
@@ -215,10 +218,14 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         }
 
         if (prev !== next) {
-            this.current = next
+            this.current = (next: any)
             this._context.newValue((this: IAtomInt), prev, next)
             if (this._slaves) this._slaves.forEach(obsoleteSlave)
         }
+    }
+
+    notify() {
+        if (this._slaves) this._slaves.forEach(obsoleteSlave)
     }
 
     refresh(): void {
@@ -301,5 +308,15 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         }
 
         return this._retry
+    }
+
+    _coll: Collection<*> | void = undefined
+
+    getCollection<T>(): Collection<T> {
+        if (this._coll === undefined) {
+            this._coll = new Collection((this: IAtom<any>))
+        }
+
+        return this._coll
     }
 }

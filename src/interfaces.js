@@ -1,7 +1,7 @@
 // @flow
-
+import type Collection from './Collection'
 export type ILoggerStatus = 'waiting' | 'proposeToReap' | 'proposeToPull'
-
+export const actionId = Symbol('lom_action')
 export interface ILogger {
     beginGroup(name: string): void;
     endGroup(): void;
@@ -42,13 +42,15 @@ export type IAtomForce = typeof ATOM_FORCE_NONE | typeof ATOM_FORCE_CACHE | type
 
 export interface IAtom<V> {
     status: IAtomStatus;
-    current: V | Error;
+    current: V;
     +field: string;
     +displayName: string;
     value(v?: V | Error, forceCache?: IAtomForce): V;
     refresh(): void;
     destructor(): void;
     getRetry(): () => void;
+    getCollection<T>(): Collection<T>;
+    notify(): void;
 }
 
 export interface IAtomInt extends IAtom<*> {
