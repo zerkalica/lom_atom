@@ -44,7 +44,6 @@ export interface IAtom<V> {
     status: IAtomStatus;
     current: V;
     +field: string;
-    +displayName: string;
     value(v?: V | Error, forceCache?: IAtomForce): V;
     refresh(): void;
     destructor(): void;

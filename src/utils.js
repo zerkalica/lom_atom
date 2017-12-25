@@ -4,6 +4,22 @@ import {ATOM_FORCE_CACHE} from './interfaces'
 import type {IAtom} from './interfaces'
 
 export const catchedId = Symbol('lom_cached')
+
+/**
+ * Babel generates garbage here, use old-style class to reduce bundle size
+ */
+export function AtomWait(message?: string = 'Wait...') {
+    Error.call(this, message)
+    // $FlowFixMe new.target
+    ;(this: Object)['__proto__'] = new.target.prototype
+    ;(this: Object)[catchedId] = true
+
+    return this
+}
+AtomWait.prototype = Object.create(Error.prototype)
+AtomWait.prototype.constructor = AtomWait
+
+/*
 export class AtomWait extends Error {
     constructor(message?: string = 'Wait...') {
         super(message)
@@ -12,6 +28,7 @@ export class AtomWait extends Error {
         ;(this: Object)[catchedId] = true
     }
 }
+*/
 
 export function getId(t: Object, hk: string): string {
     return `${t.constructor.displayName || t.constructor.name}.${hk}`
@@ -25,7 +42,6 @@ export function setFunctionName(fn: Function, name: string) {
 export const scheduleNative: (handler: () => void) => number = typeof requestAnimationFrame === 'function'
     ? (handler: () => void) => requestAnimationFrame(handler)
     : (handler: () => void) => setTimeout(handler, 16)
-
 
 export const origId = Symbol('lom_error_orig')
 const throwOnAccess = {

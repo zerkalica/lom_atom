@@ -82,10 +82,6 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         this.status = ATOM_STATUS_OBSOLETE
     }
 
-    get displayName(): string {
-        return this.toString()
-    }
-
     toString() {
         const k = this.key
         const owner = this.owner
@@ -304,7 +300,7 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
     getRetry(): () => void {
         if (this._retry === undefined) {
             const fn = () => this.refresh()
-            setFunctionName(fn, `atom(${this.displayName}).retry()`)
+            setFunctionName(fn, `atom(${this.toString()}).retry()`)
             this._retry = fn
         }
 

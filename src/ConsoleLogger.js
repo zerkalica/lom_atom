@@ -34,13 +34,13 @@ export default class ConsoleLogger implements ILogger {
     }
 
     onDestruct<V>(atom: IAtom<V>): void {
-        console.debug(atom.displayName, 'destruct')
+        console.debug(atom.toString(), 'destruct')
     }
 
     error<V>(atom: IAtom<V>, err: Error): void {}
 
     newValue<V>(atom: IAtom<V>, from?: V | Error, to: V | Error): void {
-        const name = atom.displayName
+        const name = atom.toString()
         const filter = this._filter
         if (filter && !filter.test(name)) return
         if (atom.isComponent) {

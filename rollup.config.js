@@ -28,15 +28,15 @@ const uglifyOpts = {
         toplevel: true
     }
 }
+//console.log(JSON.stringify(babelrc,0,' '))
 
 const commonConf = {
     input: 'src/index.js',
-    sourcemap: true,
     plugins: [
         babel(babelrc)
     ].concat(process.env.UGLIFY === '1' ? [uglify(uglifyOpts, minify)] : []),
     output: [
-        {file: pkg.module, format: 'es'},
+        {sourcemap: true, file: pkg.module, format: 'es'},
     ]
 }
 
@@ -44,8 +44,8 @@ export default [
     commonConf,
     Object.assign({}, commonConf, {
         output: [
-            {file: pkg.main, format: 'cjs'},
-            {file: pkg['umd:main'], format: 'umd', name: pkg.name}
+            {sourcemap: true, file: pkg.main, format: 'cjs'},
+            {sourcemap: true, file: pkg['umd:main'], format: 'umd', name: pkg.name}
         ]
     })
 ]
