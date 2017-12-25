@@ -1,7 +1,5 @@
 // @flow
 
-import Collection from './Collection'
-
 export const handlers: Map<mixed, Function> = new Map([
     [
         Array,
@@ -9,7 +7,7 @@ export const handlers: Map<mixed, Function> = new Map([
             let equal = target.length === source.length
 
             for(let i = 0; i < target.length; ++i) {
-                const conformed = target[i] = conform(target[i], source[i], false, stack)
+                const conformed = target[i] = conform(target[i], source[i], stack)
                 if (equal && conformed !== source[i]) equal = false
             }
 
@@ -23,7 +21,7 @@ export const handlers: Map<mixed, Function> = new Map([
             let equal = true
 
             for (let key in target) {
-                const conformed = target[key] = conform(target[key], source[key], false, stack)
+                const conformed = target[key] = conform(target[key], source[key], stack)
                 if (equal && conformed !== source[key]) equal = false
                 ++count
             }
@@ -47,28 +45,26 @@ export const handlers: Map<mixed, Function> = new Map([
     ]
 ])
 
-const processed: WeakMap<Object, boolean> = new WeakMap()
+export const processed: WeakMap<mixed, boolean> = new WeakMap()
 
 export default function conform<Target, Source>(
     target: Target,
     source: Source,
-    isComponent: boolean,
     stack: mixed[] = []
 ): Target {
     if (target === source) return (source: any)
-
     if (
-        isComponent
-        || !target || typeof target !== 'object'
+        !target || typeof target !== 'object'
         || !source || typeof source !== 'object'
         || target instanceof Error
         || source instanceof Error
         || target.constructor !== source.constructor
         || processed.has(target)
     ) return target
-    processed.set(target, true)
 
+    processed.set(target, true)
     const conformHandler = handlers.get(target.constructor)
+
     if (!conformHandler) return target
 
     if (stack.indexOf(target) !== -1) return target

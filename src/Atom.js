@@ -17,9 +17,7 @@ import type {
 } from './interfaces'
 import Context from './Context'
 import {AtomWait, setFunctionName, origId, catchedId, proxify} from './utils'
-import conform from './conform'
-
-import Collection from './Collection'
+import conform, {processed} from './conform'
 
 function checkSlave(slave: IAtomInt) {
     slave.check()
@@ -106,12 +104,12 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
 
     destructor(): void {
         if (this.status === ATOM_STATUS_DESTROYED) return
-        if (this._masters) {
-            this._masters.forEach(deleteSlave, this)
-        }
+        if (this._masters) this._masters.forEach(deleteSlave, this)
         this._masters = null
-        this._checkSlaves()
+        // this._checkSlaves()
+        if (this._slaves) this._slaves.forEach(checkSlave)
         this._slaves = null
+        processed.delete(this.current)
         this._hostAtoms.delete(((this._keyHash || this.owner): any))
         this._context.destroyHost(this)
         this.current = (undefined: any)
@@ -122,7 +120,6 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         this.key = undefined
         this._keyHash = undefined
         this._retry = undefined
-        this._coll = undefined
     }
 
     value(next?: V | Error, forceCache?: IAtomForce): V {
@@ -133,9 +130,12 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
                 this._suggested = this._next
                 this._next = undefined
                 this.status = ATOM_STATUS_DEEP_RESET
-                if (this._slaves) this._slaves.forEach(obsoleteSlave)
+                this.notify()
             } else {
+                const slave = context.current
+                context.current = this
                 this._push(next)
+                context.current = slave
             }
         } else {
             const slave = context.current
@@ -148,14 +148,13 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
                 slaves.add(slave)
                 slave.addMaster(this)
             }
-
             let normalized: V | Error
             if (
                 next !== undefined
-                && (normalized = conform(next, this._suggested, this.isComponent)) !== this._suggested
+                && (normalized = conform(next, this._suggested)) !== this._suggested
                 && (
                     current instanceof Error
-                    || (normalized = conform(next, current, this.isComponent)) !== current
+                    || (normalized = conform(next, current)) !== current
                 )
             ) {
                 this._suggested = this._next = normalized
@@ -210,9 +209,11 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         const prev: V | Error = this.current
         let next: V | Error
         if (nextRaw instanceof Error) {
-            next = (nextRaw: Object)[origId] === undefined ? nextRaw : (nextRaw: Object)[origId]
+            next = (nextRaw: Object)[origId] === undefined
+                ? nextRaw
+                : (nextRaw: Object)[origId]
         } else {
-            next = conform(nextRaw, prev, this.isComponent)
+            next = conform(nextRaw, prev)
             this._suggested = this._next
             this._next = undefined
         }
@@ -220,7 +221,7 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         if (prev !== next) {
             this.current = (next: any)
             this._context.newValue((this: IAtomInt), prev, next)
-            if (this._slaves) this._slaves.forEach(obsoleteSlave)
+            this.notify()
         }
     }
 
@@ -254,8 +255,8 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
             }
             newValue = error
         }
-        context.current = slave
         if (this.status !== ATOM_STATUS_DEEP_RESET) this._push(newValue)
+        context.current = slave
     }
 
     dislead(slave: IAtomInt) {
@@ -308,15 +309,5 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         }
 
         return this._retry
-    }
-
-    _coll: Collection<*> | void = undefined
-
-    getCollection<T>(): Collection<T> {
-        if (this._coll === undefined) {
-            this._coll = new Collection((this: IAtom<any>))
-        }
-
-        return this._coll
     }
 }

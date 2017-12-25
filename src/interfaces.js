@@ -49,8 +49,6 @@ export interface IAtom<V> {
     refresh(): void;
     destructor(): void;
     getRetry(): () => void;
-    getCollection<T>(): Collection<T>;
-    notify(): void;
 }
 
 export interface IAtomInt extends IAtom<*> {
