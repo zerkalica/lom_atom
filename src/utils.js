@@ -39,7 +39,7 @@ export function setFunctionName(fn: Function, name: string) {
     fn.displayName = name
 }
 
-export const scheduleNative: (handler: () => void) => number = typeof requestAnimationFrame === 'function'
+export const scheduleNative: (handler: () => void) => mixed = typeof requestAnimationFrame === 'function'
     ? (handler: () => void) => requestAnimationFrame(handler)
     : (handler: () => void) => setTimeout(handler, 16)
 

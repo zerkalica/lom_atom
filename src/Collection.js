@@ -58,7 +58,29 @@ export default class Collection<T, Id = T> {
     }
 
     getId(t: T): Id {
-        return (t: any)
+        return (JSON.stringify(t): any)
+    }
+
+    copy(raw: T[] | Collection<T, Id>): Collection<T, Id> {
+        const {_indices: indices, _items: items} = this
+        let isNewElements = false
+        const newItems: T[] = []
+        const newIndices: Map<Id, number> = new Map()
+        const next: T[] = raw instanceof Collection ? raw._items : raw
+        for (let i = 0, l = next.length; i < l; i++) {
+            let newItem = next[i]
+            const id = this.getId(newItem)
+            const index = indices.get(id)
+            if (index !== i) isNewElements = true
+            newIndices.set(id, i)
+            newItems.push(index === undefined ? newItem : items[index])
+        }
+        if (!isNewElements) return this
+
+        const copy = new this.constructor(newItems, newIndices, this._parent)
+        this._parent.notify(copy)
+
+        return copy
     }
 
     _notify(): Collection<T, Id> {
@@ -87,7 +109,7 @@ export default class Collection<T, Id = T> {
     }
 
     set(item: T | ((item: T) => T | void)): Collection<T, Id> {
-        const {_indices: indices, _items: items} = this
+        const {_items: items} = this
         let isUpdated = false
         if (typeof item === 'function') {
             for (let i = 0, l = items.length; i < l; i++) {
@@ -99,6 +121,7 @@ export default class Collection<T, Id = T> {
                 }
             }
         } else {
+            const indices = this._indices
             const id = this.getId(item)
             const index = indices.get(id)
             isUpdated = true
@@ -114,7 +137,8 @@ export default class Collection<T, Id = T> {
     }
 
     delete(cb: T | ((item: T) => boolean)): Collection<T, Id> {
-        const {_indices: indices, _items: items} = this
+        const {_items: items} = this
+        const indices = this._indices
         let isUpdated = false
         if (typeof cb === 'function') {
             let j = 0
