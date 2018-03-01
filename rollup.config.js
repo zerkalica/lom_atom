@@ -14,6 +14,7 @@ babelrc.babelrc = false
 babelrc.plugins = babelrc.plugins.map(
     plugin => (Array.isArray(plugin) ? (plugin[0] || ''): plugin).indexOf(magic) >= 0 ? null : plugin
 ).filter(Boolean)
+babelrc.runtimeHelpers = true
 
 const uglifyOpts = {
     warnings: true,

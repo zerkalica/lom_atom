@@ -3,7 +3,6 @@
 
 import assert from 'assert'
 import mem from '../src/decorators/mem'
-import detached from '../src/decorators/detached'
 import action from '../src/decorators/action'
 import {AtomWait} from '../src/utils'
 import {defaultContext} from '../src/Context'
@@ -210,21 +209,6 @@ describe('mem base', () => {
         a.foo()
 
         assert(a === t)
-    })
-
-    it('detached can access atom via prop', () => {
-        class A {
-            getAtom() {
-                return (this: Object)['foo()']
-            }
-            @detached foo() {
-                return 123
-            }
-        }
-        const a = new A()
-        assert(a.getAtom() === undefined)
-        a.foo()
-        assert(a.getAtom().field === 'foo')
     })
 
     it('setting equal state are ignored', () => {

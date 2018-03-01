@@ -15,7 +15,7 @@ import type {
     IAtomHandler,
     IAtomOwner
 } from './interfaces'
-import Context from './Context'
+import Context, {defaultContext} from './Context'
 import {AtomWait, setFunctionName, origId, catchedId, proxify} from './utils'
 import conform, {processed} from './conform'
 
@@ -40,58 +40,50 @@ const proxyId = Symbol('lom_err_proxy')
 
 export default class Atom<V> implements IAtom<V>, IAtomInt {
     status: IAtomStatus
-    field: string
-    owner: IAtomOwner
+    displayName: string
 
     current: V
-    _next: V | Error | void
+    _next: V | void
     _suggested: V | Error | void
-
-    key: mixed | void
-    isComponent: boolean
 
     _masters: ?Set<IAtomInt> = null
     _slaves: ?Set<IAtomInt> = null
-    _context: Context
-    _hostAtoms: WeakMap<Object, IAtom<*>> | Map<string, IAtom<*>>
-    _keyHash: string | void
+    _hostAtoms: WeakMap<Object, IAtom<*>> | Map<string, IAtom<*>> | void
+    _keyHash: mixed
 
     manualReset: boolean
 
+    _handler: (next?: V) => V
+
     constructor(
-        field: string,
-        owner: IAtomOwner,
-        context: Context,
-        hostAtoms: WeakMap<Object, IAtom<*>> | Map<string, IAtom<*>>,
+        displayName: string,
+        handler: (next?: V) => V,
+        keyHash?: mixed,
+        hostAtoms?: WeakMap<Object, IAtom<*>> | Map<string, IAtom<*>>,
         manualReset?: boolean,
-        key?: mixed,
-        keyHash?: string,
-        isComponent?: boolean
     ) {
-        this._keyHash = keyHash
-        this.key = key
-        this.field = field
-        this.owner = owner
-        this.isComponent = isComponent || false
+        this.displayName = displayName
+        this._handler = handler
         this.manualReset = manualReset || false
-        this._context = context
+        this._hostAtoms = hostAtoms
+        this._keyHash = keyHash
+
         this.current = (undefined: any)
         this._next = undefined
         this._suggested = undefined
-        this._hostAtoms = hostAtoms
         this.status = ATOM_STATUS_OBSOLETE
     }
 
     toString() {
-        const k = this.key
-        const owner = this.owner
-        const parent = owner.displayName || owner.constructor.displayName || owner.constructor.name
-
-        return `${String(parent)}.${this.field}`
-            + (k
-                ? ('(' + (typeof k === 'function' ? (k.displayName || k.name) : String(k)) + ')')
-                : ''
-            )
+        return this.displayName
+        // const owner = this.owner
+        // const parent = owner.displayName || owner.constructor.displayName || owner.constructor.name
+        //
+        // return `${String(parent)}.${this.field}`
+        //     + (k
+        //         ? ('(' + (typeof k === 'function' ? (k.displayName || k.name) : String(k)) + ')')
+        //         : ''
+        //     )
     }
 
     toJSON() {
@@ -106,36 +98,34 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         if (this._slaves) this._slaves.forEach(checkSlave)
         this._slaves = null
         processed.delete(this.current)
-        this._hostAtoms.delete(((this._keyHash || this.owner): any))
-        this._context.destroyHost(this)
+        if (this._hostAtoms !== undefined) this._hostAtoms.delete((this._keyHash: any))
+        defaultContext.destroyHost(this)
         this.current = (undefined: any)
         this._next = undefined
         this._suggested = undefined
         this.status = ATOM_STATUS_DESTROYED
-        this._hostAtoms = (undefined: any)
-        this.key = undefined
+        this._hostAtoms = undefined
         this._keyHash = undefined
         this._retry = undefined
     }
 
     value(next?: V | Error, forceCache?: IAtomForce): V {
-        const context = this._context
+        const context = defaultContext
         let current: V | Error = this.current
+        const slave = context.current
         if (forceCache === ATOM_FORCE_CACHE) {
             if (next === undefined) {
                 this._suggested = this._next
                 this._next = undefined
                 this.status = ATOM_STATUS_DEEP_RESET
-                this.notify()
+                this.obsoleteSlaves()
             } else {
-                const slave = context.current
                 context.current = this
                 this._push(next)
                 context.current = slave
             }
         } else {
-            const slave = context.current
-            if (slave && (!slave.isComponent || !this.isComponent)) {
+            if (slave) {
                 let slaves = this._slaves
                 if (!slaves) {
                     slaves = this._slaves = new Set()
@@ -144,20 +134,24 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
                 slaves.add(slave)
                 slave.addMaster(this)
             }
+
             let normalized: V | Error
+
             if (
                 next !== undefined
-                && (normalized = conform(next, this._suggested)) !== this._suggested
+                && (normalized = this._conform(next, this._suggested)) !== this._suggested
                 && (
                     current instanceof Error
-                    || (normalized = conform(next, current)) !== current
+                    || (normalized = this._conform(next, current)) !== current
                 )
             ) {
-                this._suggested = this._next = normalized
+                this._suggested = this._next = (normalized: any)
                 this.status = ATOM_STATUS_OBSOLETE
             }
+
             this.actualize()
         }
+
         current = this.current
         if (current instanceof Error) {
             if (forceCache !== ATOM_FORCE_NONE) {
@@ -168,6 +162,10 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         }
 
         return current
+    }
+
+    _conform<Target, Source>(target: Target, source: Source): Target {
+        return conform(target, source)
     }
 
     static deepReset: Set<IAtom<*>> | void = undefined
@@ -188,7 +186,7 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         }
 
         const deepReset = Atom.deepReset
-        if (this.status === ATOM_STATUS_DEEP_RESET && !this.isComponent) {
+        if (this.status === ATOM_STATUS_DEEP_RESET) {
             Atom.deepReset = deepReset || new Set()
             this.refresh()
             Atom.deepReset = deepReset
@@ -209,19 +207,19 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
                 ? nextRaw
                 : (nextRaw: Object)[origId]
         } else {
-            next = conform(nextRaw, prev)
+            next = this._conform(nextRaw, prev)
             this._suggested = this._next
             this._next = undefined
         }
 
         if (prev !== next) {
             this.current = (next: any)
-            this._context.newValue((this: IAtomInt), prev, next)
-            this.notify()
+            defaultContext.newValue((this: IAtomInt), prev, next)
+            this.obsoleteSlaves()
         }
     }
 
-    notify() {
+    obsoleteSlaves() {
         if (this._slaves) this._slaves.forEach(obsoleteSlave)
     }
 
@@ -235,15 +233,11 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         let newValue: V | Error
         this.status = ATOM_STATUS_PULLING
 
-        const context = this._context
+        const context = defaultContext
         const slave = context.current
         context.current = this
-        const f = this.field + '$'
-        const next = this._next
         try {
-            newValue = this.key === undefined
-                ? (this.owner: any)[f](next)
-                : (this.owner: any)[f](this.key, next)
+            newValue = this._handler(this._next)
         } catch (error) {
             if (error[catchedId] === undefined) {
                 error[catchedId] = true
@@ -251,8 +245,9 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
             }
             newValue = error
         }
-        if (this.status !== ATOM_STATUS_DEEP_RESET) this._push(newValue)
         context.current = slave
+
+        if (this.status !== ATOM_STATUS_DEEP_RESET) this._push(newValue)
     }
 
     dislead(slave: IAtomInt) {
@@ -261,7 +256,7 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
             slaves.delete(slave)
             if (slaves.size === 0) {
                 this._slaves = null
-                this._context.proposeToReap(this)
+                defaultContext.proposeToReap(this)
             }
         }
     }
@@ -270,7 +265,7 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         if (this._slaves) {
             this._slaves.forEach(checkSlave)
         } else {
-            this._context.proposeToPull(this)
+            defaultContext.proposeToPull(this)
         }
     }
 

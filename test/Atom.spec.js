@@ -10,8 +10,7 @@ import {catchedId} from '../src/utils'
 
 describe('Atom', () => {
     function atom<V>(key: string, fn: (v?: V) => V): IAtom<V> {
-        const host: {[id: string]: any} = {[key + '$']: fn}
-        return new Atom(key, host, defaultContext, new Map())
+        return new Atom(key, fn)
     }
 
     function sync() {

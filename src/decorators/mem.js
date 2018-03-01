@@ -36,7 +36,6 @@ function mem<V>(
 ): TypedPropertyDescriptor<V> {
     const handlerKey = `${name}$`
     if (proto[handlerKey] !== undefined) return descr
-
     const hostAtoms: WeakMap<Object, IAtom<V>> = new WeakMap()
 
     Object.defineProperty(proto, `${name}()`, {
@@ -45,28 +44,38 @@ function mem<V>(
         }
     })
 
+    let handler: (next?: V) => V
+    const longName = getId(proto, name)
+
     function value(next?: V): V {
         let atom: IAtom<V> | void = hostAtoms.get(this)
         if (atom === undefined) {
-            atom = new Atom(name, this, defaultContext, hostAtoms, deepReset)
+            atom = new Atom(
+                longName,
+                handler.bind(this),
+                this,
+                hostAtoms,
+                deepReset
+            )
             hostAtoms.set(this, atom)
         }
         return forceCache === ATOM_FORCE_RETRY ? (atom: any) : atom.value(next, forceCache)
     }
+
     if (descr.value !== undefined) {
-        proto[handlerKey] = descr.value
+        handler = (descr.value: any)
         descr.value = value
         return descr
     }
 
-    const longName = getId(proto, name)
     if (descr.initializer) setFunctionName(descr.initializer, longName)
     if (descr.get) setFunctionName(descr.get, `get#${longName}`)
     if (descr.set) setFunctionName(descr.set, `set#${longName}`)
 
-    proto[handlerKey] = descr.get === undefined && descr.set === undefined
+    handler = descr.get === undefined && descr.set === undefined
         ? createValueHandler(descr.initializer)
         : createGetSetHandler(descr.get, descr.set)
+    proto[handlerKey] = handler
 
     return {
         enumerable: descr.enumerable,
@@ -84,24 +93,9 @@ function memManual<V>(
     return mem(proto, name, descr, true)
 }
 
-function getKeyFromObj(params: Object): string {
-    const keys = Object.keys(params)
-        .sort()
-
-    let result = ''
-    for (let i = 0; i < keys.length; i++) {
-        const key = keys[i]
-        const value = params[key]
-        result += `.${key}:${typeof value === 'object' ? JSON.stringify(value) : value}`
-    }
-
-    return result
-}
-
 function getKey(params: any): string {
     if (!params) return ''
-    if (params instanceof Array) return JSON.stringify(params)
-    if (typeof params === 'object') return getKeyFromObj(params)
+    if (typeof params === 'object') return JSON.stringify(params)
 
     return '' + params
 }
@@ -112,18 +106,20 @@ function memkey<V, K>(
     descr: TypedPropertyDescriptor<(k: K, next?: V) => V>,
     deepReset?: boolean
 ): TypedPropertyDescriptor<(k: K, next?: V) => V> {
-    const longName = getId(proto, name)
-    const handler = descr.value
-    if (handler === undefined) {
-        throw new TypeError(`${longName} is not an function (rawKey: K, next?: V)`)
-    }
-    proto[`${name}$`] = handler
+    const handlerKey = `${name}$`
+    if (proto[handlerKey] !== undefined) return descr
     const hostAtoms: WeakMap<Object, Map<string, IAtom<V>>> = new WeakMap()
     Object.defineProperty(proto, `${name}()`, {
         get() {
             return hostAtoms.get(this)
         }
     })
+
+    const longName = getId(proto, name)
+    const handler = descr.value
+    if (handler === undefined) {
+        throw new TypeError(`${longName} is not an function (rawKey: K, next?: V)`)
+    }
 
     function value(rawKey: K, next?: V): V {
         let atomMap: Map<string, IAtom<V>> | void = hostAtoms.get(this)
@@ -134,11 +130,19 @@ function memkey<V, K>(
         const key = getKey(rawKey)
         let atom: IAtom<V> | void = atomMap.get(key)
         if (atom === undefined) {
-            atom = new Atom(name, this, defaultContext, atomMap, deepReset, rawKey, key)
+            atom = new Atom(
+                longName,
+                handler.bind(this, rawKey),
+                key,
+                atomMap,
+                deepReset
+            )
             atomMap.set(key, atom)
         }
         return forceCache === ATOM_FORCE_RETRY ? (atom: any) : atom.value(next, forceCache)
     }
+
+    proto[handlerKey] = handler
 
     descr.value = value
 

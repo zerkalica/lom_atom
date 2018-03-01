@@ -43,7 +43,7 @@ export type IAtomForce = typeof ATOM_FORCE_NONE | typeof ATOM_FORCE_CACHE | type
 export interface IAtom<V> {
     status: IAtomStatus;
     current: V;
-    +field: string;
+    +displayName: string;
     value(v?: V | Error, forceCache?: IAtomForce): V;
     refresh(): void;
     destructor(): void;
@@ -51,11 +51,7 @@ export interface IAtom<V> {
 }
 
 export interface IAtomInt extends IAtom<*> {
-    isComponent: boolean;
     manualReset: boolean;
-
-    key: mixed | void;
-    owner: IAtomOwner;
     actualize(): void;
     check(): void;
     obsolete(): void;
@@ -79,4 +75,9 @@ export type TypedPropertyDescriptor<T> = {
     initializer?: () => T;
     get?: () => T;
     set?: (value: T) => void;
+}
+
+export interface IReactHost<V> {
+    value(propsChanged: boolean): V;
+    forceUpdate(): void;
 }

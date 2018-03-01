@@ -2,8 +2,9 @@
 
 import type {IAtomInt, TypedPropertyDescriptor} from '../interfaces'
 import {actionId, ATOM_FORCE_CACHE} from '../interfaces'
-import {scheduleNative, getId, setFunctionName, AtomWait} from '../utils'
+import {getId, setFunctionName, AtomWait} from '../utils'
 import {defaultContext} from '../Context'
+import defer from '../defer'
 
 type Handler = (...args: any[]) => void
 
@@ -50,7 +51,7 @@ function createDeferedAction(action: (args: any[]) => void) {
     function deferedAction(...args: any[]) {
         const fn = () => action(...args)
         setFunctionName(fn, `${action.displayName}_cb`)
-        scheduleNative(fn)
+        defer.add(fn)
     }
     setFunctionName(deferedAction, `${action.displayName}_defered`)
 

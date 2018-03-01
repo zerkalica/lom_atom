@@ -2,6 +2,7 @@
 
 import type {IAtom, ILogger} from './interfaces'
 import {AtomWait} from './utils'
+import ReactAtom from './ReactAtom'
 
 function stringToColor(str: string): string {
     let hash = 0
@@ -43,7 +44,7 @@ export default class ConsoleLogger implements ILogger {
         const name = atom.toString()
         const filter = this._filter
         if (filter && !filter.test(name)) return
-        if (atom.isComponent) {
+        if (atom instanceof ReactAtom) {
             console.debug(name, 'rendered')
         } else {
             const useColors = this._useColors

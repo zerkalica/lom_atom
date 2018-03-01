@@ -149,7 +149,12 @@ list.todo('1') // get todo
 
 ## Actions
 
-State updates are asynchronous, but sometime we need to do transactional synced updates via action helper:
+Wrapping method in action decorator enables error handling in component event callbacks. Without it, unhandlered exception throws only into console.
+
+State updates are asynchronous, but sometime we need to do transactional synced updates via action helper: ``` @action.sync  ``` (Usable for react input, without it cursor position jumps due to asyncronous state updates)
+
+``` @action.defer ``` runs decorated action on the next tick (Usable for passing valid mounted DOM-node from refs into action in the react).
+
 
 ```js
 import {action, mem} from 'lom_atom'
@@ -161,16 +166,16 @@ class Some {
         this.id = id
         this.name = name
     }
+    @action.sync setSynced(id: string, name: string) {
+        this.id = id
+        this.name = name
+    }
 }
 const some = new Some()
 
-// Transactionally changed in current tick:
-action(() => {
-    some.name = 'test'
-    some.id = '123'
-})
-
-// or
-
+// View updates on next tick:
 some.set('123', 'test')
+
+// View updates in current tick:
+some.setSynced('123', 'test2')
 ```

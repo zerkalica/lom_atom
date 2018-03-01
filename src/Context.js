@@ -6,7 +6,7 @@ import type {
     ILogger,
 } from './interfaces'
 import {ATOM_STATUS_DESTROYED} from './interfaces'
-import {scheduleNative} from './utils'
+import defer from './defer'
 
 function reap(atom: IAtomInt, key: IAtomInt, reaping: Set<IAtomInt>) {
     reaping.delete(atom)
@@ -84,7 +84,7 @@ export default class Context {
 
     _schedule() {
         if (!this._scheduled) {
-            scheduleNative(this._run)
+            defer.add(this._run)
             this._scheduled = true
         }
     }
