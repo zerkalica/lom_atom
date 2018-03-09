@@ -76,8 +76,3 @@ export type TypedPropertyDescriptor<T> = {
     get?: () => T;
     set?: (value: T) => void;
 }
-
-export interface IReactHost<V> {
-    value(propsChanged: boolean): V;
-    forceUpdate(): void;
-}
