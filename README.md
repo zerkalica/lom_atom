@@ -94,17 +94,11 @@ class TodoList {
     @mem get todos(): Todos {
         console.log('get handler')
 
-        fetch('/todos')
-            .then((data) => mem.cache(this.todos = data))
-            .catch(error => mem.cache(this.todos = error))
-
-        throw new mem.Wait()
+        throw fetch('/todos')
     }
 
     @mem.manual get user(): IUser {
-        fetch('/user')
-            .then((data) => mem.cache(this.user = data))
-            .catch(error => mem.cache(this.user = error))
+        throw fetch('/user')
     }
 
     set user(next: IUser | Error) {}

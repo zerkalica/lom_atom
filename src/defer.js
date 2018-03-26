@@ -6,8 +6,8 @@ const scheduleNative: (handler: () => void) => mixed = typeof requestAnimationFr
 
 class Defer {
     static schedule = scheduleNative
-    _queue: (() => void)[] = []
-    add = (handler: () => void) => {
+    _queue: (() => any)[] = []
+    add = (handler: () => any) => {
         if (this._queue.length === 0) this.constructor.schedule(this.rewind)
         this._queue.push(handler)
     }

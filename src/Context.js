@@ -10,7 +10,7 @@ import defer from './defer'
 
 function reap(atom: IAtomInt, key: IAtomInt, reaping: Set<IAtomInt>) {
     reaping.delete(atom)
-    if (!atom.slaves) {
+    if (!atom._slaves) {
         atom.destructor()
     }
 }

@@ -49,9 +49,9 @@ export default class ConsoleLogger implements ILogger {
         } else {
             const useColors = this._useColors
             console[
-                from instanceof Error && !(from instanceof AtomWait)
+                from instanceof Error && !AtomWait.is(from)
                     ? 'warn'
-                    : (to instanceof Error && !(to instanceof AtomWait) ? 'error' : 'log')
+                    : (to instanceof Error && !AtomWait.is(to) ? 'error' : 'log')
             ](
                 useColors ? '%c' + name : name,
                 useColors ? stringToColor(name) : '',

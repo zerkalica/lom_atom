@@ -52,6 +52,7 @@ export interface IAtom<V> {
 
 export interface IAtomInt extends IAtom<*> {
     manualReset: boolean;
+    _slaves: ?Set<IAtomInt>;
     actualize(): void;
     check(): void;
     obsolete(): void;

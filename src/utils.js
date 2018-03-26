@@ -2,6 +2,10 @@
 
 export const catchedId = Symbol('lom_cached')
 
+export function isPromise(target: mixed): boolean {
+    return target !== null && typeof target === 'object' && typeof target.then === 'function'
+}
+
 /**
  * Can't extend Error
  * @see https://github.com/babel/babel/issues/7447
@@ -9,6 +13,10 @@ export const catchedId = Symbol('lom_cached')
 class AtomWait {
     message: string
     stack: string
+
+    static is(target: mixed): boolean {
+        return target instanceof AtomWait || isPromise(target)
+    }
 
     constructor(message?: string = '[Pending]') {
         const t = Error.call(this, message)

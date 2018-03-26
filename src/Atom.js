@@ -16,7 +16,7 @@ import type {
     IAtomOwner
 } from './interfaces'
 import Context, {defaultContext} from './Context'
-import {AtomWait, setFunctionName, origId, catchedId, proxify} from './utils'
+import {isPromise, setFunctionName, origId, catchedId, proxify} from './utils'
 import conform, {processed} from './conform'
 
 function checkSlave(slave: IAtomInt) {
@@ -110,6 +110,7 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
     }
 
     value(next?: V | Error, forceCache?: IAtomForce): V {
+        if (this.status === ATOM_STATUS_DESTROYED) return this.current
         const context = defaultContext
         let current: V | Error = this.current
         const slave = context.current
@@ -223,6 +224,8 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         if (this._slaves) this._slaves.forEach(obsoleteSlave)
     }
 
+    _setForced: void | (v: V | Error) => any = undefined
+
     refresh(): void {
         const masters = this._masters
         if (masters) {
@@ -239,7 +242,13 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         try {
             newValue = this._handler(this._next)
         } catch (error) {
-            if (error[catchedId] === undefined) {
+            if (isPromise(error)) {
+                if (this._setForced === undefined) this._setForced = value => this.value(value, ATOM_FORCE_CACHE)
+                error
+                    .then(this._setForced)
+                    .catch(this._setForced)
+                error[catchedId] = true
+            } else if (error[catchedId] === undefined) {
                 error[catchedId] = true
                 console.error(error.stack || error)
             }
