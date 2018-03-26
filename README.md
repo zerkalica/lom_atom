@@ -9,7 +9,11 @@ Alternative standalone implementation of eigenmethod [mol_atom](https://github.c
 * Simpler, less core concept than mobx
 * Loading status / error handling features
 
-Usage examples with [reactive-di](https://github.com/zerkalica/reactive-di): [example source](https://github.com/zerkalica/rdi-examples), [demo](http://zerkalica.github.io/rdi-examples/), [todomvc benchmark](http://mol.js.org/app/bench/#bench=https%3A%2F%2Fzerkalica.github.io%2Ftodomvc%2Fbenchmark%2F/sample=preact-lom-rdi~preact-raw~preact-mobx)
+Usage examples:
+
+* [fiddle](https://jsfiddle.net/zerkalica/j8ds07mm/)
+* [todomvc benchmark](http://mol.js.org/app/bench/#bench=https%3A%2F%2Fzerkalica.github.io%2Ftodomvc%2Fbenchmark%2F/sample=preact-lom-rdi~preact-raw~preact-mobx), 
+
 
 Install ``` npm install --save lom_atom ```
 
