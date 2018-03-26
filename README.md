@@ -78,17 +78,15 @@ import {mem} from 'lom_atom'
 
 class TodoList {
     @mem set todos(todos: Todo | Error) {
-        fetch({
+        const promise = fetch({
             url: '/todos',
             method: 'POST',
             body: JSON.stringify(todos)
         })
-            .then((data) => mem.cache(this.todos = data))
-            .catch(error => mem.cache(this.todos = error))
 
         console.log('set handler')
 
-        throw new mem.Wait()
+        throw new mem.Wait('Loading /todos...', promise)
     }
 
     @mem get todos(): Todos {
@@ -120,6 +118,8 @@ const list = new TodoList()
 * ``` mem.cache(list.todosWithUser) ``` - deep reset cache for todosWithUser all its dependencies (todos) and notify all dependants about changes.
 * ``` @mem.manual get user() {...} ``` - exclude user from deep reset. ``` mem.reset(list.todosWithUser) ``` resets todos but not user. If you want to reset user, use helper directly on user: ``` mem.cache(list.user) ```
 * ``` mem.async(this.todos) ``` - initiate parallel loading todos and user (wrap error in proxy, do not throw error if data are fetching).
+* ``` throw new Promise(...) ``` - Load data and handle errors and pending State
+* ``` throw new mem.Wait('Loading /todos...', promise) ``` - Add some debug info to fetching payload
 
 ## Key-value
 

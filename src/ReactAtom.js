@@ -2,17 +2,19 @@
 
 import Atom from './Atom'
 import {ATOM_STATUS_OBSOLETE} from './interfaces'
-import type {
-    IReactHost,
-    IReactAtom
-} from 'urc'
 
-export default class ReactAtom<Element> extends Atom<Element> implements IReactAtom<Element> {
+interface IReactHost<Element> {
+    __value(propsChanged: boolean): Element;
+    forceUpdate(): void;
+}
+
+export default class ReactAtom<Element> extends Atom<Element> {
     _propsChanged = true
     _owner: IReactHost<Element>
 
     constructor(displayName: string, owner: IReactHost<Element>) {
-        super(displayName, (next?: Element) => (this: any)._update(next))
+        super(displayName, (next?: Element) => t._update(next))
+        let t = this
         this._owner = owner
     }
 

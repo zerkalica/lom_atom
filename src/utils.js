@@ -1,6 +1,7 @@
 // @flow
 
 export const catchedId = Symbol('lom_cached')
+export const atomId = Symbol('lom_atom')
 
 export function isPromise(target: mixed): boolean {
     return target !== null && typeof target === 'object' && typeof target.then === 'function'
@@ -13,17 +14,15 @@ export function isPromise(target: mixed): boolean {
 class AtomWait {
     message: string
     stack: string
+    promise: ?Promise<*>
 
-    static is(target: mixed): boolean {
-        return target instanceof AtomWait || isPromise(target)
-    }
-
-    constructor(message?: string = '[Pending]') {
-        const t = Error.call(this, message)
+    constructor(message?: string, promise?: Promise<*>) {
+        const t = Error.call(this, message || '[Pending]')
         // super(message)
         // $FlowFixMe new.target
         ;(t: Object)['__proto__'] = new.target.prototype
-        ;(t: Object)[catchedId] = true
+        ;(t: Object)[catchedId] = undefined
+        ;(t: Object).promise = promise
         return t
     }
 }

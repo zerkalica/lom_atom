@@ -16,7 +16,7 @@ import type {
     IAtomOwner
 } from './interfaces'
 import Context, {defaultContext} from './Context'
-import {isPromise, setFunctionName, origId, catchedId, proxify} from './utils'
+import {atomId, AtomWait, isPromise, setFunctionName, origId, catchedId, proxify} from './utils'
 import conform, {processed} from './conform'
 
 function checkSlave(slave: IAtomInt) {
@@ -156,8 +156,8 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         current = this.current
         if (current instanceof Error) {
             if (forceCache !== ATOM_FORCE_NONE) {
-                if ((current: Object)[proxyId] === undefined) (current: Object)[proxyId] = proxify((current: any))
-                return (current: Object)[proxyId]
+                if ((current: any)[proxyId] === undefined) (current: any)[proxyId] = proxify((current: any))
+                return (current: any)[proxyId]
             }
             throw current
         }
@@ -207,6 +207,7 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
             next = (nextRaw: Object)[origId] === undefined
                 ? nextRaw
                 : (nextRaw: Object)[origId]
+            if ((next: Object)[atomId] === undefined) (next: Object)[atomId] = this
         } else {
             next = this._conform(nextRaw, prev)
             this._suggested = this._next
@@ -242,17 +243,23 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         try {
             newValue = this._handler(this._next)
         } catch (error) {
-            if (isPromise(error)) {
-                if (this._setForced === undefined) this._setForced = value => this.value(value, ATOM_FORCE_CACHE)
-                error
-                    .then(this._setForced)
-                    .catch(this._setForced)
-                error[catchedId] = true
-            } else if (error[catchedId] === undefined) {
-                error[catchedId] = true
-                console.error(error.stack || error)
-            }
-            newValue = error
+            if ((error: Object)[catchedId] === undefined) {
+                newValue = isPromise(error) ? new AtomWait(undefined, (error: any)) : error
+                ;(newValue: Object)[catchedId] = true
+                if (newValue instanceof AtomWait) {
+                    const promise = newValue.promise
+                    if (promise) {
+                        if (this._setForced === undefined) this._setForced = value => {
+                            return this.value(value, ATOM_FORCE_CACHE)
+                        }
+                        promise
+                            .then(this._setForced)
+                            .catch(this._setForced)
+                    }
+                } else {
+                    console.error(newValue.stack || newValue)
+                }
+            } else newValue = error
         }
         context.current = slave
 

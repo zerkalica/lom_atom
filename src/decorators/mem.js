@@ -2,7 +2,7 @@
 import type {TypedPropertyDescriptor, IAtom, IAtomForce, IAtomStatus} from '../interfaces'
 import {ATOM_STATUS_DEEP_RESET, ATOM_FORCE_NONE, ATOM_FORCE_RETRY, ATOM_FORCE_CACHE, ATOM_FORCE_ASYNC} from '../interfaces'
 import {defaultContext} from '../Context'
-import {getId, setFunctionName} from '../utils'
+import {atomId, getId, setFunctionName} from '../utils'
 import Atom from '../Atom'
 
 function createGetSetHandler<V>(
@@ -170,6 +170,11 @@ function getRetryResult<V>(atom: IAtom<V>): () => void {
     return atom.getRetry()
 }
 
+function getRetry(error: Error): void | () => void {
+    const atom = (error: Object)[atomId]
+    return atom ? atom.getRetry() : undefined
+}
+
 Object.defineProperties(mem, {
     cache: ({
         get<V>(): (v: V) => V {
@@ -183,6 +188,9 @@ Object.defineProperties(mem, {
             return getRetryResult
         }
     }: any),
+    retry: {
+        value: getRetry
+    },
     async: ({
         get<V>(): (v: V) => V {
             forceCache = ATOM_FORCE_ASYNC
@@ -205,6 +213,7 @@ type IMem = {
     cache<V>(v: V): V;
     async<V>(v: V): V;
     getRetry<V>(v: V): () => void;
+    retry(error: Error): void | () => void;
     key: IMemKey;
 }
 export default ((mem: any): IMem)
