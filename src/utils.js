@@ -3,8 +3,15 @@
 export const catchedId = Symbol('lom_cached')
 export const atomId = Symbol('lom_atom')
 
-export function isPromise(target: mixed): boolean {
-    return target !== null && typeof target === 'object' && typeof target.then === 'function'
+const debugId = Symbol('lom_debug')
+
+export function addInfo<V: Object>(info: string, obj: V): V {
+    ;(obj: Object)[debugId] = info
+    return obj
+}
+
+export function getInfo(obj: any): ?string {
+    return (obj && typeof obj === 'object' ? obj[debugId] : null) || (obj instanceof Error ? obj.message : null)
 }
 
 /**
@@ -14,15 +21,13 @@ export function isPromise(target: mixed): boolean {
 class AtomWait {
     message: string
     stack: string
-    promise: ?Promise<*>
 
-    constructor(message?: string, promise?: Promise<*>) {
+    constructor(message?: string) {
         const t = Error.call(this, message || '[Pending]')
         // super(message)
         // $FlowFixMe new.target
         ;(t: Object)['__proto__'] = new.target.prototype
-        ;(t: Object)[catchedId] = undefined
-        ;(t: Object).promise = promise
+        ;(t: Object)[catchedId] = true
         return t
     }
 }
@@ -32,6 +37,10 @@ class AtomWait {
 const AtomWaitInt: Class<AtomWait & Error> = (AtomWait: any)
 
 export {AtomWaitInt as AtomWait}
+
+export function isPromise(target: mixed): boolean {
+    return target !== null && typeof target === 'object' && typeof target.then === 'function'
+}
 
 export function getId(t: Object, hk: string): string {
     return `${t.constructor.displayName || t.constructor.name}.${hk}`

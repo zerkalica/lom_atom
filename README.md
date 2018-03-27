@@ -12,7 +12,7 @@ Alternative standalone implementation of eigenmethod [mol_atom](https://github.c
 Usage examples:
 
 * [fiddle](https://jsfiddle.net/zerkalica/j8ds07mm/)
-* [todomvc benchmark](http://mol.js.org/app/bench/#bench=https%3A%2F%2Fzerkalica.github.io%2Ftodomvc%2Fbenchmark%2F/sample=preact-lom-rdi~preact-raw~preact-mobx), 
+* [todomvc benchmark](http://mol.js.org/app/bench/#bench=https%3A%2F%2Fzerkalica.github.io%2Ftodomvc%2Fbenchmark%2F/sample=preact-lom-rdi~preact-raw~preact-mobx),
 
 
 Install ``` npm install --save lom_atom ```
@@ -78,7 +78,7 @@ Lom atom memoized property can interact with upstream (server, etc). Each observ
 
 
 ```js
-import {mem} from 'lom_atom'
+import {mem, addInfo} from 'lom_atom'
 
 class TodoList {
     @mem set todos(todos: Todo | Error) {
@@ -90,7 +90,7 @@ class TodoList {
 
         console.log('set handler')
 
-        throw new mem.Wait('Loading /todos...', promise)
+        throw new addInfo('Loading /todos...', promise)
     }
 
     @mem get todos(): Todos {
@@ -123,7 +123,6 @@ const list = new TodoList()
 * ``` @mem.manual get user() {...} ``` - exclude user from deep reset. ``` mem.reset(list.todosWithUser) ``` resets todos but not user. If you want to reset user, use helper directly on user: ``` mem.cache(list.user) ```
 * ``` mem.async(this.todos) ``` - initiate parallel loading todos and user (wrap error in proxy, do not throw error if data are fetching).
 * ``` throw new Promise(...) ``` - Load data and handle errors and pending State
-* ``` throw new mem.Wait('Loading /todos...', promise) ``` - Add some debug info to fetching payload
 
 ## Key-value
 

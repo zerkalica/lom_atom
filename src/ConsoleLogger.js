@@ -1,7 +1,7 @@
 // @flow
 
 import type {IAtom, ILogger} from './interfaces'
-import {AtomWait} from './utils'
+import {getInfo, isPromise} from './utils'
 import ReactAtom from './ReactAtom'
 
 function stringToColor(str: string): string {
@@ -49,15 +49,15 @@ export default class ConsoleLogger implements ILogger {
         } else {
             const useColors = this._useColors
             console[
-                from instanceof Error && !(from instanceof AtomWait)
+                from instanceof Error && !isPromise(from)
                     ? 'warn'
-                    : (to instanceof Error && !(to instanceof AtomWait) ? 'error' : 'log')
+                    : (to instanceof Error && !isPromise(to) ? 'error' : 'log')
             ](
                 useColors ? '%c' + name : name,
                 useColors ? stringToColor(name) : '',
-                from instanceof Error ? from.message : from,
+                getInfo(from) || from,
                 '➔',
-                to instanceof Error ? to.message : to
+                getInfo(to) || to
             )
         }
     }

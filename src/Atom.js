@@ -16,7 +16,7 @@ import type {
     IAtomOwner
 } from './interfaces'
 import Context, {defaultContext} from './Context'
-import {atomId, AtomWait, isPromise, setFunctionName, origId, catchedId, proxify} from './utils'
+import {atomId, isPromise, setFunctionName, origId, catchedId, proxify} from './utils'
 import conform, {processed} from './conform'
 
 function checkSlave(slave: IAtomInt) {
@@ -142,7 +142,7 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
                 next !== undefined
                 && (normalized = this._conform(next, this._suggested)) !== this._suggested
                 && (
-                    current instanceof Error
+                    current instanceof Error || isPromise(current)
                     || (normalized = this._conform(next, current)) !== current
                 )
             ) {
@@ -154,7 +154,7 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
         }
 
         current = this.current
-        if (current instanceof Error) {
+        if (current instanceof Error || isPromise(current)) {
             if (forceCache !== ATOM_FORCE_NONE) {
                 if ((current: any)[proxyId] === undefined) (current: any)[proxyId] = proxify((current: any))
                 return (current: any)[proxyId]
@@ -202,12 +202,12 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
     _push(nextRaw: V | Error): void {
         this.status = ATOM_STATUS_ACTUAL
         const prev: V | Error = this.current
-        let next: V | Error
-        if (nextRaw instanceof Error) {
-            next = (nextRaw: Object)[origId] === undefined
+        let next: V | Error | Promise<V>
+        if (nextRaw instanceof Error || isPromise(nextRaw)) {
+            next = (nextRaw: any)[origId] === undefined
                 ? nextRaw
-                : (nextRaw: Object)[origId]
-            if ((next: Object)[atomId] === undefined) (next: Object)[atomId] = this
+                : (nextRaw: any)[origId]
+            if ((next: any)[atomId] === undefined) (next: any)[atomId] = this
         } else {
             next = this._conform(nextRaw, prev)
             this._suggested = this._next
@@ -244,22 +244,19 @@ export default class Atom<V> implements IAtom<V>, IAtomInt {
             newValue = this._handler(this._next)
         } catch (error) {
             if ((error: Object)[catchedId] === undefined) {
-                newValue = isPromise(error) ? new AtomWait(undefined, (error: any)) : error
-                ;(newValue: Object)[catchedId] = true
-                if (newValue instanceof AtomWait) {
-                    const promise = newValue.promise
-                    if (promise) {
-                        if (this._setForced === undefined) this._setForced = value => {
-                            return this.value(value, ATOM_FORCE_CACHE)
-                        }
-                        promise
-                            .then(this._setForced)
-                            .catch(this._setForced)
+                ;(error: Object)[catchedId] = true
+                if (isPromise(error)) {
+                    if (this._setForced === undefined) this._setForced = value => {
+                        return this.value(value, ATOM_FORCE_CACHE)
                     }
+                    error
+                        .then(this._setForced)
+                        .catch(this._setForced)
                 } else {
-                    console.error(newValue.stack || newValue)
+                    console.error(error.stack || newValue)
                 }
-            } else newValue = error
+            }
+            newValue = error
         }
         context.current = slave
 

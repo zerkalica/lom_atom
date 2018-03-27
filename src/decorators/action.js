@@ -2,7 +2,7 @@
 
 import type {IAtomInt, TypedPropertyDescriptor} from '../interfaces'
 import {actionId, ATOM_FORCE_CACHE} from '../interfaces'
-import {getId, setFunctionName, AtomWait} from '../utils'
+import {getId, setFunctionName, isPromise} from '../utils'
 import {defaultContext} from '../Context'
 import defer from '../defer'
 
@@ -30,7 +30,7 @@ function createActionMethod<Host: Object>(
                 default: host[methodName].apply(host, args); break
             }
         } catch(e) {
-            if (!(e instanceof AtomWait)) {
+            if (!isPromise(e)) {
                 const slave = defaultContext.current
                 if (slave) {
                     slave.value(e, ATOM_FORCE_CACHE)
